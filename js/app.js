@@ -1,18 +1,18 @@
 // App shell: auth flow (Google + PIN), permission gating, tab routing.
-import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1789311146";
+import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1789329971";
 import {
   signInWithPopup, signInWithEmailAndPassword, signOut, onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
   doc, getDoc, setDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { initTasks } from "./tasks.js?v=1789311146";
-import { initSacrament } from "./sacrament.js?v=1789311146";
-import { initCalendar } from "./calendar.js?v=1789311146";
-import { initCallings } from "./callings.js?v=1789311146";
-import { initConfidential } from "./confidential.js?v=1789311146";
-import { initAdmin } from "./admin.js?v=1789311146";
-import { initBoard } from "./board.js?v=1789311146";
+import { initTasks } from "./tasks.js?v=1789329971";
+import { initSacrament } from "./sacrament.js?v=1789329971";
+import { initCalendar } from "./calendar.js?v=1789329971";
+import { initCallings } from "./callings.js?v=1789329971";
+import { initConfidential } from "./confidential.js?v=1789329971";
+import { initAdmin } from "./admin.js?v=1789329971";
+import { initBoard } from "./board.js?v=1789329971";
 
 const ROLE_RANK = { pending: 0, member: 1, bishopric: 2, bishop: 3 };
 

@@ -819,3 +819,32 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
   .agenda-view .ag-sacrament .ag-clock { margin-left: auto; }
   .agenda-view .ag-total { font-size: 1rem; }
 }
+
+/* Member Board to-dos (2026-09-13) */
+.todo-pills { display:flex; flex-wrap:wrap; gap:.3rem; margin-top:.4rem; }
+.todo-pill { display:inline-flex; align-items:center; gap:.35rem; max-width:100%; padding:.15rem .55rem; border-radius:99px; background:#eef2f7; color:var(--ink); font-size:.78rem; font-weight:600; cursor:pointer; border:1px solid transparent; }
+.todo-pill:hover { border-color:var(--brand); }
+.todo-pill .todo-due { font-weight:500; color:var(--ink-soft); font-size:.72rem; }
+.todo-pill.todo-soon { background:var(--pending-soft); color:var(--pending); }
+.todo-pill.todo-soon .todo-due { color:var(--pending); }
+.todo-pill.todo-overdue { background:#fbe7e3; color:var(--danger); }
+.todo-pill.todo-overdue .todo-due { color:var(--danger); font-weight:700; }
+.todo-list { display:flex; flex-direction:column; }
+.todo-row { display:flex; align-items:center; gap:.5rem; padding:.35rem 0; border-bottom:1px solid var(--line); }
+.todo-row:last-child { border-bottom:none; }
+.todo-prio { display:flex; flex-direction:column; gap:1px; }
+.todo-mv { border:none; background:none; color:var(--ink-soft); cursor:pointer; font-size:.6rem; line-height:1; padding:1px 3px; }
+.todo-mv:disabled { opacity:.25; cursor:default; }
+.todo-mv:not(:disabled):hover { color:var(--brand); }
+.todo-title { flex:1; min-width:0; font-weight:600; cursor:pointer; }
+.todo-title:hover { text-decoration:underline dotted; }
+.todo-hasnotes { font-size:.75rem; }
+.todo-due-cell { font-size:.8rem; color:var(--ink-soft); white-space:nowrap; }
+.todo-due-cell.soon { color:var(--pending); font-weight:700; }
+.todo-due-cell.overdue { color:var(--danger); font-weight:700; }
+.todo-add { display:flex; gap:.4rem; margin-top:.5rem; }
+.todo-add .todo-new { flex:1; min-width:0; padding:.45rem .6rem; border:1px dashed rgba(31,39,51,.3); border-radius:8px; font:inherit; font-size:.9rem; }
+.todo-add .todo-new-due { padding:.35rem .4rem; border:1px solid var(--line); border-radius:8px; font:inherit; font-size:.85rem; color:var(--ink-soft); }
+.todo-archive { margin-top:.6rem; }
+.todo-archive summary { cursor:pointer; color:var(--ink-soft); font-size:.85rem; }
+.todo-archived .todo-title { font-weight:400; color:var(--ink-soft); text-decoration:line-through; }
