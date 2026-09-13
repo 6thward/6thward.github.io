@@ -1,17 +1,17 @@
 // App shell: auth flow (Google + PIN), permission gating, tab routing.
-import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1789301862";
+import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1789302340";
 import {
   signInWithPopup, signInWithEmailAndPassword, signOut, onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
   doc, getDoc, setDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { initTasks } from "./tasks.js?v=1789301862";
-import { initSacrament } from "./sacrament.js?v=1789301862";
-import { initCalendar } from "./calendar.js?v=1789301862";
-import { initCallings } from "./callings.js?v=1789301862";
-import { initConfidential } from "./confidential.js?v=1789301862";
-import { initAdmin } from "./admin.js?v=1789301862";
+import { initTasks } from "./tasks.js?v=1789302340";
+import { initSacrament } from "./sacrament.js?v=1789302340";
+import { initCalendar } from "./calendar.js?v=1789302340";
+import { initCallings } from "./callings.js?v=1789302340";
+import { initConfidential } from "./confidential.js?v=1789302340";
+import { initAdmin } from "./admin.js?v=1789302340";
 
 const ROLE_RANK = { pending: 0, member: 1, bishopric: 2, bishop: 3 };
 
@@ -73,12 +73,57 @@ $("btn-google-signin").addEventListener("click", async () => {
 $("btn-signout").addEventListener("click", () => signOut(auth));
 $("btn-signout-pending").addEventListener("click", () => signOut(auth));
 
-// PIN sign-in. Firebase throttles repeated wrong PINs on its side; we add a
-// short client-side pause after a few misses so the screen makes it obvious.
-let pinMisses = 0;
-let pinLockedUntil = 0;
+// PIN sign-in. Five wrong PINs lock this screen for 15 minutes (kept in
+// localStorage so a refresh doesn't reset it, with a live countdown).
+// Firebase throttles repeated wrong passwords server-side as well, so the
+// lock isn't the only guard — it's the one people can see.
+const PIN_MAX_MISSES = 5;
+const PIN_LOCK_MS = 15 * 60 * 1000;
+const LOCK_KEY = "sw-pin-lock";
 const pinInput = $("pin-input");
 const pinBtn = $("btn-pin-signin");
+let lockTimer = null;
+
+function readLock() {
+  try { return JSON.parse(localStorage.getItem(LOCK_KEY) || "{}"); } catch { return {}; }
+}
+function writeLock(v) {
+  try { localStorage.setItem(LOCK_KEY, JSON.stringify(v)); } catch {}
+}
+function lockedUntil() {
+  const l = readLock();
+  return l.until && l.until > Date.now() ? l.until : 0;
+}
+function refreshLockUi() {
+  const until = lockedUntil();
+  clearInterval(lockTimer); lockTimer = null;
+  if (!until) {
+    pinInput.disabled = false; pinBtn.disabled = false;
+    return false;
+  }
+  pinInput.disabled = true; pinBtn.disabled = true; pinInput.value = "";
+  const tick = () => {
+    const left = Math.max(0, until - Date.now());
+    if (!left) { refreshLockUi(); loginError(""); pinInput.focus(); return; }
+    const m = Math.floor(left / 60000), sec = String(Math.floor((left % 60000) / 1000)).padStart(2, "0");
+    loginError(`Too many wrong PINs. Locked for ${m}:${sec} — ask the bishop if you've forgotten yours.`);
+  };
+  tick();
+  lockTimer = setInterval(tick, 1000);
+  return true;
+}
+function recordMiss(hardLock) {
+  const l = readLock();
+  const misses = hardLock ? PIN_MAX_MISSES : (l.misses || 0) + 1;
+  if (misses >= PIN_MAX_MISSES) {
+    writeLock({ misses: 0, until: Date.now() + PIN_LOCK_MS });
+    refreshLockUi();
+    return true;
+  }
+  writeLock({ misses, until: 0 });
+  return false;
+}
+
 pinInput.addEventListener("input", () => {
   pinInput.value = pinInput.value.replace(/\D/g, "").slice(0, PIN_LENGTH);
   loginError("");
@@ -88,34 +133,26 @@ pinInput.addEventListener("keydown", (e) => { if (e.key === "Enter") pinSignIn()
 pinBtn.addEventListener("click", pinSignIn);
 
 async function pinSignIn() {
+  if (refreshLockUi()) return;
   const pin = pinInput.value.trim();
   if (pin.length !== PIN_LENGTH) { loginError(`Enter your ${PIN_LENGTH}-digit PIN.`); return; }
-  if (Date.now() < pinLockedUntil) {
-    loginError(`Too many tries — wait ${Math.ceil((pinLockedUntil - Date.now()) / 1000)}s.`);
-    return;
-  }
   pinBtn.disabled = true; pinInput.disabled = true;
   loginError("");
   try {
     await signInWithEmailAndPassword(auth, pinEmail(pin), pin);
-    pinMisses = 0;
+    writeLock({ misses: 0, until: 0 });
   } catch (err) {
-    pinMisses++;
-    if (err.code === "auth/too-many-requests") {
-      pinLockedUntil = Date.now() + 5 * 60 * 1000;
-      loginError("Too many tries. Wait a few minutes and try again.");
-    } else if (pinMisses >= 5) {
-      pinLockedUntil = Date.now() + 60 * 1000;
-      loginError("That PIN isn't right. Wait a minute before trying again.");
-    } else if (err.code === "auth/operation-not-allowed") {
-      loginError("PIN sign-in isn't switched on yet — ask the bishop.");
-    } else {
-      loginError("That PIN isn't right.");
-    }
     pinInput.value = "";
+    if (err.code === "auth/operation-not-allowed") {
+      loginError("PIN sign-in isn't switched on yet — ask the bishop.");
+    } else if (recordMiss(err.code === "auth/too-many-requests")) {
+      return; // lock message + countdown already showing
+    } else {
+      const left = PIN_MAX_MISSES - (readLock().misses || 0);
+      loginError(`That PIN isn't right. ${left} ${left === 1 ? "try" : "tries"} left before a 15-minute lock.`);
+    }
   } finally {
-    pinBtn.disabled = false; pinInput.disabled = false;
-    pinInput.focus();
+    if (!lockedUntil()) { pinBtn.disabled = false; pinInput.disabled = false; pinInput.focus(); }
   }
 }
 
@@ -124,7 +161,7 @@ onAuthStateChanged(auth, async (user) => {
   if (!user) {
     hide("app"); hide("pending-screen"); show("login-screen");
     pinInput.value = "";
-    setTimeout(() => pinInput.focus(), 50);
+    if (!refreshLockUi()) setTimeout(() => pinInput.focus(), 50);
     return;
   }
   ctx.uid = user.uid;
