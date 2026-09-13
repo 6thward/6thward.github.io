@@ -5,12 +5,12 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1789306300";
+import { db } from "./firebase-init.js?v=1789306393";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789306300";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789306393";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
@@ -92,10 +92,32 @@ export function initCallings() {
     render();
   });
 
-  onSnapshot(query(collection(db, "callings"), orderBy("updatedAt", "desc")), (qs) => {
+  // Stable order (2026-09-13): a manual `order` number first (set by drag
+  // and drop), then creation time — NOT most-recently-edited, which made
+  // cards jump around every time a name was added.
+  onSnapshot(collection(db, "callings"), (qs) => {
     items = qs.docs.map((d) => norm({ id: d.id, ...d.data() }));
+    items.sort((a, b) => sortKey(a) - sortKey(b));
     render();
   });
+}
+
+const tsMs = (ts) => { const d = ts?.toDate?.() || (ts ? new Date(ts) : null); return d && !isNaN(d) ? d.getTime() : 0; };
+const sortKey = (c) => (typeof c.order === "number" ? c.order : 1e15 + (tsMs(c.createdAt) || tsMs(c.stamps?.fill) || tsMs(c.updatedAt) || 0));
+
+// After a drag: renumber every card in that column 0..n so the dropped one
+// lands where it was let go. Only cards whose number changes are written.
+async function reorderWithin(stage, draggedId, beforeId) {
+  const col = items.filter((c) => c.kind === "calling" && c.stage === stage && c.id !== draggedId);
+  const dragged = items.find((c) => c.id === draggedId);
+  if (!dragged) return;
+  const at = beforeId ? col.findIndex((c) => c.id === beforeId) : -1;
+  if (at >= 0) col.splice(at, 0, dragged); else col.push(dragged);
+  const writes = [];
+  col.forEach((c, i) => { if (c.order !== i) { c.order = i; writes.push(updateDoc(doc(db, "callings", c.id), { order: i })); } });
+  items.sort((a, b) => sortKey(a) - sortKey(b));
+  render();
+  await Promise.all(writes);
 }
 
 // every stage move gets stamped so you can see when it happened
@@ -339,6 +361,17 @@ function render() {
       document.querySelectorAll(".bb-drop").forEach((z) => z.classList.remove("bb-over"));
     });
   });
+  // hovering a card shows a drop line above it (reorder target)
+  const clearMarks = () => document.querySelectorAll("#panel-callings .bb-before").forEach((r) => r.classList.remove("bb-before"));
+  document.querySelectorAll("#panel-callings .bb-drop .list-row").forEach((row) => {
+    row.addEventListener("dragover", (e) => {
+      if (!dragId || row.dataset.id === dragId) return;
+      e.preventDefault();
+      clearMarks();
+      row.classList.add("bb-before");
+    });
+    row.addEventListener("dragleave", () => row.classList.remove("bb-before"));
+  });
   document.querySelectorAll("#panel-callings .bb-drop").forEach((zone) => {
     zone.addEventListener("dragover", (e) => {
       if (!dragId) return;
@@ -349,11 +382,15 @@ function render() {
     zone.addEventListener("drop", (e) => {
       e.preventDefault();
       zone.classList.remove("bb-over");
+      const targetRow = e.target.closest(".list-row");
+      const beforeId = targetRow && targetRow.dataset.id !== dragId ? targetRow.dataset.id : null;
+      clearMarks();
       const it = items.find((x) => x.id === dragId);
       dragId = null;
       if (!it || it.kind !== "calling") return;
       const st = zone.dataset.stage;
-      if (!st || st === it.stage) return;
+      if (!st) return;
+      if (st === it.stage) { reorderWithin(st, it.id, beforeId); return; } // same column = reorder
       if (st !== "fill" && !it.decided && !(it.candidates || [])[0]) {
         toast("Add a name (and star it) before moving this forward");
         return;
@@ -361,7 +398,8 @@ function render() {
       const upd = { stage: st };
       if (st === "fill") upd.decided = ""; // dragged back = reconsidering
       else if (!it.decided) upd.decided = (it.candidates || [])[0];
-      save(it.id, upd);
+      it.stage = st;
+      save(it.id, upd).then(() => reorderWithin(st, it.id, beforeId));
     });
   });
 }

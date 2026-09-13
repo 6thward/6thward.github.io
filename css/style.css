@@ -780,3 +780,7 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .cand-add { display:block; width:100%; margin-top:.35rem; padding:.3rem .5rem; font: inherit; font-size:.85rem; color:var(--ink); background:rgba(255,255,255,.75); border:1px dashed rgba(31,39,51,.25); border-radius:7px; }
 .cand-add::placeholder { color:var(--ink-soft); }
 .cand-add:focus { outline:none; background:#fff; border-style:solid; border-color:var(--brand); box-shadow:0 0 0 3px var(--brand-soft); }
+
+/* drop marker while re-ordering cards inside a column (2026-09-13) */
+.bb-drop .list-row.bb-before { box-shadow: 0 -3px 0 0 var(--brand) !important; }
+.bb-drop .list-row { cursor: grab; }
