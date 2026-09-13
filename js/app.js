@@ -1,17 +1,18 @@
 // App shell: auth flow (Google + PIN), permission gating, tab routing.
-import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1789306497";
+import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1789307510";
 import {
   signInWithPopup, signInWithEmailAndPassword, signOut, onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
   doc, getDoc, setDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { initTasks } from "./tasks.js?v=1789306497";
-import { initSacrament } from "./sacrament.js?v=1789306497";
-import { initCalendar } from "./calendar.js?v=1789306497";
-import { initCallings } from "./callings.js?v=1789306497";
-import { initConfidential } from "./confidential.js?v=1789306497";
-import { initAdmin } from "./admin.js?v=1789306497";
+import { initTasks } from "./tasks.js?v=1789307510";
+import { initSacrament } from "./sacrament.js?v=1789307510";
+import { initCalendar } from "./calendar.js?v=1789307510";
+import { initCallings } from "./callings.js?v=1789307510";
+import { initConfidential } from "./confidential.js?v=1789307510";
+import { initAdmin } from "./admin.js?v=1789307510";
+import { initBoard } from "./board.js?v=1789307510";
 
 const ROLE_RANK = { pending: 0, member: 1, bishopric: 2, bishop: 3 };
 
@@ -23,6 +24,7 @@ export const AREAS = [
   { key: "calendar",     label: "Calendar",      hint: "Ward events" },
   { key: "tasks",        label: "Tasks",         hint: "Assignments and follow-ups" },
   { key: "callings",     label: "Bishopric",     hint: "Callings and releases pipeline — sensitive" },
+  { key: "board",        label: "Member Board",  hint: "Person cards sorted into sections you name" },
   { key: "confidential", label: "Confidential",  hint: "Bishop's private notes — grant with care" },
   { key: "people",       label: "People",        hint: "Create PINs and set permissions (bishop only)" },
 ];
@@ -240,6 +242,7 @@ onAuthStateChanged(auth, async (user) => {
   if (can("sacrament")) initSacrament();
   if (can("calendar")) initCalendar();
   if (can("callings")) initCallings();
+  if (can("board")) initBoard();
   if (can("confidential")) initConfidential();
   if (can("people")) initAdmin();
 

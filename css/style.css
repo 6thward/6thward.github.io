@@ -789,3 +789,11 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .bb-drop .list-row { user-select: none; -webkit-user-select: none; }
 .bb-drop .list-row input { user-select: text; -webkit-user-select: text; }
 .bb-drop .list-row:active { cursor: grabbing; }
+
+/* Member Board (2026-09-13) */
+.member-board .board-card { padding: .6rem .75rem; }
+.member-board .board-note { white-space: pre-wrap; margin-top: .15rem; }
+.board-col-label.st-click { cursor: pointer; }
+.board-col-label.st-click:hover { text-decoration: underline dotted; }
+@media (max-width: 1100px) { .member-board { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } }
+@media (max-width: 650px)  { .member-board { grid-template-columns: 1fr !important; } }
