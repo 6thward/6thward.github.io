@@ -2,20 +2,35 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ---- Role helpers ----
-    // Roles live in users/{uid}.role: pending -> member -> bishopric -> bishop.
-    // The bishop's email is recognized directly so the app can never lock itself out.
+    // =====================================================================
+    // Who is who
+    // ---------------------------------------------------------------------
+    // Two kinds of people sign in:
+    //   * Google accounts (bishopric, clerks, members) — users/{uid}.role is
+    //     pending -> member -> bishopric -> bishop, exactly as before.
+    //   * PIN people — a hidden email/password account the bishop creates
+    //     from the People tab (email = pin-XXXXXX@sixthward.pin, password =
+    //     the PIN). Their users/{uid} doc has role 'pin' plus a perms map:
+    //       perms: { sacrament: 'edit', calendar: 'view', tasks: '', ... }
+    //     Each area is '' (hidden), 'view' or 'edit'. Nothing is granted
+    //     that isn't in that map.
+    // The bishop's own email is recognised directly so the app can never
+    // lock itself out.
+    // =====================================================================
     function signedIn() {
       return request.auth != null;
     }
     function isBishopEmail() {
       return signedIn() && request.auth.token.email == 'jordanchri@gmail.com';
     }
-    function role() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
-    }
     function hasProfile() {
       return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+    function profile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    function role() {
+      return profile().role;
     }
     function isBishop() {
       return isBishopEmail() || (hasProfile() && role() == 'bishop');
@@ -23,61 +38,91 @@ service cloud.firestore {
     function isBishopric() {
       return isBishop() || (hasProfile() && role() == 'bishopric');
     }
-    function isApproved() {
-      return isBishopric() || (hasProfile() && role() == 'member');
+    function isMember() {
+      return hasProfile() && role() == 'member';
+    }
+    function isPin() {
+      return hasProfile() && role() == 'pin';
+    }
+    // permission level a PIN person holds for an area ('' when absent)
+    function pinLevel(area) {
+      return isPin() && ('perms' in profile()) && (area in profile().perms)
+        ? profile().perms[area] : '';
+    }
+    // Members (Google role) see the three everyday areas, nothing sensitive.
+    function memberSees(area) {
+      return isMember() && (area == 'sacrament' || area == 'calendar' || area == 'tasks');
+    }
+    function canView(area) {
+      return isBishopric() || memberSees(area)
+        || pinLevel(area) == 'view' || pinLevel(area) == 'edit';
+    }
+    function canEdit(area) {
+      return isBishopric() || pinLevel(area) == 'edit';
+    }
+    // anyone who has been let in at all (for name pickers / rosters)
+    function hasAccess() {
+      return isBishopric() || isMember() || isPin();
     }
 
-    // ---- Profiles / roles ----
+    // ---- Profiles / roles / permissions ----
     match /users/{uid} {
-      // anyone signed in can read their own profile (to learn their role);
-      // approved users can read the roster (names for assignee pickers)
-      allow read: if signedIn() && (request.auth.uid == uid || isApproved());
-      // a new sign-in may only create their own profile, and only as 'pending'
-      // (the bishop's own email may bootstrap itself as bishop)
-      allow create: if signedIn() && request.auth.uid == uid && (
+      // your own profile (to learn your role + perms); the roster for anyone let in
+      allow read: if signedIn() && (request.auth.uid == uid || hasAccess());
+      // a new Google sign-in may only create their own profile, as 'pending'
+      // (the bishop's email may bootstrap itself as bishop);
+      // the bishop creates PIN people's profiles
+      allow create: if isBishop() || (signedIn() && request.auth.uid == uid && (
         request.resource.data.role == 'pending' ||
         (request.resource.data.role == 'bishop' && isBishopEmail())
-      );
-      // only the bishop assigns roles
+      ));
+      // only the bishop assigns roles / permissions
       allow update, delete: if isBishop();
+    }
+
+    // ---- PINs (plain, so the bishop can look one up and re-tell it) — bishop ONLY ----
+    match /pins/{uid} {
+      allow read, write: if isBishop();
     }
 
     // ---- Tasks ----
     match /tasks/{id} {
-      allow read: if isApproved();
-      allow create, delete: if isBishopric();
-      // members may update tasks assigned to them (e.g. mark done)
-      allow update: if isBishopric()
-        || (isApproved() && resource.data.assigneeUid == request.auth.uid);
+      allow read: if canView('tasks');
+      allow create, delete: if canEdit('tasks');
+      // anyone who can see tasks may update one assigned to them (e.g. mark done)
+      allow update: if canEdit('tasks')
+        || (canView('tasks') && resource.data.assigneeUid == request.auth.uid);
     }
 
     // ---- Sacrament meeting plans ----
     match /meetings/{id} {
-      allow read: if isApproved();
-      allow write: if isBishopric();
+      allow read: if canView('sacrament');
+      allow write: if canEdit('sacrament');
     }
 
     // ---- Calendar events ----
     match /events/{id} {
-      allow read, create: if isApproved();
-      allow update, delete: if isBishopric()
-        || (isApproved() && resource.data.createdBy == request.auth.uid);
+      allow read, create: if canView('calendar');
+      allow update, delete: if canEdit('calendar')
+        || (canView('calendar') && resource.data.createdBy == request.auth.uid);
     }
 
-    // ---- Shared settings (bishopric roster, etc.) ----
+    // ---- Shared settings (rosters, hymns, homebound list) ----
     match /settings/{id} {
-      allow read: if isApproved();
-      allow write: if isBishopric();
+      allow read: if hasAccess();
+      allow write: if canEdit('sacrament');
     }
 
-    // ---- Callings pipeline (sensitive: bishopric only) ----
+    // ---- Callings pipeline (sensitive) ----
     match /callings/{id} {
-      allow read, write: if isBishopric();
+      allow read: if canView('callings');
+      allow write: if canEdit('callings');
     }
 
-    // ---- Confidential (bishop ONLY) ----
+    // ---- Confidential (bishop, or a PIN the bishop explicitly grants) ----
     match /confidential/{id} {
-      allow read, write: if isBishop();
+      allow read: if isBishop() || pinLevel('confidential') == 'view' || pinLevel('confidential') == 'edit';
+      allow write: if isBishop() || pinLevel('confidential') == 'edit';
     }
 
     // everything else: denied

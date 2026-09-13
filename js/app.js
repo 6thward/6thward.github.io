@@ -1,56 +1,137 @@
-// App shell: auth flow, role gating, tab routing.
-import { auth, db, googleProvider, BISHOP_EMAIL } from "./firebase-init.js?v=1788151704";
+// App shell: auth flow (Google + PIN), permission gating, tab routing.
+import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1789301862";
 import {
-  signInWithPopup, signOut, onAuthStateChanged,
+  signInWithPopup, signInWithEmailAndPassword, signOut, onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
   doc, getDoc, setDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { initTasks } from "./tasks.js?v=1788151704";
-import { initSacrament } from "./sacrament.js?v=1788151704";
-import { initCalendar } from "./calendar.js?v=1788151704";
-import { initCallings } from "./callings.js?v=1788151704";
-import { initConfidential } from "./confidential.js?v=1788151704";
-import { initAdmin } from "./admin.js?v=1788151704";
+import { initTasks } from "./tasks.js?v=1789301862";
+import { initSacrament } from "./sacrament.js?v=1789301862";
+import { initCalendar } from "./calendar.js?v=1789301862";
+import { initCallings } from "./callings.js?v=1789301862";
+import { initConfidential } from "./confidential.js?v=1789301862";
+import { initAdmin } from "./admin.js?v=1789301862";
 
 const ROLE_RANK = { pending: 0, member: 1, bishopric: 2, bishop: 3 };
 
+// The areas a person can be granted. Order = order on the People tab.
+// Google roles map onto these too (see permsForRole) so every module asks
+// one question — can(area, level) — regardless of how the person signed in.
+export const AREAS = [
+  { key: "sacrament",    label: "Sacrament Mtg", hint: "Sunday agendas, speakers, hymns, ward business" },
+  { key: "calendar",     label: "Calendar",      hint: "Ward events" },
+  { key: "tasks",        label: "Tasks",         hint: "Assignments and follow-ups" },
+  { key: "callings",     label: "Bishopric",     hint: "Callings and releases pipeline — sensitive" },
+  { key: "confidential", label: "Confidential",  hint: "Bishop's private notes — grant with care" },
+  { key: "people",       label: "People",        hint: "Create PINs and set permissions (bishop only)" },
+];
+
 // current signed-in user's context, shared with all tab modules
-export const ctx = { uid: null, name: null, email: null, role: null };
+export const ctx = { uid: null, name: null, email: null, role: null, perms: {}, isPin: false };
 
 export function hasRole(minRole) {
   return (ROLE_RANK[ctx.role] ?? 0) >= (ROLE_RANK[minRole] ?? 0);
+}
+
+// What a Google role implies, area by area ('' hidden | 'view' | 'edit').
+function permsForRole(role) {
+  const all = (lvl) => Object.fromEntries(AREAS.map((a) => [a.key, lvl]));
+  if (role === "bishop") return all("edit");
+  if (role === "bishopric") return { ...all("edit"), confidential: "", people: "" };
+  if (role === "member") return { ...all(""), sacrament: "view", calendar: "view", tasks: "view" };
+  return all("");
+}
+
+// can("sacrament") = may see it; can("sacrament", "edit") = may change it.
+export function can(area, level = "view") {
+  const have = ctx.perms[area] || "";
+  if (level === "edit") return have === "edit";
+  return have === "view" || have === "edit";
 }
 
 const $ = (id) => document.getElementById(id);
 const show = (id) => $(id).classList.remove("hidden");
 const hide = (id) => $(id).classList.add("hidden");
 
+function loginError(msg) {
+  const el = $("login-error");
+  if (!msg) { el.classList.add("hidden"); return; }
+  el.textContent = msg;
+  el.classList.remove("hidden");
+}
+
 // ---- Sign in / out ----
 $("btn-google-signin").addEventListener("click", async () => {
-  hide("login-error");
+  loginError("");
   try {
     await signInWithPopup(auth, googleProvider);
   } catch (err) {
-    const el = $("login-error");
-    el.textContent = "Sign-in failed: " + (err.code || err.message);
-    el.classList.remove("hidden");
+    loginError("Sign-in failed: " + (err.code || err.message));
   }
 });
 $("btn-signout").addEventListener("click", () => signOut(auth));
 $("btn-signout-pending").addEventListener("click", () => signOut(auth));
 
+// PIN sign-in. Firebase throttles repeated wrong PINs on its side; we add a
+// short client-side pause after a few misses so the screen makes it obvious.
+let pinMisses = 0;
+let pinLockedUntil = 0;
+const pinInput = $("pin-input");
+const pinBtn = $("btn-pin-signin");
+pinInput.addEventListener("input", () => {
+  pinInput.value = pinInput.value.replace(/\D/g, "").slice(0, PIN_LENGTH);
+  loginError("");
+  if (pinInput.value.length === PIN_LENGTH) pinSignIn();
+});
+pinInput.addEventListener("keydown", (e) => { if (e.key === "Enter") pinSignIn(); });
+pinBtn.addEventListener("click", pinSignIn);
+
+async function pinSignIn() {
+  const pin = pinInput.value.trim();
+  if (pin.length !== PIN_LENGTH) { loginError(`Enter your ${PIN_LENGTH}-digit PIN.`); return; }
+  if (Date.now() < pinLockedUntil) {
+    loginError(`Too many tries — wait ${Math.ceil((pinLockedUntil - Date.now()) / 1000)}s.`);
+    return;
+  }
+  pinBtn.disabled = true; pinInput.disabled = true;
+  loginError("");
+  try {
+    await signInWithEmailAndPassword(auth, pinEmail(pin), pin);
+    pinMisses = 0;
+  } catch (err) {
+    pinMisses++;
+    if (err.code === "auth/too-many-requests") {
+      pinLockedUntil = Date.now() + 5 * 60 * 1000;
+      loginError("Too many tries. Wait a few minutes and try again.");
+    } else if (pinMisses >= 5) {
+      pinLockedUntil = Date.now() + 60 * 1000;
+      loginError("That PIN isn't right. Wait a minute before trying again.");
+    } else if (err.code === "auth/operation-not-allowed") {
+      loginError("PIN sign-in isn't switched on yet — ask the bishop.");
+    } else {
+      loginError("That PIN isn't right.");
+    }
+    pinInput.value = "";
+  } finally {
+    pinBtn.disabled = false; pinInput.disabled = false;
+    pinInput.focus();
+  }
+}
+
 // ---- Auth state ----
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
     hide("app"); hide("pending-screen"); show("login-screen");
+    pinInput.value = "";
+    setTimeout(() => pinInput.focus(), 50);
     return;
   }
   ctx.uid = user.uid;
-  ctx.name = user.displayName || user.email;
   ctx.email = user.email;
+  ctx.isPin = isPinEmail(user.email);
+  ctx.name = ctx.isPin ? "" : (user.displayName || user.email);
 
-  // Ensure a users/{uid} profile doc exists; new accounts start as "pending".
   const uref = doc(db, "users", user.uid);
   let snap;
   try {
@@ -58,57 +139,83 @@ onAuthStateChanged(auth, async (user) => {
   } catch {
     snap = null;
   }
-  if (!snap || !snap.exists()) {
-    const initialRole = user.email === BISHOP_EMAIL ? "bishop" : "pending";
-    try {
-      await setDoc(uref, {
-        name: ctx.name,
-        email: user.email,
-        photo: user.photoURL || "",
-        role: initialRole,
-        createdAt: serverTimestamp(),
-      });
-      ctx.role = initialRole;
-    } catch {
-      ctx.role = "pending";
+
+  if (ctx.isPin) {
+    // PIN accounts are created by the bishop together with their profile.
+    // No profile = the person was removed; the account can't do anything.
+    if (!snap || !snap.exists()) {
+      await signOut(auth);
+      loginError("That PIN is no longer active — ask the bishop.");
+      return;
+    }
+    const d = snap.data();
+    ctx.role = "pin";
+    ctx.name = d.name || "PIN user";
+    ctx.perms = { ...permsForRole(""), ...(d.perms || {}) };
+    if (!AREAS.some((a) => can(a.key))) {
+      await signOut(auth);
+      loginError("Your PIN doesn't have access to anything yet — ask the bishop.");
+      return;
     }
   } else {
-    ctx.role = snap.data().role || "pending";
-    // the bishop's email is always bishop, even if the doc says otherwise
-    if (user.email === BISHOP_EMAIL) ctx.role = "bishop";
-  }
+    // Ensure a users/{uid} profile doc exists; new Google accounts start as "pending".
+    if (!snap || !snap.exists()) {
+      const initialRole = user.email === BISHOP_EMAIL ? "bishop" : "pending";
+      try {
+        await setDoc(uref, {
+          name: ctx.name,
+          email: user.email,
+          photo: user.photoURL || "",
+          role: initialRole,
+          createdAt: serverTimestamp(),
+        });
+        ctx.role = initialRole;
+      } catch {
+        ctx.role = "pending";
+      }
+    } else {
+      ctx.role = snap.data().role || "pending";
+      // the bishop's email is always bishop, even if the doc says otherwise
+      if (user.email === BISHOP_EMAIL) ctx.role = "bishop";
+    }
+    ctx.perms = permsForRole(ctx.role);
 
-  if (ctx.role === "pending") {
-    hide("login-screen"); hide("app"); show("pending-screen");
-    return;
+    if (ctx.role === "pending") {
+      hide("login-screen"); hide("app"); show("pending-screen");
+      return;
+    }
   }
 
   // ---- Enter the app ----
   hide("login-screen"); hide("pending-screen"); show("app");
   $("user-name").textContent = ctx.name;
   const photo = $("user-photo");
-  if (user.photoURL) { photo.src = user.photoURL; photo.classList.remove("hidden"); }
+  if (!ctx.isPin && user.photoURL) { photo.src = user.photoURL; photo.classList.remove("hidden"); }
   else photo.classList.add("hidden");
 
-  // hide tabs above the user's role
+  // show only the tabs this person may see
   document.querySelectorAll("#main-tabs .tab").forEach((t) => {
-    const min = t.dataset.minrole;
-    t.classList.toggle("hidden", !!min && !hasRole(min));
+    const area = t.dataset.area;
+    t.classList.toggle("hidden", !!area && !can(area));
   });
 
-  initTasks();
-  initSacrament();
-  initCalendar();
-  if (hasRole("bishopric")) initCallings();
-  if (hasRole("bishop")) { initConfidential(); initAdmin(); }
+  if (can("tasks")) initTasks();
+  if (can("sacrament")) initSacrament();
+  if (can("calendar")) initCalendar();
+  if (can("callings")) initCallings();
+  if (can("confidential")) initConfidential();
+  if (can("people")) initAdmin();
 
   selectTab(localStorage.getItem("sw-tab") || "sacrament");
 });
 
 // ---- Tabs ----
 function selectTab(name) {
-  const tab = document.querySelector(`.tab[data-tab="${name}"]`);
-  if (!tab || tab.classList.contains("hidden")) name = "sacrament";
+  let tab = document.querySelector(`.tab[data-tab="${name}"]`);
+  if (!tab || tab.classList.contains("hidden")) {
+    tab = document.querySelector("#main-tabs .tab:not(.hidden)");
+    name = tab ? tab.dataset.tab : name;
+  }
   document.querySelectorAll(".tab").forEach((t) =>
     t.classList.toggle("active", t.dataset.tab === name));
   document.querySelectorAll(".panel").forEach((p) =>

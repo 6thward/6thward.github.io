@@ -1,11 +1,11 @@
 // Tasks tab: assignable tasks with status tracking.
-import { db } from "./firebase-init.js?v=1788151704";
-import { ctx, hasRole } from "./app.js?v=1788151704";
+import { db } from "./firebase-init.js?v=1789301862";
+import { ctx, hasRole, can } from "./app.js?v=1789301862";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp, getDocs,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1788151704";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789301862";
 
 const STATUSES = [
   ["open", "Open"],
@@ -110,7 +110,7 @@ function render() {
 
 function editTask(t) {
   const isNew = !t;
-  const canManage = hasRole("bishopric");
+  const canManage = can("tasks", "edit");
   const canEdit = canManage || (t && t.assigneeUid === ctx.uid);
   const peopleOpts = people.map((p) =>
     `<option value="${p.uid}" ${t?.assigneeUid === p.uid ? "selected" : ""}>${esc(p.name)}</option>`).join("");

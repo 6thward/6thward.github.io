@@ -2,13 +2,13 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1788151704";
-import { ctx, hasRole } from "./app.js?v=1788151704";
+import { db } from "./firebase-init.js?v=1789301862";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789301862";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1788151704";
-import { HYMNS } from "./hymns.js?v=1788151704";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789301862";
+import { HYMNS } from "./hymns.js?v=1789301862";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -219,7 +219,7 @@ export function initSacrament() {
           <button class="chip" data-view-mode="table">Table</button>
         </div>
         <button class="btn btn-sm" id="btn-toggle-past">Show previous Sundays</button>
-        ${hasRole("bishopric") ? `<button class="btn" id="btn-edit-bishopric">⚙ Settings</button>` : ""}
+        ${canDo("sacrament", "edit") ? `<button class="btn" id="btn-edit-bishopric">⚙ Settings</button>` : ""}
       </div>
     </div>
     <div id="sunday-list"></div>`;
@@ -261,7 +261,7 @@ async function loadBishopric() {
       if (Array.isArray(d.customHymns)) customHymns = d.customHymns;
       if (Array.isArray(d.blockedHymns)) blockedHymns = d.blockedHymns;
       if (Array.isArray(d.sacramentApproved)) sacramentApproved = d.sacramentApproved;
-    } else if (hasRole("bishopric")) {
+    } else if (canDo("sacrament", "edit")) {
       await setDoc(doc(db, "settings", "leadership"), { bishopric: DEFAULT_BISHOPRIC, priests: [], organists: [], conductors: [] });
     }
   } catch { /* keep defaults */ }
@@ -536,7 +536,7 @@ function statusChips(m, date) {
   if (NO_MEETING(type)) return "";
   const items = itemsFor(m, date);
   const planned = !!m;
-  const can = hasRole("bishopric");
+  const can = canDo("sacrament", "edit");
   const of = (k) => items.filter((i) => i.kind === k);
   // no name -> grey/red (unassigned); name but not confirmed -> yellow "pending";
   // name + confirmed -> green with a checkmark and a "confirmed by" tooltip.
@@ -700,7 +700,7 @@ function viewDates() {
 
 // ===== Cards view =====
 function renderCards(wrap) {
-  const canEdit = hasRole("bishopric");
+  const canEdit = canDo("sacrament", "edit");
   const today = todayISO();
 
   wrap.innerHTML = viewDates().map((date) => {
@@ -1489,7 +1489,7 @@ function wbModal(date) {
     <div class="modal-actions">
       <div class="right">
         <button class="btn" id="wb-close">Close</button>
-        ${hasRole("bishopric") ? `<button class="btn btn-primary" id="wb-edit">Edit</button>` : ""}
+        ${canDo("sacrament", "edit") ? `<button class="btn btn-primary" id="wb-edit">Edit</button>` : ""}
       </div>
     </div>`);
   el.querySelector("#wb-close").addEventListener("click", closeModal);
@@ -1499,7 +1499,7 @@ function wbModal(date) {
 // Homebound sacrament: the standing list lives in settings; who takes it to
 // each member is assigned per Sunday and stored on the meeting (hbAssign map)
 function hbModal(date) {
-  const canEdit = hasRole("bishopric");
+  const canEdit = canDo("sacrament", "edit");
   if (!homebound.length) {
     toast(canEdit ? "No homebound members yet — add them under ⚙ Settings" : "No homebound members on the list");
     return;
@@ -1643,7 +1643,7 @@ function hbModal(date) {
 // ===== View modal =====
 function viewMeeting(date) {
   const m = meetings[date];
-  const canEdit = hasRole("bishopric");
+  const canEdit = canDo("sacrament", "edit");
   if (!m) {
     if (canEdit) return editMeeting(date);
     return toast("Not planned yet");
@@ -1794,7 +1794,7 @@ function renderAgendaView(m, canEdit = false) {
 
 // ===== Table (spreadsheet) view =====
 function renderTable(wrap) {
-  const canEdit = hasRole("bishopric");
+  const canEdit = canDo("sacrament", "edit");
   const today = todayISO();
   const thisYear = new Date().getFullYear();
   // default: this week onward; "show previous" reveals the whole year (past rows dimmed)

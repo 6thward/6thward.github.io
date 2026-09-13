@@ -1,10 +1,10 @@
 // Calendar tab: month grid of ward meetings and the bishop's schedule.
-import { db } from "./firebase-init.js?v=1788151704";
-import { ctx, hasRole } from "./app.js?v=1788151704";
+import { db } from "./firebase-init.js?v=1789301862";
+import { ctx, hasRole, can } from "./app.js?v=1789301862";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1788151704";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1789301862";
 
 let events = [];
 let viewYear, viewMonth; // 0-based month
@@ -161,7 +161,7 @@ function dayView(date) {
 
 function editEvent(e, defaultDate) {
   const isNew = !e;
-  const canEdit = isNew || hasRole("bishopric") || e.createdBy === ctx.uid;
+  const canEdit = isNew || can("calendar", "edit") || e.createdBy === ctx.uid;
   const el = openModal(`
     <h3>${isNew ? "New event" : canEdit ? "Edit event" : "Event"}</h3>
     <div class="form-grid two-col">
