@@ -3,12 +3,12 @@
 // added, renamed, reordered and removed. Data:
 //   boardColumns/{id}  { label, order }
 //   board/{id}         { name, notes, column, order, createdAt, updatedAt }
-import { db } from "./firebase-init.js?v=1789329971";
-import { ctx, can } from "./app.js?v=1789329971";
+import { db } from "./firebase-init.js?v=1789330141";
+import { ctx, can } from "./app.js?v=1789330141";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1789329971";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1789330141";
 
 const PALETTE = ["#1f4e79", "#5b4b9e", "#2e7d4f", "#a8720d", "#b3402f", "#0e7490", "#7a5a14", "#5b6675"];
 const DEFAULT_COLUMNS = ["Ideas", "Talking to", "Settled"];
@@ -42,7 +42,7 @@ export function initBoard() {
 
   onSnapshot(collection(db, "boardColumns"), (qs) => {
     cols = qs.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    if (!cols.length && editor && !seeding && !qs.metadata.fromCache) seedColumns();
+    if (!cols.length && editor && !seeding && !(qs.metadata && qs.metadata.fromCache)) seedColumns();
     render();
   });
   onSnapshot(collection(db, "board"), (qs) => {
