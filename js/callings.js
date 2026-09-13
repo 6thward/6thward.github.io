@@ -5,12 +5,12 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1789302340";
+import { db } from "./firebase-init.js?v=1789306300";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789302340";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789306300";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
@@ -143,11 +143,15 @@ const fillRow = (c) => {
   const cands = c.candidates || [];
   const sub = cands.length
     ? cands.map((n, i) => `<div class="cand-line">${esc(n)} <span class="cand-x" data-rm="${i}" title="Remove ${esc(n)} from consideration">✕</span></div>`).join("")
-    : "No names yet";
+    : "";
+  // Inline add box (2026-09-13): type a name + Enter to add it to the
+  // consideration list without opening the editor. The card itself still
+  // opens the editor for starring / everything else.
+  const addBox = `<input class="cand-add" data-addcand="${c.id}" placeholder="${cands.length ? "+ Add another name" : "+ Add a name to consider"}" autocomplete="off" aria-label="Add a name to consider for ${esc(c.calling)}">`;
   return `
   <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
     <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}${c.organization ? ` <span class="call-card-org">· ${esc(c.organization)}</span>` : ""}</div>
-    <div class="row-sub">${sub}</div>
+    <div class="row-sub">${sub}${addBox}</div>
   </div>`;
 };
 
@@ -256,6 +260,7 @@ function render() {
       const t = e.target;
       const item = it();
       if (!item) return;
+      if (t.classList.contains("cand-add")) { e.stopPropagation(); return; } // typing a name, not opening the editor
       if (t.dataset.rm != null && t.classList.contains("cand-x")) { // ✕ a considered name
         e.stopPropagation();
         const cands = [...(item.candidates || [])];
@@ -283,6 +288,32 @@ function render() {
       else if (item.kind === "release") editRelease(item);
       else editCalling(item);
     });
+  });
+
+  // inline "+ Add a name" boxes on Calling-to-Fill cards
+  document.querySelectorAll("#panel-callings .cand-add").forEach((inp) => {
+    const commit = async () => {
+      const name = inp.value.trim();
+      if (!name) return;
+      const item = items.find((x) => x.id === inp.dataset.addcand);
+      if (!item) return;
+      const cands = [...(item.candidates || [])];
+      if (cands.some((n) => n.toLowerCase() === name.toLowerCase())) { toast(`${name} is already on the list`); inp.value = ""; return; }
+      cands.push(name);
+      inp.value = "";
+      inp.disabled = true;
+      try { await save(item.id, { candidates: cands }); toast(`${name} added to ${item.calling}`); }
+      finally { inp.disabled = false; }
+      // re-render replaces the input; put the cursor back in the same card's box
+      setTimeout(() => { const again = document.querySelector(`#panel-callings .cand-add[data-addcand="${item.id}"]`); if (again) again.focus(); }, 80);
+    };
+    inp.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); commit(); }
+      if (e.key === "Escape") { inp.value = ""; inp.blur(); }
+    });
+    inp.addEventListener("blur", commit);
+    inp.addEventListener("mousedown", (e) => e.stopPropagation());
+    inp.addEventListener("dragstart", (e) => { e.preventDefault(); e.stopPropagation(); });
   });
 
   // "+" on a bucket header opens the matching creator
