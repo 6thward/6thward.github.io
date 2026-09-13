@@ -814,6 +814,8 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
   .agenda-view .ag-head-break { display: none; }
   .agenda-view .ag-sacrament, .agenda-view .ag-sac-hymn { margin-left: 0; margin-right: 0; padding-left: .5rem; padding-right: .5rem; }
   .agenda-view .ag-sacrament { flex-wrap: nowrap; border-bottom: none; }
-  .agenda-view .ag-sac-label { font-size: 1rem; }
+  .agenda-view .ag-sac-label { position: static; transform: none; left: auto; flex: 1 1 auto; text-align: left; font-size: 1rem; padding-right: .5rem; }
+  .agenda-view .ag-sacrament { justify-content: flex-start; }
+  .agenda-view .ag-sacrament .ag-clock { margin-left: auto; }
   .agenda-view .ag-total { font-size: 1rem; }
 }
