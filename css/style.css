@@ -784,3 +784,8 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 /* drop marker while re-ordering cards inside a column (2026-09-13) */
 .bb-drop .list-row.bb-before { box-shadow: 0 -3px 0 0 var(--brand) !important; }
 .bb-drop .list-row { cursor: grab; }
+
+/* cards drag as a whole — no accidental text-selection drags (2026-09-13) */
+.bb-drop .list-row { user-select: none; -webkit-user-select: none; }
+.bb-drop .list-row input { user-select: text; -webkit-user-select: text; }
+.bb-drop .list-row:active { cursor: grabbing; }

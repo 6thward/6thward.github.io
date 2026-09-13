@@ -5,12 +5,12 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1789306393";
+import { db } from "./firebase-init.js?v=1789306497";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789306393";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789306497";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
@@ -174,6 +174,7 @@ const fillRow = (c) => {
   <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
     <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}${c.organization ? ` <span class="call-card-org">· ${esc(c.organization)}</span>` : ""}</div>
     <div class="row-sub">${sub}${addBox}</div>
+    ${cands.length ? `<div class="call-card-actions"><button class="btn btn-sm" data-adv="issue" type="button" title="Move to Calls to Issue${c.decided ? "" : " (uses the first name unless you star one)"}">Issue call →</button></div>` : ""}
   </div>`;
 };
 
@@ -302,7 +303,13 @@ function render() {
       }
       if (t.dataset.adv) { // quick advance / step back to the named stage
         e.stopPropagation();
-        save(item.id, { stage: t.dataset.adv });
+        const upd = { stage: t.dataset.adv };
+        if (t.dataset.adv !== "fill" && !item.decided) { // leaving "fill" needs a name on the card
+          const first = (item.candidates || [])[0];
+          if (!first) { toast("Add a name first"); return; }
+          upd.decided = first;
+        }
+        save(item.id, upd);
         return;
       }
 
