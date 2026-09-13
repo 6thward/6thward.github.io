@@ -797,3 +797,23 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .board-col-label.st-click:hover { text-decoration: underline dotted; }
 @media (max-width: 1100px) { .member-board { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } }
 @media (max-width: 650px)  { .member-board { grid-template-columns: 1fr !important; } }
+
+/* ===== Agenda readout on phones (2026-09-13): each line stacks —
+   small label + time on top, the answer full-width and larger below ===== */
+@media (max-width: 650px) {
+  .modal-backdrop { padding: .5rem; align-items: flex-start; }
+  .modal { padding: 1rem .9rem 1.1rem; border-radius: 10px; }
+  .agenda-view { font-size: 1rem; }
+  .agenda-view .ag-row { flex-wrap: wrap; row-gap: .05rem; padding: .45rem 0; border-bottom: 1px solid var(--line); align-items: center; }
+  .agenda-view .ag-row:last-child { border-bottom: none; }
+  .agenda-view .ag-label { min-width: 0; flex: 1 1 auto; order: 0; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); }
+  .agenda-view .ag-clock { order: 1; margin-left: auto; min-width: 0; font-size: .8rem; }
+  .agenda-view .ag-clock + .ag-time { order: 1; margin-left: .5rem; min-width: 0; font-size: .8rem; }
+  .agenda-view .ag-val { order: 2; flex: 1 1 100%; font-size: 1.08rem; line-height: 1.35; color: var(--ink); }
+  .agenda-view .ag-detail-full, .agenda-view .ag-detail-box { order: 3; font-size: .95rem; }
+  .agenda-view .ag-head-break { display: none; }
+  .agenda-view .ag-sacrament, .agenda-view .ag-sac-hymn { margin-left: 0; margin-right: 0; padding-left: .5rem; padding-right: .5rem; }
+  .agenda-view .ag-sacrament { flex-wrap: nowrap; border-bottom: none; }
+  .agenda-view .ag-sac-label { font-size: 1rem; }
+  .agenda-view .ag-total { font-size: 1rem; }
+}
