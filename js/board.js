@@ -3,12 +3,12 @@
 // added, renamed, reordered and removed. Data:
 //   boardColumns/{id}  { label, order }
 //   board/{id}         { name, notes, column, order, createdAt, updatedAt }
-import { db } from "./firebase-init.js?v=1789350123";
-import { ctx, can } from "./app.js?v=1789350123";
+import { db } from "./firebase-init.js?v=1789354584";
+import { ctx, can } from "./app.js?v=1789354584";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789350123";
+import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789354584";
 
 // Next ordinance a person is working toward — shown as a pill beside the name.
 const ORDINANCES = ["Sacrament", "Aaronic Priesthood", "Melchizedek Priesthood", "Endowment", "Sealing"];
@@ -87,7 +87,7 @@ function render() {
       <div class="mtg-row">${meetingsPill(k, editor)}</div>
     </div>`;
   };
-  wrap.innerHTML = `<div class="bishopric-board member-board" style="grid-template-columns:repeat(${Math.min(cols.length, 4)}, minmax(0,1fr))">` +
+  wrap.innerHTML = `<div class="bishopric-board member-board">` + /* 4 columns on desktop (CSS); extra sections wrap to a second row */
     cols.map((c, i) => {
       const rows = cards.filter((k) => k.column === c.id);
       return `
