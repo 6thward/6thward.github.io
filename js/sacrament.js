@@ -2,13 +2,13 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789358482";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789358482";
+import { db } from "./firebase-init.js?v=1789359289";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789359289";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789358482";
-import { HYMNS } from "./hymns.js?v=1789358482";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789359289";
+import { HYMNS } from "./hymns.js?v=1789359289";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -30,6 +30,7 @@ let homebound = [];  // homebound members: {id, name, address} — sacrament tak
 let organists = [];  // suggestions for the Organist field
 let conductors = []; // suggestions for the music Conductor field
 let customHymns = []; // [{num, title}] added under ⚙ Settings, merged into the catalog
+let meetingTime = ""; // "HH:MM" sacrament meeting start (⚙ Settings) — decides which Sunday a sustaining lands on
 let blockedHymns = [];      // hymn numbers un-approved by the bishop: stay listed, leave the pickers
 let sacramentApproved = []; // hymn numbers approved for the Sacrament Hymn slot
 
@@ -314,7 +315,7 @@ let showPast = false; // table: include the current year's earlier Sundays
 const NO_BUSINESS = (t) => NO_MEETING(t) || t === "wardconf";
 export async function addSustainingToNext(name, calling) {
   if (!name) return null;
-  let d = upcomingSunday();
+  let d = await sundayForBusiness();
   for (let i = 0; i < 12; i++) {
     const type = meetings[d]?.type || defaultTypeFor(d);
     if (!NO_BUSINESS(type)) break;
@@ -348,6 +349,27 @@ async function patchMeetingFresh(date, mutate) {
   m.updatedAt = serverTimestamp();
   await setDoc(doc(db, "meetings", date), m);
   if (meetings[date]) meetings[date] = m;
+}
+
+// The Sunday a new sustaining belongs to: the coming Sunday — but on a Sunday
+// itself, once the sacrament meeting time (⚙ Settings) has passed, the next
+// one. Reads the time fresh so the Callings tab gets it even with a cold cache.
+export async function sundayForBusiness(now = new Date()) {
+  let t = meetingTime;
+  try {
+    const snap = await getDoc(doc(db, "settings", "leadership"));
+    if (snap.exists() && typeof snap.data().meetingTime === "string") { t = snap.data().meetingTime; meetingTime = t; }
+  } catch { /* keep cached */ }
+  const d = new Date(now);
+  let iso = isoOf(new Date(d.getFullYear(), d.getMonth(), d.getDate() + ((7 - d.getDay()) % 7)));
+  if (d.getDay() === 0 && /^\d{1,2}:\d{2}$/.test(t)) {
+    const [h, m] = t.split(":").map(Number);
+    if (d.getHours() * 60 + d.getMinutes() >= h * 60 + m) {
+      const nx = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 7);
+      iso = isoOf(nx);
+    }
+  }
+  return iso;
 }
 
 // Undo of the above: when a call falls through (moved back out of Calls to
@@ -431,6 +453,7 @@ async function loadBishopric() {
       if (Array.isArray(d.organists)) organists = d.organists;
       if (Array.isArray(d.conductors)) conductors = d.conductors;
       if (Array.isArray(d.customHymns)) customHymns = d.customHymns;
+      if (typeof d.meetingTime === "string") meetingTime = d.meetingTime;
       if (Array.isArray(d.blockedHymns)) blockedHymns = d.blockedHymns;
       if (Array.isArray(d.sacramentApproved)) sacramentApproved = d.sacramentApproved;
     } else if (canDo("sacrament", "edit")) {
@@ -449,7 +472,10 @@ function editBishopric() {
     `<div class="speaker-row"><input class="${cls}" value="${esc(n)}"><button class="btn btn-sm set-del" type="button">✕</button></div>`).join("");
   const el = openModal(`
     <h3>Settings</h3>
-    <div class="mtg-sec-title">Bishopric</div>
+    <div class="mtg-sec-title">Sacrament meeting time</div>
+    <p class="row-sub" style="margin:0 0 .5rem">When a call is moved to “Calls to Sustain” on a Sunday, it goes on <b>this</b> Sunday's Ward Business if the meeting hasn't started yet, otherwise on <b>next</b> Sunday's.</p>
+    <div class="speaker-row"><input type="time" id="set-mtime" value="${esc(meetingTime)}" style="flex:0 0 9rem"><span class="row-sub">${meetingTime ? "" : "Not set — sustainings always go on the coming Sunday, even after the meeting."}</span></div>
+    <div class="mtg-sec-title" style="margin-top:1.1rem">Bishopric</div>
     <p class="row-sub" style="margin:0 0 .5rem">These names fill the Presiding and Conducting dropdowns.</p>
     <div id="bp-rows">${nameRows("bp-name", bishopric)}</div>
     <button class="btn btn-sm" id="bp-add" type="button">+ Add name</button>
@@ -532,10 +558,13 @@ function editBishopric() {
       name: row.querySelector(".hb-name").value.trim(),
       address: row.querySelector(".hb-addr").value.trim(),
     })).filter((p) => p.name);
+    const mtime = el.querySelector("#set-mtime").value || "";
     try {
+      // merge: the hymn-approvals manager keeps blockedHymns/sacramentApproved on this same doc (2026-09-13)
       await setDoc(doc(db, "settings", "leadership"),
-        { bishopric: names, priests: priestNames, organists: organistNames, conductors: conductorNames, customHymns: hymnRows });
+        { bishopric: names, priests: priestNames, organists: organistNames, conductors: conductorNames, customHymns: hymnRows, meetingTime: mtime }, { merge: true });
       await setDoc(doc(db, "settings", "homebound"), { people: hbPeople });
+      meetingTime = mtime;
       bishopric = names;
       priests = priestNames;
       organists = organistNames;
