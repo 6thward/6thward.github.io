@@ -3,12 +3,12 @@
 // added, renamed, reordered and removed. Data:
 //   boardColumns/{id}  { label, order }
 //   board/{id}         { name, notes, column, order, createdAt, updatedAt }
-import { db } from "./firebase-init.js?v=1789347878";
-import { ctx, can } from "./app.js?v=1789347878";
+import { db } from "./firebase-init.js?v=1789348595";
+import { ctx, can } from "./app.js?v=1789348595";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789347878";
+import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789348595";
 
 const PALETTE = ["#1f4e79", "#5b4b9e", "#2e7d4f", "#a8720d", "#b3402f", "#0e7490", "#7a5a14", "#5b6675"];
 const DEFAULT_COLUMNS = ["Ideas", "Talking to", "Settled"];
@@ -81,7 +81,7 @@ function render() {
     <div class="list-row call-card call-card-v board-card" data-id="${k.id}" style="background:#fff;border:1px solid var(--line);border-left:5px solid ${colColor(cols.findIndex((c) => c.id === k.column))}">
       <div class="row-title">${esc(k.name || "—")}</div>
       ${k.notes || editor ? `<div class="row-sub board-note${k.notes ? "" : " board-note-empty"}${editor ? " board-note-edit" : ""}" data-notes="1" title="${editor ? "Click to edit" : ""}">${k.notes ? esc(k.notes) : "+ notes"}</div>` : ""}
-      <div class="todo-pills">${open.map((t) => todoPill(k, t)).join("")}${editor ? `<span class="todo-pill todo-add-pill" data-addtodo="1" title="Add a to-do with a date">+ to-do</span>` : ""}</div>
+      <div class="todo-pills">${open.map((t) => todoPill(k, t)).join("")}${editor ? `<span class="todo-pill todo-add-pill" data-addtodo="1" title="Add a to-do — type and press Enter">+</span>` : ""}</div>
       <div class="mtg-row">${meetingsPill(k, editor)}</div>
     </div>`;
   };
@@ -108,7 +108,7 @@ function render() {
       const k = cards.find((x) => x.id === row.dataset.id);
       if (!k) return;
       const pill = e.target.closest(".todo-pill");
-      if (pill && pill.dataset.addtodo) { e.stopPropagation(); newTodo(k); return; }
+      if (pill && pill.dataset.addtodo) { e.stopPropagation(); inlineNewTodo(row, k, pill); return; }
       if (pill) { e.stopPropagation(); const t = (k.todos || []).find((x) => x.id === pill.dataset.todo); if (t) editTodo(k, t); return; }
       const mp = e.target.closest(".mtg-pill");
       if (mp) { e.stopPropagation(); openMeetings(k); return; }
@@ -183,7 +183,7 @@ function dueState(t) {
 const fmtDue = (iso) => { if (!iso) return ""; const d = new Date(iso + "T12:00:00"); return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }); };
 function todoPill(k, t) {
   const st = dueState(t);
-  return `<span class="todo-pill${st ? " todo-" + st : ""}" data-todo="${t.id}" title="${esc(t.notes ? t.notes : "Click for notes")}">${esc(t.title)}${t.due ? `<span class="todo-due">${st === "overdue" ? "⚠ " : ""}${fmtDue(t.due)}</span>` : ""}</span>`;
+  return `<span class="todo-pill${st ? " todo-" + st : ""}${t.council ? " todo-council" : ""}" data-todo="${t.id}" title="${esc((t.council ? "On the ward council agenda · " : "") + (t.notes ? t.notes : "Click for notes"))}">${t.council ? "📋 " : ""}${esc(t.title)}${t.due ? `<span class="todo-due">${st === "overdue" ? "⚠ " : ""}${fmtDue(t.due)}</span>` : ""}</span>`;
 }
 async function saveTodos(k, todos) {
   k.todos = todos;
@@ -283,6 +283,36 @@ function inlineNotes(row, k, noteEl) {
   ta.addEventListener("blur", () => setTimeout(() => finish(true), 80));
 }
 
+// "+" on the card → type right there; Enter saves (no date), Esc / empty cancels.
+function inlineNewTodo(row, k, pillEl) {
+  if (row.querySelector("input.todo-inline")) return;
+  const inp = document.createElement("input");
+  inp.className = "todo-inline";
+  inp.placeholder = "To-do… (Enter)";
+  inp.autocomplete = "off";
+  pillEl.replaceWith(inp);
+  inp.focus();
+  row.draggable = false;
+  let done = false;
+  const finish = async (save) => {
+    if (done) return; done = true;
+    row.draggable = true;
+    const title = inp.value.trim();
+    if (save && title) {
+      const t = { id: newTodoId(), title, notes: "", due: "", order: activeTodos(k).length, done: false, createdAt: new Date().toISOString() };
+      await saveTodos(k, [...(k.todos || []), t]);
+    }
+    render();
+  };
+  inp.addEventListener("click", (e) => e.stopPropagation());
+  inp.addEventListener("mousedown", (e) => e.stopPropagation());
+  inp.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); finish(true); }
+    if (e.key === "Escape") { e.preventDefault(); finish(false); }
+  });
+  inp.addEventListener("blur", () => setTimeout(() => finish(true), 80));
+}
+
 // Quick add straight from the card: title + deadline (+ optional notes).
 function newTodo(k) {
   const el = openModal(`
@@ -379,8 +409,9 @@ function editTodo(k, t, fromCard) {
       <label class="field full"><span>Notes</span><textarea id="td-notes" ${editor ? "" : "disabled"} placeholder="What's the situation, what's been said, next step…" style="min-height:7rem">${esc(t.notes || "")}</textarea></label>
     </div>
     <div class="modal-actions">
-      <div style="display:flex;gap:.4rem">
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap">
         ${editor ? `<button class="btn btn-ghost btn-danger" id="td-delete">Delete</button>` : ""}
+        ${editor && !t.done ? `<button class="btn${t.council ? " council-on" : ""}" id="td-council" title="${t.council ? "Remove from the ward council agenda" : "Bring this up at the next ward council"}">📋 ${t.council ? "On ward council agenda ✓" : "Ward council"}</button>` : ""}
         ${editor && !t.done ? `<button class="btn" id="td-archive">✓ Done — archive</button>` : ""}
         ${editor && t.done ? `<button class="btn" id="td-restore">↩ Restore</button>` : ""}
       </div>
@@ -403,6 +434,11 @@ function editTodo(k, t, fromCard) {
     if (!title) { toast("Give it a title"); return; }
     await persist((cur) => { cur.title = title; cur.due = el.querySelector("#td-due").value || ""; cur.notes = el.querySelector("#td-notes").value.trim(); });
     toast("Saved"); back();
+  });
+  el.querySelector("#td-council")?.addEventListener("click", async () => {
+    await persist((cur) => { cur.notes = el.querySelector("#td-notes").value.trim(); cur.council = !cur.council; if (cur.council) cur.councilAddedAt = new Date().toISOString(); });
+    toast(t.council ? "Taken off the ward council agenda" : "Added to the ward council agenda");
+    editTodo(k, (k.todos || []).find((x) => x.id === t.id) || t, fromCard);
   });
   el.querySelector("#td-archive")?.addEventListener("click", async () => {
     await persist((cur) => { cur.notes = el.querySelector("#td-notes").value.trim(); cur.done = true; cur.doneAt = new Date().toISOString(); });

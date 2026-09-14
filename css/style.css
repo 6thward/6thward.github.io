@@ -1043,3 +1043,26 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 /* inline hymn editing: number box wide enough to read "#170" with the picker arrow (2026-09-13) */
 .st-line .st-in-num { width: 4.8rem !important; font-size: .85rem !important; padding: .2rem .35rem !important; }
 .st-line .st-in-title { font-size: .85rem !important; padding: .2rem .4rem !important; }
+
+/* Ward Council tab + council-flagged to-dos (2026-09-13) */
+.todo-inline { font: inherit; font-size: .8rem; padding: .15rem .55rem; border: 1px solid var(--brand); border-radius: 99px; min-width: 9rem; }
+.todo-inline:focus { outline: none; box-shadow: 0 0 0 3px var(--brand-soft); }
+.todo-pill.todo-council { border-color: rgba(31,78,121,.45); }
+.btn.council-on { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); }
+.wc-person { padding: .6rem 0 .2rem; border-top: 1px solid var(--line); }
+.wc-person:first-of-type { border-top: none; }
+.wc-name { font-weight: 800; font-size: 1rem; margin-bottom: .3rem; }
+.wc-row { display: flex; gap: .8rem; align-items: flex-start; padding: .5rem .7rem; margin: .25rem 0; background: #f8fafb; border: 1px solid var(--line); border-radius: 10px; }
+.wc-row.wc-done { opacity: .75; }
+.wc-main { flex: 1; min-width: 0; }
+.wc-title { font-weight: 600; }
+.wc-due { margin-left: .5rem; font-size: .8rem; font-weight: 500; color: var(--pending); }
+.wc-notes { white-space: pre-wrap; color: var(--ink-soft); font-size: .9rem; margin-top: .15rem; }
+.wc-actions { display: flex; gap: .35rem; flex-shrink: 0; }
+
+.wc-cnotes { margin-top: .35rem; padding: .35rem .55rem; border-left: 3px solid var(--brand); background: #fff; border-radius: 0 8px 8px 0; white-space: pre-wrap; font-size: .9rem; }
+.wc-cnotes-edit { cursor: text; }
+.wc-cnotes-edit:hover { background: var(--brand-soft); }
+.wc-cnotes-empty { color: #b7bfcb; font-style: italic; border-left-color: #d3d9e1; }
+.wc-cnotes-ta { width: 100%; box-sizing: border-box; margin-top: .35rem; font: inherit; font-size: .9rem; line-height: 1.4; padding: .45rem .55rem; border: 1.5px solid var(--brand); border-radius: 8px; resize: none; }
+.wc-cnotes-ta:focus { outline: none; box-shadow: 0 0 0 3px var(--brand-soft); }
