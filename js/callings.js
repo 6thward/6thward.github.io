@@ -5,12 +5,12 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1789344887";
+import { db } from "./firebase-init.js?v=1789344971";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789344887";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789344971";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
@@ -125,6 +125,7 @@ const save = (id, data) => {
   const upd = { ...data, updatedAt: serverTimestamp() };
   if (upd.stage) upd["stamps." + upd.stage] = serverTimestamp();
   if (upd.setApart === true) upd["stamps.setApartDone"] = serverTimestamp();
+  if (upd.mlsDone === true) upd["stamps.mlsDone"] = serverTimestamp();
   return updateDoc(doc(db, "callings", id), upd);
 };
 const fmtStamp = (ts) => {
@@ -197,12 +198,11 @@ const apartRow = (c) => `
   <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
     <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}</div>
     <div class="row-title">${esc(c.decided || "—")}</div>
-    ${c.setApart
-      ? `${stampLine("Set apart", c.stamps?.setApartDone)}<div class="row-sub">Step 2 of 2 — waiting to be updated in MLS</div>`
-      : `${stampLine("Sustained", c.stamps?.apart)}<div class="row-sub">Step 1 of 2 — set apart</div>`}
-    <div class="call-card-actions">${c.setApart
-      ? `<button class="btn btn-sm btn-primary" data-adv="done" type="button" title="Recorded in MLS — completes and archives this calling">Updated in MLS ✓</button>`
-      : `<button class="btn btn-sm" data-setapart="1" type="button">Set apart ✓</button>`}</div>
+    ${stampLine("Sustained", c.stamps?.apart)}
+    <div class="step-pills">
+      <button class="step-pill${c.setApart ? " on" : ""}" data-toggle="setApart" type="button" title="${c.setApart ? "Set apart" + (c.stamps?.setApartDone ? " " + fmtStamp(c.stamps.setApartDone) : "") + " — click to undo" : "Click when set apart"}">${c.setApart ? "✓" : "○"} Set apart</button>
+      <button class="step-pill${c.mlsDone ? " on" : ""}" data-toggle="mlsDone" type="button" title="${c.mlsDone ? "Updated in MLS" + (c.stamps?.mlsDone ? " " + fmtStamp(c.stamps.mlsDone) : "") + " — click to undo" : "Click when updated in MLS"}">${c.mlsDone ? "✓" : "○"} MLS</button>
+    </div>
   </div>`;
 
 const releaseRow = (r) => {
@@ -264,7 +264,7 @@ function render() {
       by("issue").map(issueRow), "No calls waiting to be issued.", "issue") +
     bucket("Calls to Sustain", "Accepted — present for sustaining.",
       by("sustain").map(sustainRow), "No one waiting to be sustained.", "sustain") +
-    bucket("Set Apart & MLS", "Click once when set apart, again when updated in MLS — that completes and archives it.",
+    bucket("Set Apart & MLS", "Tick Set apart and MLS as each happens — when both are ticked the calling is complete and archives.",
       by("apart").map(apartRow), "No one waiting to be set apart.", "apart") +
     `</div>` +
     bucket("Releases", "Decided → notified → released → recorded by the clerk.",
@@ -293,6 +293,16 @@ function render() {
       if (t.dataset.undecide) { // "Decided" pill → back to considering
         e.stopPropagation();
         save(item.id, { decided: "", stage: "fill" });
+        return;
+      }
+      if (t.dataset.toggle) { // Set apart / MLS pills — independent ticks; both on = complete
+        e.stopPropagation();
+        const f = t.dataset.toggle;
+        const next = { setApart: !!item.setApart, mlsDone: !!item.mlsDone };
+        next[f] = !next[f];
+        const upd = { setApart: next.setApart, mlsDone: next.mlsDone };
+        if (next.setApart && next.mlsDone) upd.stage = "done";
+        save(item.id, upd);
         return;
       }
       if (t.dataset.setapart) { // set apart done; still waiting on the clerk

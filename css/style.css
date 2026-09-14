@@ -891,3 +891,9 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .st-drag.st-dragging { opacity: .45; }
 .st-drop-ok { outline: 1.5px dashed rgba(31,78,121,.45); outline-offset: 1px; border-radius: 6px; }
 .st-drop-over { outline: 2px solid var(--brand) !important; outline-offset: 1px; background: var(--brand-soft) !important; border-radius: 6px; }
+
+/* Set Apart & MLS step pills (2026-09-13) */
+.step-pills { display:flex; gap:.4rem; margin-top:.5rem; flex-wrap:wrap; }
+.step-pill { font: inherit; font-size:.8rem; font-weight:700; padding:.28rem .7rem; border-radius:99px; border:1.5px solid var(--line); background:#fff; color:var(--ink-soft); cursor:pointer; }
+.step-pill:hover { border-color:var(--brand); color:var(--brand); }
+.step-pill.on { background:#e3f2e8; color:var(--ok); border-color:#b9dcc6; }
