@@ -2,13 +2,13 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789356588";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789356588";
+import { db } from "./firebase-init.js?v=1789356860";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789356860";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789356588";
-import { HYMNS } from "./hymns.js?v=1789356588";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789356860";
+import { HYMNS } from "./hymns.js?v=1789356860";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -306,6 +306,29 @@ let started = false;
 let viewMode = localStorage.getItem("sw-sacview") || "cards";
 let viewYear = new Date().getFullYear();
 let showPast = false; // table: include the current year's earlier Sundays
+
+// 2026-09-13 — the Callings board calls this when a call is accepted: the
+// sustaining lands in Ward Business on the next Sunday that actually has a
+// ward sacrament meeting (skips General / Stake / Ward Conference). Returns
+// the date used, or null. Duplicate name+calling on that Sunday is skipped.
+const NO_BUSINESS = (t) => NO_MEETING(t) || t === "wardconf";
+export async function addSustainingToNext(name, calling) {
+  if (!name) return null;
+  let d = upcomingSunday();
+  for (let i = 0; i < 12; i++) {
+    const type = meetings[d]?.type || defaultTypeFor(d);
+    if (!NO_BUSINESS(type)) break;
+    const nd = new Date(d + "T12:00:00"); nd.setDate(nd.getDate() + 7);
+    d = `${nd.getFullYear()}-${String(nd.getMonth() + 1).padStart(2, "0")}-${String(nd.getDate()).padStart(2, "0")}`;
+  }
+  await patchMeeting(d, (m) => {
+    let wb = m.items.find((i) => i.kind === "wardBusiness");
+    if (!wb) { wb = blankItem("wardBusiness"); insertCanonical(m.items, wb); }
+    wb.sustainings = wb.sustainings || [];
+    if (!wb.sustainings.some((x) => x.name === name && (x.calling || "") === (calling || ""))) wb.sustainings.push({ name, calling: calling || "" });
+  });
+  return d;
+}
 
 export function initSacrament() {
   if (started) return;

@@ -5,12 +5,13 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1789356588";
+import { db } from "./firebase-init.js?v=1789356860";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789356588";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789356860";
+import { addSustainingToNext } from "./sacrament.js?v=1789356860";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
@@ -127,12 +128,23 @@ async function reorderWithin(stage, draggedId, beforeId) {
 }
 
 // every stage move gets stamped so you can see when it happened
-const save = (id, data) => {
+const save = async (id, data) => {
   const upd = { ...data, updatedAt: serverTimestamp() };
   if (upd.stage) upd["stamps." + upd.stage] = serverTimestamp();
   if (upd.setApart === true) upd["stamps.setApartDone"] = serverTimestamp();
   if (upd.mlsDone === true) upd["stamps.mlsDone"] = serverTimestamp();
-  return updateDoc(doc(db, "callings", id), upd);
+  await updateDoc(doc(db, "callings", id), upd);
+  // reaching "Calls to Sustain" puts the sustaining on the next Sunday's Ward Business (2026-09-13)
+  if (upd.stage === "sustain") {
+    const it = items.find((x) => x.id === id);
+    const name = upd.decided || it?.decided;
+    if (name && it && (it.kind || "calling") === "calling") {
+      try {
+        const d = await addSustainingToNext(name, it.calling);
+        if (d) toast(`Added to Ward Business for ${new Date(d + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}`);
+      } catch (e) { console.warn("[callings] ward business", e); }
+    }
+  }
 };
 const fmtStamp = (ts) => {
   const d = ts?.toDate?.() || (ts ? new Date(ts) : null);
@@ -165,7 +177,7 @@ const callColor = (label, orgKey) => {
 // the whole card is one big tinted pill in the calling's color
 const cardStyle = (label, orgKey) => {
   const col = callColor(label, orgKey);
-  return `style="background:${col}22;border:1px solid ${col}55;border-left:5px solid ${col}" data-col="${col}"`;
+  return `style="--col:${col};background:${col}22;border:1px solid ${col}55;border-left:5px solid ${col}" data-col="${col}"`;
 };
 
 const fillRow = (c) => {
