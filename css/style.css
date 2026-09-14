@@ -964,3 +964,9 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 /* "not confirmed yet" mark (the exception) — amber "!" (2026-09-13) */
 .st-icon.st-unconf, .st-li-ic.st-unconf { color: var(--pending) !important; opacity: 1 !important; font-weight: 900; }
 .st-li-ic.st-confirm-dot, .st-icon.st-confirm-dot { cursor: pointer; }
+
+/* hymn lines share the pill look (no grip — they don't drag) (2026-09-13) */
+.st-line.st-line-light { display:flex; align-items:center; gap:.3rem; background:rgba(255,255,255,.62); border:1px solid rgba(31,39,51,.12); border-radius:99px; padding:.14rem .6rem .14rem .55rem; margin:.1rem 0; box-shadow:0 1px 1px rgba(20,30,45,.05); }
+.st-line.st-line-light .st-li-tag { flex:0 0 4.6rem; }
+.st-line.st-line-light .st-li-name { white-space:normal; overflow:visible; text-overflow:clip; overflow-wrap:anywhere; min-width:0; flex:1 1 3.5rem; line-height:1.25; }
+.st-line.st-line-light[data-ed]:hover, .st-line.st-line-light[data-hymned]:hover { border-color:rgba(31,78,121,.45); box-shadow:0 2px 6px rgba(20,30,45,.12); }
