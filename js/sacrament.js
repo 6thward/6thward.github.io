@@ -2,13 +2,13 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789346419";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789346419";
+import { db } from "./firebase-init.js?v=1789346518";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789346518";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789346419";
-import { HYMNS } from "./hymns.js?v=1789346419";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789346518";
+import { HYMNS } from "./hymns.js?v=1789346518";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -741,7 +741,7 @@ function statusChips(m, date) {
   if (youthLines.length) chips.push(groupChip("Youth Speakers", { t: "py" }, youthLines));
   if (adultSpk.length) {
     // "+" under the last speaker line: opens the editor with a fresh row ready
-    const addBtn = can ? `<span class="st-add" data-qe='${JSON.stringify({ t: "spk", k: "speaker", add: 1 })}' title="Add another speaker">+</span>` : "";
+    const addBtn = can ? `<span class="st-add" data-addspk="speaker" title="Add another speaker">+</span>` : ""; // 2026-09-13 — inline pill, not the editor
     chips.push(groupChip("Speakers", { t: "spk", k: "speaker" },
       spkLines("speaker", (it, i) => String(i + 1)), null, addBtn));
   }
@@ -861,6 +861,26 @@ function renderCards(wrap) {
   }).join("") + musicDatalists() + hymnDatalists();
 
   if (canEdit) wireCardDrag(wrap); // drag a prayer / speaker / musical number to another Sunday's slot to swap
+  // "+" under Speakers: drop in a fresh pill with a name box; Enter saves, Esc or empty cancels
+  wrap.querySelectorAll("[data-addspk]").forEach((btn) => btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const group = btn.parentElement;
+    if (group.querySelector(".st-line.st-new")) { group.querySelector(".st-line.st-new input")?.focus(); return; }
+    const date = btn.closest("[data-date]").dataset.date;
+    const kind = btn.dataset.addspk;
+    const n = group.querySelectorAll(".st-line").length + 1;
+    const line = document.createElement("span");
+    line.className = "st-line st-drag st-new";
+    line.innerHTML = `<span class="st-li-ic"></span><span class="st-li-tag">${n}:</span> <input class="st-in-title" autocomplete="off" placeholder="Name" style="flex:1;min-width:4rem">`;
+    btn.before(line);
+    const inp = line.querySelector("input");
+    inp.focus();
+    wireInline(line, [inp], () => {
+      const name = inp.value.trim();
+      if (!name) { render(); return; } // nothing typed → no ghost slot
+      patchMeeting(date, (mm) => { const it = blankItem(kind); it.name = name; insertCanonical(mm.items, it); });
+    });
+  }));
   wrap.querySelectorAll("[data-edit]").forEach((b) =>
     b.addEventListener("click", (e) => { e.stopPropagation(); editMeeting(b.dataset.edit); }));
   wrap.querySelectorAll("[data-view]").forEach((b) =>
