@@ -2,13 +2,13 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789347101";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789347101";
+import { db } from "./firebase-init.js?v=1789347217";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789347217";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789347101";
-import { HYMNS } from "./hymns.js?v=1789347101";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789347217";
+import { HYMNS } from "./hymns.js?v=1789347217";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -614,7 +614,7 @@ function statusChips(m, date) {
   // no name -> grey/red (unassigned); name but not confirmed -> yellow "pending";
   // name + confirmed -> green with a checkmark and a "confirmed by" tooltip.
   // qe -> pill is clickable for quick inline assignment
-  const chip = (label, name, qe, confirmed, confirmedBy, org, sub, confirmTarget) => {
+  const chip = (label, name, qe, confirmed, confirmedBy, org, sub, confirmTarget, extra) => {
     const hasName = !!name;
     const cls = !hasName ? (planned ? "st-miss" : "st-off") : confirmed ? "st-ok" : "st-pending";
     const clickable = qe && can;
@@ -630,7 +630,7 @@ function statusChips(m, date) {
     const subLine = hasName && sub ? `<span class="st-sub">${esc(sub)}</span>` : "";
     // icon rides with the name (not the headline) so the title centers cleanly
     const dragAttr = can && confirmTarget && (confirmTarget.k === "musical" || confirmTarget.k === "choir") ? ` draggable="true" data-drag='${JSON.stringify({ k: confirmTarget.k, o: 0 })}'` : "";
-    return `<span class="st ${cls}${clickable ? " st-click" : ""}${dragAttr ? " st-drag" : ""}"${clickable ? ` data-qe='${JSON.stringify(qe)}'` : ""}${title ? ` title="${esc(title)}"` : ""}${dragAttr}><span class="st-head">${label}</span>${hasName ? `<span class="st-name">${esc(name)} ${iconHtml}</span>` : ""}${subLine}${orgBadge}</span>`;
+    return `<span class="st ${cls}${clickable ? " st-click" : ""}${dragAttr ? " st-drag" : ""}"${clickable ? ` data-qe='${JSON.stringify(qe)}'` : ""}${title ? ` title="${esc(title)}"` : ""}${dragAttr}><span class="st-head">${label}</span>${hasName ? `<span class="st-name">${esc(name)} ${iconHtml}</span>` : ""}${subLine}${extra || ""}${orgBadge}</span>`;
   };
 
   // Hymns pill counts only actual hymn slots; the musical/choir slot gets its own pill
@@ -725,13 +725,15 @@ function statusChips(m, date) {
     const before = spkIdxs.filter((i) => i < slotIdx).length;
     return before === 0 ? "before the speakers" : `after speaker ${before}`;
   })();
+  // 2026-09-13 — placement ("after speaker 3") is its own pill; click to move the slot
+  const placePill = slotPos && planned ? `<span class="st-place${can ? " st-click" : ""}"${can ? ` data-qe='{"t":"place"}' title="Click to change where it falls in the program"` : ""}>${esc(slotPos)}</span>` : "";
   if (slotMusical) {
-    chips.push(chip("Music Number", slotMusical.who, { t: "inter" }, isConf(slotMusical), slotMusical.confirmedBy, null, [slotMusical.hymn, slotPos].filter(Boolean).join(" · "), { k: "musical", o: 0 }));
+    chips.push(chip("Music Number", slotMusical.who, { t: "inter" }, isConf(slotMusical), slotMusical.confirmedBy, null, slotMusical.hymn || "", { k: "musical", o: 0 }, placePill));
   } else if (slotChoir) {
-    chips.push(chip("Music Number", "Choir", { t: "inter" }, isConf(slotChoir), slotChoir.confirmedBy, null, [slotChoir.hymn, slotPos].filter(Boolean).join(" · "), { k: "choir", o: 0 }));
+    chips.push(chip("Music Number", "Choir", { t: "inter" }, isConf(slotChoir), slotChoir.confirmedBy, null, slotChoir.hymn || "", { k: "choir", o: 0 }, placePill));
   } else if (slotInterHymn) {
     const hymnVal = [slotInterHymn.num ? "#" + slotInterHymn.num : "", slotInterHymn.title].filter(Boolean).join(" | ");
-    chips.push(chip("Music Number", hymnVal, { t: "inter" }, true, null, null, slotPos));
+    chips.push(chip("Music Number", hymnVal, { t: "inter" }, true, null, null, "", null, placePill));
   } else if (type !== "fast") {
     // Fast & Testimony has no intermediate slot — skip the empty pill there
     chips.push(`<span class="st st-off${can ? " st-click" : ""}"${can ? ` data-qe='{"t":"inter"}' title="Click to add"` : ""}><span class="st-head">Music Number</span></span>`);
@@ -1069,7 +1071,30 @@ function quickEdit(date, q) {
       ${byLine ? `<span class="row-sub confirm-by">${esc(byLine)}</span>` : ""}
     </label>`;
 
-  if (q.t === "topic") {
+  if (q.t === "place") {
+    const slotIdx = items.findIndex((i) => ["intermediateHymn", "musical", "choir"].includes(i.kind));
+    const spkIdxs = items.map((it, i) => (it.kind === "speaker" ? i : -1)).filter((i) => i >= 0);
+    const before = slotIdx < 0 ? 0 : spkIdxs.filter((i) => i < slotIdx).length;
+    const spkName = (i) => { const it = items[spkIdxs[i]]; return it && it.name ? ` (${it.name})` : ""; };
+    const opts = [`<option value="0" ${before === 0 ? "selected" : ""}>Before the speakers</option>`]
+      .concat(spkIdxs.map((_, i) => `<option value="${i + 1}" ${before === i + 1 ? "selected" : ""}>After speaker ${i + 1}${esc(spkName(i))}</option>`));
+    html = `<h3>Music number placement ${dateLabel}</h3>
+      <label class="field">Where does it fall? <select id="qe-place">${opts.join("")}</select></label>`;
+    onSave = (el) => {
+      const after = Number(el.querySelector("#qe-place").value) || 0;
+      return (m) => {
+        const si = m.items.findIndex((i) => ["intermediateHymn", "musical", "choir"].includes(i.kind));
+        if (si < 0) return;
+        const [slot] = m.items.splice(si, 1);
+        const sp = m.items.map((it, i) => (it.kind === "speaker" ? i : -1)).filter((i) => i >= 0);
+        let at;
+        if (!sp.length) at = si;
+        else if (after <= 0) at = sp[0];
+        else at = sp[Math.min(after, sp.length) - 1] + 1;
+        m.items.splice(at, 0, slot);
+      };
+    };
+  } else if (q.t === "topic") {
     const it = nthItem(items, q.k, q.o) || {};
     html = `<h3>Topic ${dateLabel}</h3>
       <p class="row-sub" style="margin:0 0 .6rem"><b>${esc(it.name || "Speaker")}</b> · ${esc(KINDS[q.k]?.label || "Speaker")}</p>

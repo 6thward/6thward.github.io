@@ -1002,3 +1002,7 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .st-line.st-drag .st-li-name, .st-line.st-line-light .st-li-name, .st.st-drag .st-name { font-size: .8rem !important; font-weight: 700 !important; line-height: 1.25; }
 .st-line.st-drag .st-li-tag, .st-line.st-line-light .st-li-tag { font-size: .74rem; }
 .st.st-drag .st-sub, .st-subhead { font-size: .76rem; font-weight: 600; }
+
+/* music number placement pill (2026-09-13) */
+.st-place { display: inline-block; align-self: center; margin-top: .3rem; font-size: .72rem; font-weight: 600; color: var(--ink-soft); background: rgba(255,255,255,.62); border: 1px dashed rgba(31,39,51,.25); border-radius: 99px; padding: .12rem .6rem; }
+.st-place.st-click:hover { color: var(--brand); border-color: var(--brand); border-style: solid; }
