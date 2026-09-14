@@ -1140,3 +1140,9 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .agenda-view .ag-prog.ag-music { background: var(--violet-soft); border-color: rgba(91,75,158,.25); }
 .agenda-view .ag-prog.ag-music:hover { background: #e3dcf3; border-color: rgba(91,75,158,.45); }
 .agenda-view .ag-prog.ag-music .ag-label { color: var(--violet); }
+
+/* readout program rows: white with an outline; music row keeps a violet outline (2026-09-13) */
+.agenda-view .ag-prog { background: #fff; border: 1px solid rgba(31,39,51,.16); }
+.agenda-view .ag-prog:hover { background: #fff; border-color: var(--brand); }
+.agenda-view .ag-prog.ag-music { background: #fff; border: 1.5px solid rgba(91,75,158,.55); }
+.agenda-view .ag-prog.ag-music:hover { background: #fff; border-color: var(--violet); }
