@@ -2,13 +2,13 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789347039";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789347039";
+import { db } from "./firebase-init.js?v=1789347101";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789347101";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789347039";
-import { HYMNS } from "./hymns.js?v=1789347039";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789347101";
+import { HYMNS } from "./hymns.js?v=1789347101";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -677,7 +677,7 @@ function statusChips(m, date) {
       // 2026-09-13 — assignment lines are draggable between Sundays (and slots): drop on a like slot to swap
       const dragAttr = can && l.k && DRAG_KINDS.has(l.k) ? ` draggable="true" data-drag='${JSON.stringify({ k: l.k, o: l.o })}'` : "";
       // speakers get a small "topic" button on the right: shows the topic on hover, click to add / change it
-      const topicBtn = l.topicable ? `<span class="st-topic${l.topic ? " has" : ""}" data-topic='${JSON.stringify({ k: l.k, o: l.o })}' title="${l.topic ? esc(l.topic) + (can ? " — click to change" : "") : (can ? "Add a topic" : "No topic yet")}">${l.topic ? "topic ✓" : "topic"}</span>` : "";
+      const topicBtn = l.topicable ? `<span class="st-topic${l.topic ? " has" : ""}" data-topic='${JSON.stringify({ k: l.k, o: l.o })}' title="${l.topic ? esc(l.topic) + (can ? " — click to change" : "") : (can ? "Add a topic" : "No topic yet")}">topic</span>` : "";
       return `<span class="st-line${l.light ? " st-line-light" : ""}${dragAttr ? " st-drag" : ""}${l.name && !l.confirmed && !l.light ? " st-li-unconf" : ""}"${editAttr}${dragAttr}><span class="st-li-tag">${esc(l.tag)}:</span> <span class="st-li-name${l.light ? " st-li-light" : ""}">${l.name ? esc(l.name) : "—"}</span>${orgTag}${topicBtn}${l.light ? "" : dot}</span>`;
     }).join("");
     // no icon in the headline — the title stays cleanly centered; state

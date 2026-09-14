@@ -988,9 +988,9 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .st-line.st-drag .st-li-ic { margin-left: auto; order: 9; flex: 0 0 auto; }
 .st-line.st-drag .st-li-org { margin-left: auto; order: 5; }
 .st-line.st-drag .st-li-org + .st-topic, .st-line.st-drag .st-li-org ~ .st-li-ic { margin-left: .35rem; }
-.st-topic { margin-left: auto; order: 6; flex: 0 0 auto; font-size: .62rem; font-weight: 500; letter-spacing: .03em; color: var(--ink-soft); border: 1px solid rgba(31,39,51,.18); border-radius: 99px; padding: .02rem .45rem; cursor: pointer; background: rgba(255,255,255,.7); }
-.st-topic:hover { color: var(--brand); border-color: var(--brand); }
-.st-topic.has { color: var(--brand); border-color: rgba(31,78,121,.4); background: var(--brand-soft); }
+.st-topic { margin-left: auto; order: 6; flex: 0 0 auto; font-size: .62rem; font-weight: 500; letter-spacing: .03em; color: var(--ink-soft); border: 1px solid rgba(31,39,51,.14); border-radius: 99px; padding: .02rem .45rem; cursor: pointer; background: rgba(255,255,255,.7); opacity: .45; } /* faded until a topic exists */
+.st-topic:hover { opacity: 1; color: var(--brand); border-color: var(--brand); }
+.st-topic.has { opacity: 1; color: #fff; background: var(--brand); border-color: var(--brand); }
 .st-topic + .st-li-ic { margin-left: .35rem; }
 .st.st-drag .st-name .st-icon { margin-left: .2rem; }
 
