@@ -2,13 +2,13 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789348771";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789348771";
+import { db } from "./firebase-init.js?v=1789349901";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789349901";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789348771";
-import { HYMNS } from "./hymns.js?v=1789348771";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789349901";
+import { HYMNS } from "./hymns.js?v=1789349901";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -64,8 +64,28 @@ function hymnDatalists() {
             : `<option value="${esc(h.num)}" label="${esc(h.title)}"></option>`).join("")}</datalist>`;
   const cat = approvedCatalog();
   const sac = sacramentCatalog();
+  // one combined list — "#34 — O Ye Mountains High" — so a single box can
+  // take a number OR words (2026-09-13)
+  const combo = (list, id) => `<datalist id="${id}">${list.map((h) => `<option value="${esc(hymnCombo(h.num, h.title))}"></option>`).join("")}</datalist>`;
   return opts(cat, "dl-hymn-nums") + opts(cat, "dl-hymn-titles", true)
-       + opts(sac, "dl-sac-hymn-nums") + opts(sac, "dl-sac-hymn-titles", true);
+       + opts(sac, "dl-sac-hymn-nums") + opts(sac, "dl-sac-hymn-titles", true)
+       + combo(cat, "dl-hymn-all") + combo(sac, "dl-sac-hymn-all");
+}
+// "#34 — O Ye Mountains High" ⇄ { num, title }
+function hymnCombo(num, title) {
+  const n = String(num || "").trim(), t = String(title || "").trim();
+  return n && t ? `#${n} — ${t}` : n ? `#${n}` : t;
+}
+function parseHymnCombo(str) {
+  const v = String(str || "").trim();
+  if (!v) return { num: "", title: "" };
+  const m = /^#?\s*(\d+)\s*(?:[—–-]\s*(.*))?$/.exec(v);
+  if (m) {
+    const num = m[1];
+    const title = (m[2] || "").trim() || hymnTitleForNum(num) || "";
+    return { num, title };
+  }
+  return { num: hymnNumForTitle(v) || "", title: v };
 }
 function warnIfBlocked(num) {
   const n = String(num || "").trim();
@@ -996,16 +1016,15 @@ function renderCards(wrap) {
       if (ed.t === "hymn") {
         const sac = k === "sacramentHymn";
         line.innerHTML = `${tagHtml}
-          <input class="hymn-num st-in-num" list="${sac ? "dl-sac-hymn-nums" : "dl-hymn-nums"}" placeholder="#" inputmode="numeric" autocomplete="off" value="${esc(it?.num || "")}">
-          <input class="hymn-title st-in-title" list="${sac ? "dl-sac-hymn-titles" : "dl-hymn-titles"}" placeholder="Hymn title" autocomplete="off" value="${esc(it?.title || "")}">`;
-        const numIn = line.querySelector(".hymn-num"), titleIn = line.querySelector(".hymn-title");
-        wireHymnAutofill(numIn, titleIn);
-        numIn.focus();
-        wireInline(line, [numIn, titleIn], () => patchMeeting(date, (mm) => {
+          <input class="hymn-combo st-in-title" list="${sac ? "dl-sac-hymn-all" : "dl-hymn-all"}" placeholder="Number or title…" autocomplete="off" value="${esc(hymnCombo(it?.num, it?.title))}">`;
+        const comboIn = line.querySelector(".hymn-combo");
+        comboIn.focus(); comboIn.select();
+        wireInline(line, [comboIn], () => patchMeeting(date, (mm) => {
           let t = nthItem(mm.items, k, o);
           if (!t) { t = blankItem(k, 3); insertCanonical(mm.items, t); }
-          t.num = numIn.value.trim();
-          t.title = titleIn.value.trim();
+          const v = parseHymnCombo(comboIn.value);
+          t.num = v.num; t.title = v.title;
+          warnIfBlocked(v.num);
         }));
       } else {
         // name line (prayers / youth / speakers)
@@ -1159,18 +1178,11 @@ function quickEdit(date, q) {
     html = `<h3>Hymns ${dateLabel}</h3>
       ${hymnRows.map((h, i) => `
         <label class="field" style="margin-bottom:.6rem">${KINDS[h.kind].label}
-          <div style="display:flex;gap:.4rem">
-            <input id="qe-num-${i}" class="hymn-num" list="${h.kind === "sacramentHymn" ? "dl-sac-hymn-nums" : "dl-hymn-nums"}" placeholder="#" inputmode="numeric" autocomplete="off" style="width:4.5rem" value="${esc(h.num)}">
-            <input id="qe-title-${i}" class="hymn-title" list="${h.kind === "sacramentHymn" ? "dl-sac-hymn-titles" : "dl-hymn-titles"}" placeholder="Hymn title" autocomplete="off" style="flex:1" value="${esc(h.title)}">
-          </div>
+          <input id="qe-hymn-${i}" class="hymn-combo" list="${h.kind === "sacramentHymn" ? "dl-sac-hymn-all" : "dl-hymn-all"}" placeholder="Type a number or a title…" autocomplete="off" style="width:100%" value="${esc(hymnCombo(h.num, h.title))}">
         </label>`).join("")}
       ${hymnDatalists()}`;
     onSave = (el) => {
-      const vals = hymnRows.map((h, i) => ({
-        kind: h.kind, o: h.o,
-        num: el.querySelector(`#qe-num-${i}`).value.trim(),
-        title: el.querySelector(`#qe-title-${i}`).value.trim(),
-      }));
+      const vals = hymnRows.map((h, i) => ({ kind: h.kind, o: h.o, ...parseHymnCombo(el.querySelector(`#qe-hymn-${i}`).value) }));
       return (m) => {
         vals.forEach((v) => {
           let it = nthItem(m.items, v.kind, v.o);
@@ -1209,8 +1221,7 @@ function quickEdit(date, q) {
         ${modeBtn("hymn", "Hymn")}${modeBtn("musical", "Special Musical #")}${modeBtn("choir", "Choir")}
       </div>
       <div id="qe-inter-hymn-fields" style="display:${interMode === "hymn" ? "flex" : "none"};gap:.4rem">
-        <input id="qe-inter-num" class="hymn-num" list="dl-hymn-nums" placeholder="#" inputmode="numeric" autocomplete="off" style="width:4.5rem" value="${esc(interHymn?.num || "")}">
-        <input id="qe-inter-title" class="hymn-title" list="dl-hymn-titles" placeholder="Hymn title" autocomplete="off" style="flex:1" value="${esc(interHymn?.title || "")}">
+        <input id="qe-inter-hymn" class="hymn-combo" list="dl-hymn-all" placeholder="Type a number or a title…" autocomplete="off" style="flex:1" value="${esc(hymnCombo(interHymn?.num, interHymn?.title))}">
       </div>
       <div id="qe-inter-musical-fields" style="display:${interMode === "musical" ? "block" : "none"}">
         <label class="field" style="margin-bottom:.4rem">Hymn name
@@ -1237,7 +1248,7 @@ function quickEdit(date, q) {
         ? { who: el.querySelector("#qe-inter-who").value.trim(), hymn: el.querySelector("#qe-inter-piece").value.trim(), accompanist: el.querySelector("#qe-inter-acc").value.trim() }
         : nowMode === "choir"
         ? { hymn: el.querySelector("#qe-inter-choir-piece").value.trim() }
-        : { num: el.querySelector("#qe-inter-num").value.trim(), title: el.querySelector("#qe-inter-title").value.trim() };
+        : parseHymnCombo(el.querySelector("#qe-inter-hymn").value);
       return (m) => {
         // swap the intermediate slot between an intermediateHymn / musical / choir item
         const SLOT_KINDS = ["intermediateHymn", "musical", "choir"];
