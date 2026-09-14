@@ -2,13 +2,13 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789347217";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789347217";
+import { db } from "./firebase-init.js?v=1789347312";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789347312";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789347217";
-import { HYMNS } from "./hymns.js?v=1789347217";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789347312";
+import { HYMNS } from "./hymns.js?v=1789347312";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -1947,8 +1947,10 @@ function renderAgendaView(m, canEdit = false) {
     } else if (PRAYER_KINDS.includes(it.kind)) {
       val = esc(it.name || "") + (it.org ? ` <span class="row-sub">(arranged by ${esc(it.org)})</span>` : "");
     } else if (it.kind === "musical") {
-      val = esc([it.who, it.hymn ? "— " + it.hymn : ""].filter(Boolean).join(" "))
-        + (it.accompanist ? ` <span class="row-sub">(accompanist: ${esc(it.accompanist)})</span>` : "");
+      // performer on the first line; the piece (and accompanist) on its own line beneath (2026-09-13)
+      val = esc(it.who || "")
+        + (it.hymn ? `<div class="ag-piece">${esc(it.hymn)}${it.accompanist ? ` <span class="row-sub">(accompanist: ${esc(it.accompanist)})</span>` : ""}</div>`
+                   : (it.accompanist ? ` <span class="row-sub">(accompanist: ${esc(it.accompanist)})</span>` : ""));
     } else if (it.kind === "choir") {
       val = esc(it.hymn || "") + (it.accompanist ? ` <span class="row-sub">(accompanist: ${esc(it.accompanist)})</span>` : "");
     } else if (it.kind === "blessing") {

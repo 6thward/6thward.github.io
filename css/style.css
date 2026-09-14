@@ -1006,3 +1006,6 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 /* music number placement pill (2026-09-13) */
 .st-place { display: inline-block; align-self: center; margin-top: .3rem; font-size: .72rem; font-weight: 600; color: var(--ink-soft); background: rgba(255,255,255,.62); border: 1px dashed rgba(31,39,51,.25); border-radius: 99px; padding: .12rem .6rem; }
 .st-place.st-click:hover { color: var(--brand); border-color: var(--brand); border-style: solid; }
+
+/* readout: musical piece under the performer (2026-09-13) */
+.agenda-view .ag-piece { font-style: italic; color: var(--ink-soft); font-size: .92em; margin-top: .05rem; }
