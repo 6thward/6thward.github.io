@@ -1037,3 +1037,9 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .board-note-empty { color: #b7bfcb; font-style: italic; }
 .board-note-ta { width: 100%; box-sizing: border-box; font: inherit; font-size: .88rem; line-height: 1.4; color: var(--ink); padding: .4rem .5rem; border: 1.5px solid var(--brand); border-radius: 8px; resize: none; margin-top: .15rem; background: #fff; }
 .board-note-ta:focus { outline: none; box-shadow: 0 0 0 3px var(--brand-soft); }
+
+.st-place-sel { font: inherit; font-size: .72rem; font-weight: 600; color: var(--ink); border: 1px solid var(--brand); border-radius: 99px; padding: .05rem .4rem; background: #fff; max-width: 100%; }
+
+/* inline hymn editing: number box wide enough to read "#170" with the picker arrow (2026-09-13) */
+.st-line .st-in-num { width: 4.8rem !important; font-size: .85rem !important; padding: .2rem .35rem !important; }
+.st-line .st-in-title { font-size: .85rem !important; padding: .2rem .4rem !important; }

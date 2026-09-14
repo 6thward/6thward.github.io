@@ -2,13 +2,13 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789347815";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789347815";
+import { db } from "./firebase-init.js?v=1789347878";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789347878";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789347815";
-import { HYMNS } from "./hymns.js?v=1789347815";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789347878";
+import { HYMNS } from "./hymns.js?v=1789347878";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -123,6 +123,20 @@ const KINDS = {
 };
 
 const HYMN_KINDS = ["openingHymn", "sacramentHymn", "intermediateHymn", "closingHymn"];
+
+// Move the intermediate slot (musical / choir / intermediate hymn) so it
+// falls before the speakers (after = 0) or after adult speaker N.
+function moveInterSlot(m, after) {
+  const si = m.items.findIndex((i) => ["intermediateHymn", "musical", "choir"].includes(i.kind));
+  if (si < 0) return;
+  const [slot] = m.items.splice(si, 1);
+  const sp = m.items.map((it, i) => (it.kind === "speaker" ? i : -1)).filter((i) => i >= 0);
+  let at;
+  if (!sp.length) at = si;
+  else if (after <= 0) at = sp[0];
+  else at = sp[Math.min(after, sp.length) - 1] + 1;
+  m.items.splice(at, 0, slot);
+}
 
 // ---- drag assignments between Sundays (2026-09-13) ----
 // A prayer, speaker or musical number line on a card can be dragged onto the
@@ -726,7 +740,7 @@ function statusChips(m, date) {
     return before === 0 ? "before the speakers" : `after speaker ${before}`;
   })();
   // 2026-09-13 — placement ("after speaker 3") is its own pill; click to move the slot
-  const placePill = slotPos && planned ? `<span class="st-place${can ? " st-click" : ""}"${can ? ` data-qe='{"t":"place"}' title="Click to change where it falls in the program"` : ""}>${esc(slotPos)}</span>` : "";
+  const placePill = slotPos && planned ? `<span class="st-place${can ? " st-click" : ""}"${can ? ` data-place="1" title="Click to change where it falls in the program"` : ""}>${esc(slotPos)}</span>` : "";
   if (slotMusical) {
     chips.push(chip("Music Number", slotMusical.who, { t: "inter" }, isConf(slotMusical), slotMusical.confirmedBy, null, slotMusical.hymn || "", { k: "musical", o: 0 }, placePill));
   } else if (slotChoir) {
@@ -907,6 +921,28 @@ function renderCards(wrap) {
       e.stopPropagation();
       quickEdit(el.closest("[data-date]").dataset.date, JSON.parse(el.dataset.qe));
     }));
+  // placement pill → a dropdown right in the card (2026-09-13)
+  wrap.querySelectorAll("[data-place]").forEach((el) =>
+    el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (el.querySelector("select")) return;
+      const date = el.closest("[data-date]").dataset.date;
+      const its = itemsFor(meetings[date], date);
+      const slotIdx = its.findIndex((i) => ["intermediateHymn", "musical", "choir"].includes(i.kind));
+      const spkIdxs = its.map((it, i) => (it.kind === "speaker" ? i : -1)).filter((i) => i >= 0);
+      const before = slotIdx < 0 ? 0 : spkIdxs.filter((i) => i < slotIdx).length;
+      const opts = [`<option value="0"${before === 0 ? " selected" : ""}>before the speakers</option>`]
+        .concat(spkIdxs.map((si, i) => `<option value="${i + 1}"${before === i + 1 ? " selected" : ""}>after speaker ${i + 1}${its[si].name ? " — " + esc(its[si].name) : ""}</option>`));
+      el.innerHTML = `<select class="st-place-sel">${opts.join("")}</select>`;
+      const sel = el.querySelector("select");
+      sel.focus();
+      let done = false;
+      sel.addEventListener("click", (ev) => ev.stopPropagation());
+      sel.addEventListener("mousedown", (ev) => ev.stopPropagation());
+      sel.addEventListener("change", () => { done = true; const after = Number(sel.value) || 0; patchMeeting(date, (mm) => moveInterSlot(mm, after)); });
+      sel.addEventListener("keydown", (ev) => { if (ev.key === "Escape") { done = true; render(); } });
+      sel.addEventListener("blur", () => setTimeout(() => { if (!done) render(); }, 120));
+    }));
   // speaker "topic" button (2026-09-13): read-only users get the tooltip; editors get a tiny editor
   wrap.querySelectorAll("[data-topic]").forEach((el) =>
     el.addEventListener("click", (e) => {
@@ -1071,7 +1107,7 @@ function quickEdit(date, q) {
       ${byLine ? `<span class="row-sub confirm-by">${esc(byLine)}</span>` : ""}
     </label>`;
 
-  if (q.t === "place") {
+  if (q.t === "place") { /* kept for keyboard / legacy callers; the card pill edits inline now */
     const slotIdx = items.findIndex((i) => ["intermediateHymn", "musical", "choir"].includes(i.kind));
     const spkIdxs = items.map((it, i) => (it.kind === "speaker" ? i : -1)).filter((i) => i >= 0);
     const before = slotIdx < 0 ? 0 : spkIdxs.filter((i) => i < slotIdx).length;
@@ -1082,17 +1118,7 @@ function quickEdit(date, q) {
       <label class="field">Where does it fall? <select id="qe-place">${opts.join("")}</select></label>`;
     onSave = (el) => {
       const after = Number(el.querySelector("#qe-place").value) || 0;
-      return (m) => {
-        const si = m.items.findIndex((i) => ["intermediateHymn", "musical", "choir"].includes(i.kind));
-        if (si < 0) return;
-        const [slot] = m.items.splice(si, 1);
-        const sp = m.items.map((it, i) => (it.kind === "speaker" ? i : -1)).filter((i) => i >= 0);
-        let at;
-        if (!sp.length) at = si;
-        else if (after <= 0) at = sp[0];
-        else at = sp[Math.min(after, sp.length) - 1] + 1;
-        m.items.splice(at, 0, slot);
-      };
+      return (m) => moveInterSlot(m, after);
     };
   } else if (q.t === "topic") {
     const it = nthItem(items, q.k, q.o) || {};
