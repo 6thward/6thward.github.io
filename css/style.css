@@ -897,3 +897,8 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .step-pill { font: inherit; font-size:.8rem; font-weight:700; padding:.28rem .7rem; border-radius:99px; border:1.5px solid var(--line); background:#fff; color:var(--ink-soft); cursor:pointer; }
 .step-pill:hover { border-color:var(--brand); color:var(--brand); }
 .step-pill.on { background:#e3f2e8; color:var(--ok); border-color:#b9dcc6; }
+
+/* archived list on the Bishopric tab (2026-09-13) */
+.done-row { display:flex; align-items:center; gap:.6rem; }
+.done-row .row-main { flex:1; min-width:0; }
+.done-row .done-back { font: inherit; font-size:.8rem; padding:.25rem .4rem; border:1px solid var(--line); border-radius:7px; color:var(--ink-soft); background:#fff; max-width:11rem; }

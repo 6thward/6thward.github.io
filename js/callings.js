@@ -5,12 +5,12 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1789344971";
+import { db } from "./firebase-init.js?v=1789345195";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789344971";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789345195";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
@@ -75,7 +75,7 @@ export function initCallings() {
     </div>
     <div id="bishopric-buckets"></div>
     <div class="chips" style="margin-top:.6rem">
-      <button class="chip" id="chip-done">Show completed</button>
+      <button class="chip" id="chip-done">Show archived</button>
     </div>
     <div class="card hidden" id="calling-done-card" style="margin-top:.6rem">
       <h3>Completed</h3>
@@ -230,13 +230,21 @@ const memberRow = (p) => `
     <span class="pill pill-inprogress">Needs calling</span>
   </div>`;
 
+// Archived (complete) callings + releases, with a "move back to…" so a
+// mistake — or a calling that fell through — can rejoin the flow.
+const CALL_BACK = [["fill", "Calling to Fill"], ["issue", "Calls to Issue"], ["sustain", "Calls to Sustain"], ["apart", "Set Apart & MLS"]];
+const REL_BACK = [["decided", "Decided"], ["notified", "Notified"], ["released", "Released"]];
 const doneRow = (it) => `
-  <div class="list-row" data-id="${it.id}">
+  <div class="list-row done-row" data-id="${it.id}">
     <div class="row-main">
       <div class="row-title">${it.kind === "release" ? `${esc(it.name)} — released` : `${esc(it.decided || "")} — ${esc(it.calling)}`}</div>
       ${stampLine("Completed", it.stamps?.done)}
     </div>
-    <span class="pill pill-done">Complete</span>
+    <select class="done-back" data-id="${it.id}" title="Move this back into the flow">
+      <option value="">Move back to…</option>
+      ${(it.kind === "release" ? REL_BACK : CALL_BACK).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}
+    </select>
+    <span class="pill pill-done">Archived</span>
   </div>`;
 
 function render() {
@@ -272,9 +280,27 @@ function render() {
     bucket("Members who need callings", "The pool to draw from as positions open up.",
       members.map(memberRow), "No one on the list.", null, "member");
 
-  const doneItems = [...callings.filter((c) => c.stage === "done"), ...releases.filter((r) => r.stage === "done")];
+  const doneItems = [...callings.filter((c) => c.stage === "done"), ...releases.filter((r) => r.stage === "done")]
+    .sort((a, b) => tsMs(b.stamps?.done) - tsMs(a.stamps?.done));
   const doneList = document.getElementById("calling-done");
-  if (doneList) doneList.innerHTML = doneItems.length ? doneItems.map(doneRow).join("") : `<div class="empty-note">None completed yet.</div>`;
+  if (doneList) doneList.innerHTML = doneItems.length ? doneItems.map(doneRow).join("") : `<div class="empty-note">Nothing archived yet.</div>`;
+  const chipDone = document.getElementById("chip-done");
+  if (chipDone) chipDone.textContent = (showDone ? "Hide archived" : "Show archived") + (doneItems.length ? ` (${doneItems.length})` : "");
+  // "Move back to…" on an archived row: rejoin the flow at the chosen stage.
+  // Coming back into Set Apart & MLS clears the MLS tick so it doesn't
+  // immediately re-complete.
+  document.querySelectorAll("#calling-done .done-back").forEach((sel) => sel.addEventListener("change", async (e) => {
+    e.stopPropagation();
+    const st = sel.value; if (!st) return;
+    const it = items.find((x) => x.id === sel.dataset.id); if (!it) return;
+    const upd = { stage: st };
+    if (it.kind !== "release") {
+      upd.mlsDone = false;
+      if (st !== "apart") upd.setApart = false;
+    }
+    await save(it.id, upd);
+    toast("Moved back to " + (sel.options[sel.selectedIndex].textContent));
+  }));
 
   document.querySelectorAll("#panel-callings .list-row").forEach((row) => {
     const it = () => items.find((x) => x.id === row.dataset.id);
