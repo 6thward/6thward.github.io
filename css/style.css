@@ -929,3 +929,13 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 /* sacrament / testimonies bands keep their height now that the readout has no time cells (2026-09-13) */
 .agenda-view .ag-sacrament { min-height: 2.1rem; padding-top: .4rem; padding-bottom: .4rem; }
 .agenda-view .ag-testimonies { min-height: 2.6rem; }
+
+/* draggable assignment lines read as pills (2026-09-13) */
+.st-line.st-drag { display:inline-flex; align-items:center; gap:.3rem; background:rgba(255,255,255,.62); border:1px solid rgba(31,39,51,.12); border-radius:99px; padding:.12rem .55rem .12rem .4rem; margin:.1rem 0; max-width:100%; box-shadow:0 1px 1px rgba(20,30,45,.05); transition:box-shadow .12s, transform .12s, border-color .12s; }
+.st-line.st-drag:hover { border-color:rgba(31,78,121,.45); box-shadow:0 2px 6px rgba(20,30,45,.12); transform:translateY(-1px); }
+.st-line.st-drag::before { content:"⋮⋮"; font-size:.68rem; letter-spacing:-.14em; color:rgba(31,39,51,.3); margin-right:.05rem; }
+.st-line.st-drag .st-li-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.st.st-drag { cursor: grab; }
+.st.st-drag .st-name { display:inline-flex; align-items:center; gap:.3rem; background:rgba(255,255,255,.62); border:1px solid rgba(31,39,51,.12); border-radius:99px; padding:.15rem .6rem; }
+.st.st-drag:hover .st-name { border-color:rgba(31,78,121,.45); box-shadow:0 2px 6px rgba(20,30,45,.12); }
+.st-drop-ok.st-line, .st-drop-ok .st-name { border-style:dashed !important; border-color:rgba(31,78,121,.5) !important; }
