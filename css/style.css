@@ -1119,3 +1119,7 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .board-head { padding-bottom: .35rem; margin-bottom: .35rem; border-bottom: 1px solid var(--line); }
 .board-head .row-title { font-size: 1.2rem; font-weight: 800; letter-spacing: -.01em; color: var(--ink); line-height: 1.2; }
 .board-card .board-note { font-size: .9rem; }
+
+/* Member Board: shaded name band in the section's colour (2026-09-13) */
+.board-card .board-head { margin: -.6rem -.75rem .5rem -.75rem; padding: .5rem .75rem .45rem; border-bottom: 1px solid color-mix(in srgb, var(--cc, #1f4e79) 25%, #fff); background: color-mix(in srgb, var(--cc, #1f4e79) 11%, #fff); border-radius: 0 10px 0 0; }
+.board-card .board-head .row-title { color: color-mix(in srgb, var(--cc, #1f4e79) 70%, #000); }
