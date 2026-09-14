@@ -1107,7 +1107,7 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 
 /* card pills: black text, more transparent fill (2026-09-13 — trying it out) */
 .st-line.st-drag, .st-line.st-line-light, .st.st-drag .st-name, .st.st-drag .st-sub, .st-subhead, .st-place {
-  background: rgba(255,255,255,.38) !important; border-color: rgba(31,39,51,.1) !important; box-shadow: none !important;
+  background: rgba(255,255,255,.82) !important; border-color: rgba(31,39,51,.1) !important; box-shadow: 0 1px 1px rgba(20,30,45,.05) !important; /* near-white over the tint — a whisper of the card colour shows through */
 }
 .st-line.st-drag .st-li-name, .st-line.st-line-light .st-li-name, .st.st-drag .st-name, .st.st-drag .st-sub, .st-subhead, .st-line .st-li-tag {
   color: var(--ink) !important;
