@@ -5,13 +5,13 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1789359289";
+import { db } from "./firebase-init.js?v=1789359429";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789359289";
-import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1789359289";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789359429";
+import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1789359429";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
@@ -332,10 +332,10 @@ function render() {
     bucket("Set Apart & MLS", "Tick Set apart and MLS as each happens — when both are ticked the calling is complete and archives.",
       by("apart").map(apartRow), "No one waiting to be set apart.", "apart") +
     `</div>` +
-    `<h3 style="margin:1.4rem 0 0;display:flex;align-items:center;gap:.5rem">Releases <span class="pill pill-role-member">${releases.filter((r) => r.stage !== "done").length}</span><button class="btn btn-sm" data-add="release" type="button" style="margin-left:auto" title="New release">+</button></h3>` +
+    `<h3 style="margin:1.4rem 0 0;display:flex;align-items:center;gap:.5rem">Releases <span class="pill pill-role-member">${releases.filter((r) => r.stage !== "done").length}</span></h3>` +
     `<div class="bishopric-board releases-board">` +
     bucket("Decided", "Release decided — let them know.",
-      releases.filter((r) => r.stage === "decided").map(releaseRow), "Nothing decided yet.", "decided") +
+      releases.filter((r) => r.stage === "decided").map(releaseRow), "Nothing decided yet.", "decided", "release") + // + on the card itself (2026-09-13)
     bucket("Notified", "They know — release from the pulpit.",
       releases.filter((r) => r.stage === "notified").map(releaseRow), "No one waiting to be released.", "notified") +
     bucket("Released", "Released — tick MLS once the clerk has recorded it.",
