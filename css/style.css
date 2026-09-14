@@ -74,7 +74,7 @@ body {
 .user-photo { width: 28px; height: 28px; border-radius: 50%; }
 
 /* ===== Panels ===== */
-main { max-width: 68rem; margin: 0 auto; padding: 1.25rem 1rem 4rem; }
+main { max-width: 112rem; margin: 0 auto; padding: 1.25rem 1.25rem 4rem; } /* 2026-09-13 — was 68rem; the cards want the room */
 .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: .25rem 0 1rem; flex-wrap: wrap; }
 .panel-head h2 { margin: 0; font-size: 1.25rem; }
 .panel-sub { color: var(--ink-soft); font-size: .88rem; margin: .2rem 0 0; }
