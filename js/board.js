@@ -3,12 +3,12 @@
 // added, renamed, reordered and removed. Data:
 //   boardColumns/{id}  { label, order }
 //   board/{id}         { name, notes, column, order, createdAt, updatedAt }
-import { db } from "./firebase-init.js?v=1789347444";
-import { ctx, can } from "./app.js?v=1789347444";
+import { db } from "./firebase-init.js?v=1789347616";
+import { ctx, can } from "./app.js?v=1789347616";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1789347444";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1789347616";
 
 const PALETTE = ["#1f4e79", "#5b4b9e", "#2e7d4f", "#a8720d", "#b3402f", "#0e7490", "#7a5a14", "#5b6675"];
 const DEFAULT_COLUMNS = ["Ideas", "Talking to", "Settled"];
@@ -81,7 +81,8 @@ function render() {
     <div class="list-row call-card call-card-v board-card" data-id="${k.id}" style="background:#fff;border:1px solid var(--line);border-left:5px solid ${colColor(cols.findIndex((c) => c.id === k.column))}">
       <div class="row-title">${esc(k.name || "—")}</div>
       ${k.notes ? `<div class="row-sub board-note">${esc(k.notes)}</div>` : ""}
-      ${open.length ? `<div class="todo-pills">${open.map((t) => todoPill(k, t)).join("")}</div>` : ""}
+      <div class="todo-pills">${open.map((t) => todoPill(k, t)).join("")}${editor ? `<span class="todo-pill todo-add-pill" data-addtodo="1" title="Add a to-do with a date">+ to-do</span>` : ""}</div>
+      <div class="mtg-row">${meetingsPill(k, editor)}</div>
     </div>`;
   };
   wrap.innerHTML = `<div class="bishopric-board member-board" style="grid-template-columns:repeat(${Math.min(cols.length, 4)}, minmax(0,1fr))">` +
@@ -107,7 +108,10 @@ function render() {
       const k = cards.find((x) => x.id === row.dataset.id);
       if (!k) return;
       const pill = e.target.closest(".todo-pill");
+      if (pill && pill.dataset.addtodo) { e.stopPropagation(); newTodo(k); return; }
       if (pill) { e.stopPropagation(); const t = (k.todos || []).find((x) => x.id === pill.dataset.todo); if (t) editTodo(k, t); return; }
+      const mp = e.target.closest(".mtg-pill");
+      if (mp) { e.stopPropagation(); openMeetings(k); return; }
       editCard(k);
     });
   });
@@ -243,6 +247,89 @@ function wireTodoList(el, k) {
   inp.addEventListener("blur", () => { if (inp.value.trim()) add(); });
 }
 
+// Quick add straight from the card: title + deadline (+ optional notes).
+function newTodo(k) {
+  const el = openModal(`
+    <h3 style="margin-bottom:.2rem">New to-do</h3>
+    <p class="row-sub" style="margin:0 0 .9rem">${esc(k.name || "")}</p>
+    <div class="form-grid">
+      <label class="field"><span>To-do</span><input id="nt-title" placeholder="e.g. Call about temple recommend" autocomplete="off"></label>
+      <label class="field"><span>Deadline (optional)</span><input type="date" id="nt-due"></label>
+      <label class="field full"><span>Notes (optional)</span><textarea id="nt-notes" style="min-height:4rem"></textarea></label>
+    </div>
+    <div class="modal-actions"><span></span><div style="display:flex;gap:.5rem"><button class="btn" id="nt-cancel">Cancel</button><button class="btn btn-primary" id="nt-save">Add</button></div></div>`);
+  setTimeout(() => el.querySelector("#nt-title").focus(), 30);
+  el.querySelector("#nt-cancel").addEventListener("click", closeModal);
+  const save = async () => {
+    const title = el.querySelector("#nt-title").value.trim();
+    if (!title) { toast("Give it a title"); return; }
+    const t = { id: newTodoId(), title, notes: el.querySelector("#nt-notes").value.trim(), due: el.querySelector("#nt-due").value || "", order: activeTodos(k).length, done: false, createdAt: new Date().toISOString() };
+    await saveTodos(k, [...(k.todos || []), t]); toast("Added"); closeModal();
+  };
+  el.querySelector("#nt-save").addEventListener("click", save);
+  el.querySelector("#nt-title").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); save(); } });
+}
+
+// ---- meeting recaps: dated notes from each time you met with the person ----
+// Stored on the card: meetings: [{ id, date (YYYY-MM-DD), notes, createdAt }]
+const meetingsOf = (k) => [...(k.meetings || [])].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+function meetingsPill(k, editor) {
+  const ms = meetingsOf(k);
+  if (!ms.length) return editor ? `<span class="mtg-pill mtg-empty" title="Add notes from a meeting">🗓 + meeting recap</span>` : "";
+  return `<span class="mtg-pill" title="Click to read the recaps">🗓 ${ms.length} meeting${ms.length === 1 ? "" : "s"} · last ${fmtDue(ms[0].date)}</span>`;
+}
+async function saveMeetings(k, meetings) {
+  k.meetings = meetings;
+  await updateDoc(doc(db, "board", k.id), { meetings, updatedAt: serverTimestamp() });
+}
+function openMeetings(k, editingId) {
+  const editor = can("board", "edit");
+  const ms = meetingsOf(k);
+  const editing = editingId ? ms.find((m) => m.id === editingId) : null;
+  const el = openModal(`
+    <h3 style="margin-bottom:.2rem">Meeting recaps</h3>
+    <p class="row-sub" style="margin:0 0 .9rem">${esc(k.name || "")} · notes from each time you've met</p>
+    ${editor ? `
+      <div class="mtg-form">
+        <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.4rem">
+          <input type="date" id="mr-date" value="${esc(editing ? editing.date : todayIso())}">
+          <span class="row-sub">${editing ? "Editing this recap" : "New recap"}</span>
+          ${editing ? `<button class="btn btn-sm btn-ghost btn-danger" id="mr-del" type="button" style="margin-left:auto">Delete</button>` : ""}
+        </div>
+        <textarea id="mr-notes" placeholder="What was discussed, what was decided, what's next…" style="width:100%;box-sizing:border-box;min-height:6rem;padding:.55rem .65rem;border:1.5px solid var(--line);border-radius:8px;font:inherit;font-size:.92rem">${esc(editing ? editing.notes : "")}</textarea>
+        <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.5rem">
+          ${editing ? `<button class="btn" id="mr-cancel-edit" type="button">Cancel edit</button>` : ""}
+          <button class="btn btn-primary" id="mr-save" type="button">${editing ? "Save changes" : "Save recap"}</button>
+        </div>
+      </div>` : ""}
+    <div class="mtg-list">
+      ${ms.length ? ms.map((m) => `
+        <div class="mtg-entry${editing && editing.id === m.id ? " editing" : ""}" data-mtg="${m.id}">
+          <div class="mtg-date">${fmtDate(m.date, { year: true })}</div>
+          <div class="mtg-notes">${esc(m.notes || "")}</div>
+          ${editor ? `<button class="btn btn-sm mtg-edit" type="button" title="Edit this recap">✎</button>` : ""}
+        </div>`).join("") : `<div class="empty-note" style="padding:.8rem">No recaps yet.</div>`}
+    </div>
+    <div class="modal-actions"><span></span><button class="btn" id="mr-close">Close</button></div>`);
+  el.querySelector("#mr-close").addEventListener("click", closeModal);
+  el.querySelectorAll(".mtg-edit").forEach((b) => b.addEventListener("click", () => openMeetings(k, b.closest(".mtg-entry").dataset.mtg)));
+  if (!editor) return;
+  el.querySelector("#mr-cancel-edit")?.addEventListener("click", () => openMeetings(k));
+  el.querySelector("#mr-del")?.addEventListener("click", async () => {
+    if (!confirm("Delete this recap?")) return;
+    await saveMeetings(k, (k.meetings || []).filter((m) => m.id !== editing.id)); toast("Deleted"); openMeetings(k);
+  });
+  el.querySelector("#mr-save").addEventListener("click", async () => {
+    const date = el.querySelector("#mr-date").value || todayIso();
+    const notes = el.querySelector("#mr-notes").value.trim();
+    if (!notes) { toast("Write a line or two first"); return; }
+    let next;
+    if (editing) next = (k.meetings || []).map((m) => (m.id === editing.id ? { ...m, date, notes } : m));
+    else next = [...(k.meetings || []), { id: "m" + Math.random().toString(36).slice(2, 9), date, notes, createdAt: new Date().toISOString(), by: ctx.name || "" }];
+    await saveMeetings(k, next); toast("Saved"); openMeetings(k);
+  });
+}
+
 // One to-do: title, deadline, notes; archive / delete. `fromCard` = came from
 // the card editor, so Back returns there.
 function editTodo(k, t, fromCard) {
@@ -310,7 +397,8 @@ function editCard(k, presetCol) {
       </label>
       <label class="field full"><span>Notes</span><textarea id="bc-notes" ${editor ? "" : "disabled"} placeholder="Anything worth remembering — optional">${esc(k?.notes || "")}</textarea></label>
     </div>
-    ${!isNew ? `<h4 style="margin:1rem 0 .3rem">To-dos <span class="row-sub" style="font-weight:400">· top = highest priority · ✓ archives</span></h4><div id="bc-todos">${todoListHtml(k)}</div>` : ""}
+    ${!isNew ? `<h4 style="margin:1rem 0 .3rem">To-dos <span class="row-sub" style="font-weight:400">· top = highest priority · ✓ archives</span></h4><div id="bc-todos">${todoListHtml(k)}</div>
+    <div style="margin-top:.9rem"><button class="btn btn-sm" type="button" id="bc-meetings">🗓 Meeting recaps (${(k.meetings || []).length})</button></div>` : ""}
     <div class="modal-actions">
       ${!isNew && editor ? `<button class="btn btn-ghost btn-danger" id="bc-delete">Remove</button>` : "<span></span>"}
       <div style="display:flex;gap:.5rem">
@@ -319,6 +407,7 @@ function editCard(k, presetCol) {
       </div>
     </div>`);
   el.querySelector("#bc-cancel").addEventListener("click", closeModal);
+  el.querySelector("#bc-meetings")?.addEventListener("click", () => openMeetings(k));
   if (!editor) { el.querySelectorAll(".todo-open").forEach((sp) => sp.addEventListener("click", () => { const t = (k.todos || []).find((x) => x.id === sp.dataset.todo); if (t) editTodo(k, t, true); })); return; }
   if (!isNew) wireTodoList(el, k);
   if (isNew) setTimeout(() => el.querySelector("#bc-name").focus(), 30);

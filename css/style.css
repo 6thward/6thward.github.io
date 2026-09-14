@@ -1014,3 +1014,19 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .agenda-view .ag-prog { background: rgba(31,39,51,.035); border: 1px solid rgba(31,39,51,.07); border-radius: 9px; padding: .22rem .55rem; margin: .14rem 0; align-items: baseline; }
 .agenda-view .ag-prog:hover { background: rgba(31,78,121,.06); border-color: rgba(31,78,121,.18); }
 .agenda-view .ag-prog .ag-grip { align-self: center; }
+
+/* Member Board: quick to-do + meeting recaps (2026-09-13) */
+.todo-pill.todo-add-pill { background: transparent; border: 1px dashed rgba(31,39,51,.25); color: var(--ink-soft); font-weight: 500; }
+.todo-pill.todo-add-pill:hover { border-color: var(--brand); color: var(--brand); }
+.mtg-row { margin-top: .35rem; }
+.mtg-pill { display: inline-block; font-size: .76rem; font-weight: 600; color: var(--brand); background: var(--brand-soft); border-radius: 99px; padding: .15rem .6rem; cursor: pointer; }
+.mtg-pill.mtg-empty { background: transparent; color: var(--ink-soft); border: 1px dashed rgba(31,39,51,.25); font-weight: 500; }
+.mtg-pill:hover { filter: brightness(.96); }
+.mtg-form { background: #f8fafb; border: 1px solid var(--line); border-radius: 10px; padding: .7rem .8rem; margin-bottom: .8rem; }
+.mtg-form input[type=date] { font: inherit; font-size: .9rem; padding: .35rem .5rem; border: 1.5px solid var(--line); border-radius: 8px; }
+.mtg-list { display: flex; flex-direction: column; gap: .5rem; max-height: 50vh; overflow-y: auto; }
+.mtg-entry { display: grid; grid-template-columns: 8.5rem 1fr auto; gap: .6rem; padding: .55rem .7rem; border: 1px solid var(--line); border-radius: 10px; align-items: start; }
+.mtg-entry.editing { border-color: var(--brand); background: var(--brand-soft); }
+.mtg-date { font-weight: 700; font-size: .88rem; color: var(--brand); }
+.mtg-notes { white-space: pre-wrap; font-size: .92rem; line-height: 1.4; }
+@media (max-width: 650px) { .mtg-entry { grid-template-columns: 1fr auto; } .mtg-notes { grid-column: 1 / -1; } }
