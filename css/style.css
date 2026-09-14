@@ -925,3 +925,7 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .hs-row.hs-need + .hs-row { border-top:none; }
 .hs-row.hs-need .hs-name { font-size:1.02rem; }
 .hs-row.hs-here { opacity:.8; }
+
+/* sacrament / testimonies bands keep their height now that the readout has no time cells (2026-09-13) */
+.agenda-view .ag-sacrament { min-height: 2.1rem; padding-top: .4rem; padding-bottom: .4rem; }
+.agenda-view .ag-testimonies { min-height: 2.6rem; }
