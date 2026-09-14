@@ -3,12 +3,12 @@
 // added, renamed, reordered and removed. Data:
 //   boardColumns/{id}  { label, order }
 //   board/{id}         { name, notes, column, order, createdAt, updatedAt }
-import { db } from "./firebase-init.js?v=1789349901";
-import { ctx, can } from "./app.js?v=1789349901";
+import { db } from "./firebase-init.js?v=1789350123";
+import { ctx, can } from "./app.js?v=1789350123";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789349901";
+import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789350123";
 
 // Next ordinance a person is working toward — shown as a pill beside the name.
 const ORDINANCES = ["Sacrament", "Aaronic Priesthood", "Melchizedek Priesthood", "Endowment", "Sealing"];
@@ -91,8 +91,8 @@ function render() {
     cols.map((c, i) => {
       const rows = cards.filter((k) => k.column === c.id);
       return `
-      <div class="card bb-col" style="margin-top:.8rem;border-top:4px solid ${colColor(i)}">
-        <h3 style="display:flex;align-items:center;gap:.5rem;min-width:0">
+      <div class="card bb-col board-col" data-colid="${c.id}" style="margin-top:.8rem;border-top:4px solid ${colColor(i)}">
+        <h3 class="board-col-head" ${editor ? `draggable="true" title="Drag to reorder sections"` : ""} style="display:flex;align-items:center;gap:.5rem;min-width:0">
           <span class="board-col-label${editor ? " st-click" : ""}" data-col="${c.id}" title="${editor ? "Click to rename or remove this section" : ""}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.label)}</span>
           <span class="pill pill-role-member">${rows.length}</span>
           ${editor ? `<button class="btn btn-sm" data-addto="${c.id}" type="button" style="margin-left:auto" title="Add a person to ${esc(c.label)}">+</button>` : ""}
@@ -125,6 +125,39 @@ function render() {
   wrap.querySelectorAll("[data-addto]").forEach((b) => b.addEventListener("click", () => editCard(null, b.dataset.addto)));
   wrap.querySelectorAll(".board-col-label").forEach((l) => l.addEventListener("click", () => editSection(cols.find((c) => c.id === l.dataset.col))));
 
+  // ---- drag a section header to reorder the sections ----
+  let dragCol = null;
+  wrap.querySelectorAll(".board-col-head[draggable]").forEach((h) => {
+    const col = h.closest(".board-col");
+    h.addEventListener("dragstart", (e) => { dragCol = col.dataset.colid; e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", ""); } catch {} col.classList.add("col-dragging"); e.stopPropagation(); });
+    h.addEventListener("dragend", () => { dragCol = null; wrap.querySelectorAll(".col-dragging, .col-before").forEach((x) => x.classList.remove("col-dragging", "col-before")); });
+  });
+  wrap.querySelectorAll(".board-col").forEach((col) => {
+    col.addEventListener("dragover", (e) => {
+      if (!dragCol || col.dataset.colid === dragCol) return;
+      e.preventDefault();
+      wrap.querySelectorAll(".col-before").forEach((x) => x.classList.remove("col-before"));
+      col.classList.add("col-before");
+    });
+    col.addEventListener("drop", async (e) => {
+      if (!dragCol) return;
+      e.preventDefault(); e.stopPropagation();
+      const from = dragCol; dragCol = null;
+      wrap.querySelectorAll(".col-dragging, .col-before").forEach((x) => x.classList.remove("col-dragging", "col-before"));
+      const target = col.dataset.colid;
+      if (from === target) return;
+      const list = cols.filter((c) => c.id !== from);
+      const moving = cols.find((c) => c.id === from);
+      const at = list.findIndex((c) => c.id === target);
+      list.splice(at < 0 ? list.length : at, 0, moving);
+      const batch = writeBatch(db);
+      list.forEach((c, i) => { if (c.order !== i) { c.order = i; batch.update(doc(db, "boardColumns", c.id), { order: i }); } });
+      cols = list;
+      render();
+      await batch.commit();
+    });
+  });
+
   // ---- drag & drop: between sections and up/down within one ----
   let dragId = null;
   const clearMarks = () => wrap.querySelectorAll(".bb-before").forEach((r) => r.classList.remove("bb-before"));
@@ -136,9 +169,10 @@ function render() {
     row.addEventListener("dragleave", () => row.classList.remove("bb-before"));
   });
   wrap.querySelectorAll(".bb-drop").forEach((zone) => {
-    zone.addEventListener("dragover", (e) => { if (!dragId) return; e.preventDefault(); zone.classList.add("bb-over"); });
+    zone.addEventListener("dragover", (e) => { if (!dragId || dragCol) return; e.preventDefault(); zone.classList.add("bb-over"); });
     zone.addEventListener("dragleave", () => zone.classList.remove("bb-over"));
     zone.addEventListener("drop", async (e) => {
+      if (dragCol) return; // a section is being dragged, handled above
       e.preventDefault();
       zone.classList.remove("bb-over");
       const targetRow = e.target.closest(".board-card");

@@ -5,12 +5,12 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1789349901";
+import { db } from "./firebase-init.js?v=1789350123";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789349901";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789350123";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
@@ -65,7 +65,7 @@ export function initCallings() {
   panel.innerHTML = `
     <div class="panel-head">
       <div>
-        <h2>Bishopric</h2>
+        <h2>Callings</h2>
         <p class="panel-sub">Callings and releases, from consideration to the clerk's records.</p>
       </div>
       <div style="display:flex;gap:.5rem;flex-wrap:wrap">
@@ -171,7 +171,7 @@ const cardStyle = (label, orgKey) => {
 const fillRow = (c) => {
   const cands = c.candidates || [];
   const sub = cands.length
-    ? cands.map((n, i) => `<div class="cand-line"><span class="cand-star-i" data-star="${i}" title="Star ${esc(n)} — the bishopric has settled on this name (moves to Calls to Issue)">☆</span>${esc(n)} <span class="cand-x" data-rm="${i}" title="Remove ${esc(n)} from consideration">✕</span></div>`).join("")
+    ? cands.map((n, i) => `<div class="cand-line"><span class="cand-x" data-rm="${i}" title="Remove ${esc(n)} from consideration">✕</span><span class="cand-name-txt">${esc(n)}</span><span class="cand-pick" data-star="${i}" title="Choose ${esc(n)} — the bishopric has settled on this name (moves to Calls to Issue)">○</span></div>`).join("")
     : "";
   // Inline add box (2026-09-13): type a name + Enter to add it to the
   // consideration list without opening the editor. The card itself still
@@ -337,7 +337,7 @@ function render() {
       const item = it();
       if (!item) return;
       if (t.classList.contains("cand-add")) { e.stopPropagation(); return; } // typing a name, not opening the editor
-      if (t.dataset.star != null && t.classList.contains("cand-star-i")) { // ☆ on the card: settle on this name → Calls to Issue
+      if (t.dataset.star != null && t.classList.contains("cand-pick")) { // ☆ on the card: settle on this name → Calls to Issue
         e.stopPropagation();
         const name = (item.candidates || [])[Number(t.dataset.star)];
         if (!name) return;

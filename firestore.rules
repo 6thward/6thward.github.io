@@ -122,6 +122,10 @@ service cloud.firestore {
       allow read: if canView('board');
       allow write: if canEdit('board');
     }
+    match /councils/{id} {
+      allow read: if canView('board');
+      allow write: if canEdit('board');
+    }
 
     // ---- Callings pipeline (sensitive) ----
     match /callings/{id} {

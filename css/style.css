@@ -1075,3 +1075,27 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .ord-pill.ord-edit:hover { border-color: var(--violet); }
 .ord-pill.ord-empty { background: transparent; color: #b7bfcb; border: 1px dashed rgba(31,39,51,.25); font-weight: 500; }
 .ord-sel { font: inherit; font-size: .78rem; padding: .1rem .4rem; border: 1px solid var(--violet); border-radius: 99px; background: #fff; color: var(--violet); }
+
+/* Ward Council agendas (2026-09-13) */
+.wc-num { font-weight: 800; color: var(--ink-soft); min-width: 1.6rem; padding-top: .05rem; }
+.wc-person-name { font-weight: 800; }
+.wc-add { margin-top: .6rem; }
+.wc-new { width: 100%; box-sizing: border-box; font: inherit; font-size: .95rem; padding: .55rem .7rem; border: 1px dashed rgba(31,39,51,.3); border-radius: 10px; background: #fff; }
+.wc-new:focus { outline: none; border-style: solid; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.wc-hist { margin-top: .8rem; }
+.wc-hist summary { cursor: pointer; color: var(--ink-soft); font-size: .88rem; font-weight: 600; }
+
+/* Member Board: drag sections by their header; cards don't text-select while dragging (2026-09-13) */
+.board-col-head[draggable] { cursor: grab; user-select: none; -webkit-user-select: none; }
+.board-col.col-dragging { opacity: .5; }
+.board-col.col-before { box-shadow: -4px 0 0 0 var(--brand); }
+.board-card { user-select: none; -webkit-user-select: none; }
+.board-card textarea, .board-card input { user-select: text; -webkit-user-select: text; }
+
+/* candidate rows: ✕ left, name, quiet pick-circle right (2026-09-13) */
+.cand-line { display: flex; align-items: center; gap: .45rem; }
+.cand-line .cand-x { order: 0; margin: 0; }
+.cand-name-txt { flex: 1; min-width: 0; }
+.cand-pick { margin-left: auto; color: rgba(31,39,51,.28); font-size: 1rem; line-height: 1; cursor: pointer; padding: 0 .2rem; }
+.cand-pick:hover { color: var(--brand); transform: scale(1.15); }
+.cand-star-i { display: none; }

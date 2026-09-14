@@ -2,13 +2,13 @@
 //  * PIN people — created here: a name, a 6-digit PIN, and a permission per
 //    area (Hidden / View / Edit). They sign in with just the PIN.
 //  * Google sign-ins — approve and assign a role, as before.
-import { db } from "./firebase-init.js?v=1789349901";
-import { ctx, AREAS } from "./app.js?v=1789349901";
+import { db } from "./firebase-init.js?v=1789350123";
+import { ctx, AREAS } from "./app.js?v=1789350123";
 import {
   collection, onSnapshot, updateDoc, setDoc, deleteDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1789349901";
-import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1789349901";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1789350123";
+import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1789350123";
 
 const ROLES = [
   ["pending", "Pending (no access)"],
@@ -52,7 +52,7 @@ export function initAdmin() {
       </table>
       <div class="row-sub" style="margin-top:.8rem">
         <b>Member</b> — sees tasks, sacrament plans, and the calendar; can update their own tasks.<br>
-        <b>Bishopric / Clerk</b> — everything above, plus create/edit anything and see the Bishopric tab.<br>
+        <b>Bishopric / Clerk</b> — everything above, plus create/edit anything and see the Callings tab.<br>
         <b>Bishop</b> — everything, including Confidential and this page.
       </div>
     </div>`;
