@@ -1161,3 +1161,13 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .todo-pill .todo-tick:hover { background:var(--ok); border-color:var(--ok); color:#fff; }
 .todo-pill.todo-overdue .todo-tick { border-color:rgba(176,52,43,.45); }
 .todo-pill .todo-pill-text { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* Hymns column: organist + conductor as two separate pills matching the hymn lines (2026-09-13) */
+.st-subhead.st-music { display:flex; flex-direction:column; gap:.2rem; align-self:stretch; background:transparent !important; border:none !important; box-shadow:none !important; padding:0; margin:.1rem 0 .15rem; overflow:visible; white-space:normal; }
+.st-subhead.st-music .st-music-pill { display:flex; align-items:center; gap:.3rem; background:rgba(255,255,255,.82); border:1px solid rgba(31,39,51,.1); border-radius:99px; padding:.14rem .6rem .14rem .55rem; box-shadow:0 1px 1px rgba(20,30,45,.05); text-align:left; font-size:.8rem; font-weight:600; }
+.st-subhead.st-music .st-music-pill .st-li-tag { flex:0 0 5.6rem; font-weight:600; color:var(--ink); }
+.st-subhead.st-music .st-music-pill .st-li-name { font-weight:600; color:var(--ink); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.st-subhead.st-music[data-musiced]:hover .st-music-pill { border-color:rgba(31,78,121,.45); }
+.st-subhead.st-music.st-sh-editing { gap:.2rem; }
+.st-subhead.st-music.st-sh-editing .st-music-row { background:rgba(255,255,255,.82); border:1px solid rgba(31,39,51,.1); border-radius:99px; padding:.1rem .55rem; font-size:.8rem; font-weight:600; }
+.st-subhead.st-music.st-sh-editing .st-music-row input { font-size:.8rem; border-radius:99px; }

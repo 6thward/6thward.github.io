@@ -2,13 +2,13 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789361052";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789361052";
+import { db } from "./firebase-init.js?v=1789362733";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789362733";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789361052";
-import { HYMNS } from "./hymns.js?v=1789361052";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789362733";
+import { HYMNS } from "./hymns.js?v=1789362733";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -795,7 +795,7 @@ function statusChips(m, date) {
     // no icon in the headline — the title stays cleanly centered; state
     // lives in the pill color and the per-line marks
     const sh = subhead ? (typeof subhead === "string" ? { html: subhead, attrs: "" } : subhead) : null;
-    const shHtml = sh ? `<span class="st-subhead"${sh.attrs}>${sh.html}</span>` : "";
+    const shHtml = sh ? `<span class="st-subhead${sh.cls ? " " + sh.cls : ""}"${sh.attrs}>${sh.html}</span>` : "";
     return `<span class="st st-group ${cls}${can ? " st-click" : ""}"${can ? ` data-qe='${JSON.stringify(qe)}' title="Click to edit"` : ""}><span class="st-head">${label}</span>${shHtml}${body}${footer || ""}</span>`;
   };
 
@@ -822,7 +822,10 @@ function statusChips(m, date) {
       light: true, // hymn titles stay unbolded so more of the name fits
       inlineEdit: { t: "hymn", k: h.kind, o: 0 },
     })), {
-      html: `Organ: ${esc(m?.organist || "—")} · Conduct: ${esc(m?.chorister || "—")}`,
+      // two separate pills, sized like the hymn lines (2026-09-13)
+      cls: "st-music",
+      html: `<span class="st-music-pill"><span class="st-li-tag">Organ:</span><span class="st-li-name">${esc(m?.organist || "—")}</span></span>` +
+            `<span class="st-music-pill"><span class="st-li-tag">Conduct:</span><span class="st-li-name">${esc(m?.chorister || "—")}</span></span>`,
       attrs: can ? ` data-musiced title="Click to set organist & conductor"` : "",
     }),
   ];
