@@ -906,3 +906,16 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 /* inline star on considered names (2026-09-13) */
 .cand-star-i { cursor:pointer; color:#c9a227; opacity:.55; font-size:1.05rem; margin-right:.3rem; line-height:1; }
 .cand-star-i:hover { opacity:1; transform:scale(1.15); }
+
+/* Calling-to-Fill groupings (2026-09-13) */
+.cg { margin-top: .6rem; }
+.cg-head { display:flex; align-items:center; gap:.45rem; font-size:.78rem; font-weight:800; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft); padding:.15rem .1rem .3rem; border-bottom:1px solid var(--line); margin-bottom:.3rem; cursor:pointer; }
+.cg-head.cg-other { cursor:default; }
+.cg-head[data-group]:hover span:first-child { color:var(--brand); text-decoration:underline dotted; }
+.cg-drop { min-height: 3rem; padding-bottom: .6rem; }
+.cg-empty { padding:.6rem; font-size:.82rem; border:1px dashed var(--line); border-radius:8px; }
+
+/* Releases as a three-column flow (2026-09-13) */
+.releases-board { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 1100px) { .releases-board { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 650px) { .releases-board { grid-template-columns: 1fr; } }

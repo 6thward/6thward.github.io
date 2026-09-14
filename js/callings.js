@@ -5,12 +5,12 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1789345241";
+import { db } from "./firebase-init.js?v=1789345426";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789345241";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789345426";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
@@ -27,6 +27,7 @@ const REL_STAGES = [
 ];
 
 let items = [];
+let groups = [];   // Calling-to-Fill groupings: callingGroups/{id} { label, order }
 let showDone = false;
 let started = false;
 
@@ -95,6 +96,10 @@ export function initCallings() {
   // Stable order (2026-09-13): a manual `order` number first (set by drag
   // and drop), then creation time — NOT most-recently-edited, which made
   // cards jump around every time a name was added.
+  onSnapshot(collection(db, "callingGroups"), (qs) => {
+    groups = qs.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    render();
+  });
   onSnapshot(collection(db, "callings"), (qs) => {
     items = qs.docs.map((d) => norm({ id: d.id, ...d.data() }));
     items.sort((a, b) => sortKey(a) - sortKey(b));
@@ -108,9 +113,10 @@ const sortKey = (c) => (typeof c.order === "number" ? c.order : 1e15 + (tsMs(c.c
 // After a drag: renumber every card in that column 0..n so the dropped one
 // lands where it was let go. Only cards whose number changes are written.
 async function reorderWithin(stage, draggedId, beforeId) {
-  const col = items.filter((c) => c.kind === "calling" && c.stage === stage && c.id !== draggedId);
   const dragged = items.find((c) => c.id === draggedId);
   if (!dragged) return;
+  const col = items.filter((c) => (c.kind || "calling") === (dragged.kind || "calling") && c.stage === stage && c.id !== draggedId
+    && (stage !== "fill" || (c.group || "") === (dragged.group || "")));
   const at = beforeId ? col.findIndex((c) => c.id === beforeId) : -1;
   if (at >= 0) col.splice(at, 0, dragged); else col.push(dragged);
   const writes = [];
@@ -205,21 +211,16 @@ const apartRow = (c) => `
     </div>
   </div>`;
 
-const releaseRow = (r) => {
-  const next = { decided: ["notified", "Notified →"], notified: ["released", "Released →"], released: ["done", "Clerk updated ✓"] }[r.stage];
-  const back = { notified: "decided", released: "notified" }[r.stage];
-  return `
-  <div class="list-row call-card" data-id="${r.id}" ${cardStyle(r.calling || r.name)}>
-    <div class="row-main">
-      ${r.calling ? `<div class="call-card-title" style="color:${callColor(r.calling)}">${esc(r.calling)}</div>` : ""}
-      <div class="row-title">${esc(r.name)}</div>
-      <div class="row-sub">${r.notes ? esc(r.notes.slice(0, 70)) : "Release"}</div>
-      ${stampLine(REL_STAGES.find(([k]) => k === r.stage)?.[1] || "", r.stamps?.[r.stage])}
-    </div>
-    <span class="pill ${r.stage === "released" ? "pill-accepted" : "pill-inprogress"}"${back ? ` data-adv="${back}" style="cursor:pointer" title="Click to go back a step"` : ""}>${REL_STAGES.find(([k]) => k === r.stage)?.[1] || r.stage}</span>
-    ${next ? `<button class="btn btn-sm" data-adv="${next[0]}" type="button">${next[1]}</button>` : ""}
+// Release card in the three-column flow. Drag between columns; on the last
+// column the MLS tick completes and archives it.
+const releaseRow = (r) => `
+  <div class="list-row call-card call-card-v" data-id="${r.id}" ${cardStyle(r.calling || r.name)}>
+    ${r.calling ? `<div class="call-card-title" style="color:${callColor(r.calling)}">${esc(r.calling)}</div>` : ""}
+    <div class="row-title">${esc(r.name)}</div>
+    ${r.notes ? `<div class="row-sub">${esc(r.notes.slice(0, 90))}</div>` : ""}
+    ${stampLine(REL_STAGES.find(([k]) => k === r.stage)?.[1] || "", r.stamps?.[r.stage])}
+    ${r.stage === "released" ? `<div class="step-pills"><button class="step-pill" data-adv="done" type="button" title="Recorded in MLS — completes and archives this release">○ Updated in MLS</button></div>` : ""}
   </div>`;
-};
 
 const memberRow = (p) => `
   <div class="list-row" data-id="${p.id}">
@@ -264,10 +265,30 @@ function render() {
 
   // the calling flow reads left → right on desktop; drag a row to the next
   // column or use its arrow button
+  // Calling to Fill can be split into named groupings (Primary, RS, Urgent…).
+  // Each grouping is its own drop zone; ungrouped cards sit at the bottom.
+  const fillCards = by("fill");
+  const groupIds = new Set(groups.map((g) => g.id));
+  const fillSection = (g) => {
+    const rows = fillCards.filter((c) => (g ? c.group === g.id : !groupIds.has(c.group || "")));
+    if (!g && !rows.length && groups.length) return ""; // hide an empty "Other"
+    return `
+      <div class="cg">
+        ${g ? `<div class="cg-head" data-group="${g.id}" title="Click to rename or remove this grouping"><span>${esc(g.label)}</span><span class="pill pill-role-member">${rows.length}</span></div>`
+            : (groups.length ? `<div class="cg-head cg-other"><span>Other</span><span class="pill pill-role-member">${rows.length}</span></div>` : "")}
+        <div class="bb-drop cg-drop" data-stage="fill" data-group="${g ? g.id : ""}">${rows.length ? rows.map(fillRow).join("") : `<div class="empty-note cg-empty">Drag callings here</div>`}</div>
+      </div>`;
+  };
+  const fillBody = `
+    <div class="card bb-col" style="margin-top:.8rem">
+      <h3 style="display:flex;align-items:center;gap:.5rem">Calling to Fill <span class="pill pill-role-member">${fillCards.length}</span>
+        <span style="margin-left:auto;display:flex;gap:.3rem"><button class="btn btn-sm" data-add="group" type="button" title="New grouping (Primary, RS, Urgent…)">+ Group</button><button class="btn btn-sm" data-add="calling" type="button" title="Add a calling">+</button></span></h3>
+      <p class="row-sub" style="margin:0 0 .3rem">Names under consideration — star one to decide.${groups.length ? " Drag a calling into a grouping." : ""}</p>
+      ${fillCards.length || groups.length ? groups.map(fillSection).join("") + fillSection(null) : `<div class="bb-drop" data-stage="fill" data-group=""><div class="empty-note">Nothing waiting to be filled.</div></div>`}
+    </div>`;
   wrap.innerHTML =
     `<div class="bishopric-board">` +
-    bucket("Calling to Fill", "Names under consideration — star one to decide.",
-      by("fill").map(fillRow), "Nothing waiting to be filled.", "fill", "calling") +
+    fillBody +
     bucket("Calls to Issue", "Name decided — extend the call.",
       by("issue").map(issueRow), "No calls waiting to be issued.", "issue") +
     bucket("Calls to Sustain", "Accepted — present for sustaining.",
@@ -275,8 +296,15 @@ function render() {
     bucket("Set Apart & MLS", "Tick Set apart and MLS as each happens — when both are ticked the calling is complete and archives.",
       by("apart").map(apartRow), "No one waiting to be set apart.", "apart") +
     `</div>` +
-    bucket("Releases", "Decided → notified → released → recorded by the clerk.",
-      releases.filter((r) => r.stage !== "done").map(releaseRow), "No releases in progress.", null, "release") +
+    `<h3 style="margin:1.4rem 0 0;display:flex;align-items:center;gap:.5rem">Releases <span class="pill pill-role-member">${releases.filter((r) => r.stage !== "done").length}</span><button class="btn btn-sm" data-add="release" type="button" style="margin-left:auto" title="New release">+</button></h3>` +
+    `<div class="bishopric-board releases-board">` +
+    bucket("Decided", "Release decided — let them know.",
+      releases.filter((r) => r.stage === "decided").map(releaseRow), "Nothing decided yet.", "decided") +
+    bucket("Notified", "They know — release from the pulpit.",
+      releases.filter((r) => r.stage === "notified").map(releaseRow), "No one waiting to be released.", "notified") +
+    bucket("Released", "Released — tick MLS once the clerk has recorded it.",
+      releases.filter((r) => r.stage === "released").map(releaseRow), "No one waiting on MLS.", "released") +
+    `</div>` +
     bucket("Members who need callings", "The pool to draw from as positions open up.",
       members.map(memberRow), "No one on the list.", null, "member");
 
@@ -388,9 +416,11 @@ function render() {
     inp.addEventListener("dragstart", (e) => { e.preventDefault(); e.stopPropagation(); });
   });
 
+  wrap.querySelectorAll(".cg-head[data-group]").forEach((h) => h.addEventListener("click", () => editGroup(groups.find((g) => g.id === h.dataset.group))));
   // "+" on a bucket header opens the matching creator
   document.querySelectorAll("#panel-callings [data-add]").forEach((b) =>
     b.addEventListener("click", (e) => {
+      if (b.dataset.add === "group") { e.stopPropagation(); return editGroup(null); }
       e.stopPropagation();
       if (b.dataset.add === "calling") editCalling(null);
       else if (b.dataset.add === "release") editRelease(null);
@@ -429,7 +459,7 @@ function render() {
       zone.classList.add("bb-over");
     });
     zone.addEventListener("dragleave", () => zone.classList.remove("bb-over"));
-    zone.addEventListener("drop", (e) => {
+    zone.addEventListener("drop", async (e) => {
       e.preventDefault();
       zone.classList.remove("bb-over");
       const targetRow = e.target.closest(".list-row");
@@ -437,9 +467,18 @@ function render() {
       clearMarks();
       const it = items.find((x) => x.id === dragId);
       dragId = null;
-      if (!it || it.kind !== "calling") return;
+      if (!it || (it.kind !== "calling" && it.kind !== "release")) return;
       const st = zone.dataset.stage;
       if (!st) return;
+      if (it.kind === "release") { // releases flow: decided → notified → released (MLS tick archives)
+        if (!["decided", "notified", "released"].includes(st)) return;
+        if (st === it.stage) { reorderWithin(st, it.id, beforeId); return; }
+        it.stage = st;
+        save(it.id, { stage: st }).then(() => reorderWithin(st, it.id, beforeId));
+        return;
+      }
+      const g = zone.dataset.group ?? "";
+      if (st === "fill" && (it.group || "") !== g) { it.group = g; await save(it.id, { group: g }); } // dropped into a grouping
       if (st === it.stage) { reorderWithin(st, it.id, beforeId); return; } // same column = reorder
       if (st !== "fill" && !it.decided && !(it.candidates || [])[0]) {
         toast("Add a name (and star it) before moving this forward");
@@ -452,6 +491,48 @@ function render() {
       save(it.id, upd).then(() => reorderWithin(st, it.id, beforeId));
     });
   });
+}
+
+// ---- Calling-to-Fill groupings ----
+function editGroup(g) {
+  const isNew = !g;
+  const count = g ? items.filter((c) => c.group === g.id).length : 0;
+  const el = openModal(`
+    <h3>${isNew ? "New grouping" : "Grouping"}</h3>
+    <p class="row-sub" style="margin:0 0 .8rem">A heading inside Calling to Fill — e.g. Primary, Relief Society, Urgent. Drag callings into it.</p>
+    <div class="form-grid">
+      <label class="field"><span>Title</span><input id="cg-label" value="${esc(g?.label || "")}" placeholder="e.g. Urgent" autocomplete="off"></label>
+      ${!isNew && groups.length > 1 ? `<label class="field"><span>Position</span><select id="cg-pos">${groups.map((x, i) => `<option value="${i}" ${x.id === g.id ? "selected" : ""}>${i + 1}${x.id === g.id ? " (current)" : " — before " + esc(x.label)}</option>`).join("")}</select></label>` : ""}
+    </div>
+    <div class="modal-actions">
+      ${!isNew ? `<button class="btn btn-ghost btn-danger" id="cg-del">Remove grouping</button>` : "<span></span>"}
+      <div style="display:flex;gap:.5rem"><button class="btn" id="cg-cancel">Cancel</button><button class="btn btn-primary" id="cg-save">${isNew ? "Add" : "Save"}</button></div>
+    </div>`);
+  setTimeout(() => el.querySelector("#cg-label").select(), 30);
+  el.querySelector("#cg-cancel").addEventListener("click", closeModal);
+  el.querySelector("#cg-del")?.addEventListener("click", async () => {
+    if (!confirm(`Remove “${g.label}”?${count ? ` Its ${count} calling${count === 1 ? "" : "s"} will move to Other.` : ""}`)) return;
+    await deleteDoc(doc(db, "callingGroups", g.id));
+    await Promise.all(items.filter((c) => c.group === g.id).map((c) => updateDoc(doc(db, "callings", c.id), { group: "" })));
+    toast("Grouping removed"); closeModal();
+  });
+  const save_ = async () => {
+    const label = el.querySelector("#cg-label").value.trim();
+    if (!label) { toast("Give it a title"); return; }
+    try {
+      if (isNew) {
+        await addDoc(collection(db, "callingGroups"), { label, order: groups.length, createdAt: serverTimestamp() });
+      } else {
+        const pos = el.querySelector("#cg-pos"); const idx = groups.findIndex((x) => x.id === g.id);
+        const newPos = pos ? Number(pos.value) : idx;
+        const list = groups.filter((x) => x.id !== g.id); list.splice(Math.min(newPos, list.length), 0, { ...g, label });
+        await Promise.all(list.map((x, i) => updateDoc(doc(db, "callingGroups", x.id), x.id === g.id ? { label, order: i } : { order: i })));
+      }
+      toast("Saved"); closeModal();
+    } catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
+  };
+  el.querySelector("#cg-save").addEventListener("click", save_);
+  el.querySelector("#cg-label").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); save_(); } });
 }
 
 // ---- editors ----

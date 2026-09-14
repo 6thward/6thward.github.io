@@ -128,6 +128,10 @@ service cloud.firestore {
       allow read: if canView('callings');
       allow write: if canEdit('callings');
     }
+    match /callingGroups/{id} {
+      allow read: if canView('callings');
+      allow write: if canEdit('callings');
+    }
 
     // ---- Confidential (bishop, or a PIN the bishop explicitly grants) ----
     match /confidential/{id} {
