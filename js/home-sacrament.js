@@ -6,12 +6,12 @@
 //   meetings/{date}.hbSkip[]      ids marked "at church" that Sunday
 //   meetings/{date}.hbOn          true once attendance is being tracked
 // The 🏠 button on each Sunday's card still assigns who takes it.
-import { db } from "./firebase-init.js?v=1789345426";
-import { ctx, can } from "./app.js?v=1789345426";
+import { db } from "./firebase-init.js?v=1789345456";
+import { ctx, can } from "./app.js?v=1789345456";
 import {
   doc, getDoc, setDoc, updateDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789345426";
+import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789345456";
 
 let people = [];
 let date = "";          // selected Sunday, YYYY-MM-DD
@@ -87,18 +87,10 @@ function render() {
 
   body.innerHTML = `
     ${specialType ? `<div class="conf-banner" style="margin-bottom:.8rem">This Sunday is marked <b>${esc(meeting.type)}</b> on the Sacrament tab — there may be no regular sacrament meeting.</div>` : ""}
-    <div class="card hs-summary">
-      <h3 style="margin:0 0 .2rem">Take the sacrament to <span class="pill ${need.length ? "pill-overdue" : "pill-done"}">${need.length}</span></h3>
-      <p class="row-sub" style="margin:0 0 .6rem">${atChurch.length} at church · ${people.length} on the list${editor ? " · tap a row to switch" : ""}</p>
-      ${need.length ? `<div class="hs-visit">${need.map((p) => `
-        <div class="hs-visit-row">
-          <div class="hs-visit-name">${esc(p.name)}</div>
-          <div class="hs-visit-addr">${p.address ? esc(p.address) : "<span class='row-sub'>no address</span>"}</div>
-        </div>`).join("")}</div>` : `<div class="empty-note" style="padding:.6rem">Everyone made it to church this Sunday.</div>`}
-    </div>
-
-    <div class="card" style="margin-top:.8rem">
-      <h3 style="margin:0 0 .5rem">Everyone on the list</h3>
+    <div class="card">
+      <h3 style="margin:0 0 .2rem;display:flex;align-items:center;gap:.5rem">Take the sacrament to <span class="pill ${need.length ? "pill-overdue" : "pill-done"}">${need.length}</span>
+        <span class="row-sub" style="font-weight:400;margin-left:auto">${atChurch.length} at church · ${people.length} on the list</span></h3>
+      <p class="row-sub" style="margin:0 0 .6rem">Red rows need a visit this Sunday.${editor ? " Tap At church when someone makes it." : ""}</p>
       <div class="hs-list">
         ${people.map((p) => {
           const here = skip.has(p.id);
@@ -106,7 +98,7 @@ function render() {
           <div class="hs-row${here ? " hs-here" : " hs-need"}" data-id="${p.id}">
             <div class="hs-who">
               <div class="hs-name">${esc(p.name)}</div>
-              <div class="hs-addr">${esc(p.address || "")}</div>
+              <div class="hs-addr">${p.address ? esc(p.address) : "<span class='row-sub'>no address</span>"}</div>
             </div>
             <div class="hs-status">
               ${editor

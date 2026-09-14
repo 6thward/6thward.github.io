@@ -919,3 +919,9 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .releases-board { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 1100px) { .releases-board { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 650px) { .releases-board { grid-template-columns: 1fr; } }
+
+/* Home Sacrament: single list — rows needing a visit are tinted (2026-09-13) */
+.hs-row.hs-need { background:#fbe7e3; margin:0 -.5rem; padding-left:.6rem; padding-right:.6rem; border-radius:8px; border-bottom:none; }
+.hs-row.hs-need + .hs-row { border-top:none; }
+.hs-row.hs-need .hs-name { font-size:1.02rem; }
+.hs-row.hs-here { opacity:.8; }
