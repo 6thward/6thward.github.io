@@ -2,13 +2,13 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789346518";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789346518";
+import { db } from "./firebase-init.js?v=1789346566";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789346566";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789346518";
-import { HYMNS } from "./hymns.js?v=1789346518";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789346566";
+import { HYMNS } from "./hymns.js?v=1789346566";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -650,7 +650,9 @@ function statusChips(m, date) {
     // missing: a pill of all-none goes grey, and the rest can still go green
     const real = lines.filter((l) => !l.none);
     const named = real.filter((l) => l.name);
-    const allDone = real.length > 0 && named.length === real.length && real.every((l) => l.confirmed);
+    // 2026-09-13 — the group colour tracks NAMES only (all named = green);
+    // a single "not confirmed yet" flag stays on its own line, not the group
+    const allDone = real.length > 0 && named.length === real.length;
     const cls = real.length === 0
       ? "st-off"
       : named.length === 0 ? (planned ? "st-miss" : "st-off") : allDone ? "st-ok" : "st-pending";
@@ -674,7 +676,7 @@ function statusChips(m, date) {
       const editAttr = l.inlineEdit && can ? ` data-ed='${JSON.stringify(l.inlineEdit)}' title="Click to type here"` : "";
       // 2026-09-13 — assignment lines are draggable between Sundays (and slots): drop on a like slot to swap
       const dragAttr = can && l.k && DRAG_KINDS.has(l.k) ? ` draggable="true" data-drag='${JSON.stringify({ k: l.k, o: l.o })}'` : "";
-      return `<span class="st-line${l.light ? " st-line-light" : ""}${dragAttr ? " st-drag" : ""}"${editAttr}${dragAttr}>${dot}<span class="st-li-tag">${esc(l.tag)}:</span> <span class="st-li-name${l.light ? " st-li-light" : ""}">${l.name ? esc(l.name) : "—"}</span>${orgTag}</span>`;
+      return `<span class="st-line${l.light ? " st-line-light" : ""}${dragAttr ? " st-drag" : ""}${l.name && !l.confirmed && !l.light ? " st-li-unconf" : ""}"${editAttr}${dragAttr}>${dot}<span class="st-li-tag">${esc(l.tag)}:</span> <span class="st-li-name${l.light ? " st-li-light" : ""}">${l.name ? esc(l.name) : "—"}</span>${orgTag}</span>`;
     }).join("");
     // no icon in the headline — the title stays cleanly centered; state
     // lives in the pill color and the per-line marks
