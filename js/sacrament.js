@@ -2,13 +2,13 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789345908";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789345908";
+import { db } from "./firebase-init.js?v=1789345982";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789345982";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789345908";
-import { HYMNS } from "./hymns.js?v=1789345908";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789345982";
+import { HYMNS } from "./hymns.js?v=1789345982";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -839,7 +839,9 @@ function renderCards(wrap) {
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:.75rem;flex-wrap:wrap">
         <div>
           <h3 style="margin:0"><span class="card-date">${fmtDay(date, { year: true })}</span>
-            ${m?.theme ? `<span class="theme-tag">“${esc(m.theme)}”</span>` : ""}
+            ${m?.theme
+              ? `<span class="theme-tag${canEdit ? " st-click" : ""}"${canEdit ? ` data-qe='{"t":"theme"}' title="Click to edit the theme"` : ""}>“${esc(m.theme)}”</span>`
+              : (canEdit && !isConf ? `<span class="theme-tag theme-add" data-qe='{"t":"theme"}' title="Add a theme for this Sunday">+ theme</span>` : "")}
             ${megaphone}${wbIcon}${hbIcon}${type !== "sacrament" ? `<span class="pill head-pill ${isConf ? "pill-conf" : type === "fast" ? "pill-fast" : "pill-approved"}">${esc(typeLabel(m, date))}</span>` : ""}${nth === 5 ? `<span class="nth-pill nth-5 head-pill">5th Sunday</span>` : ""}${babies.map((b) => `<span class="pill-baby-bold head-pill">Blessing${b.name ? ": " + esc(b.name) : ""}</span>`).join("")}
           </h3>
           <div class="row-sub" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">${condChip}${isConf ? "<span>no sacrament meeting</span>" : ""}</div>
@@ -1029,7 +1031,16 @@ function quickEdit(date, q) {
       ${byLine ? `<span class="row-sub confirm-by">${esc(byLine)}</span>` : ""}
     </label>`;
 
-  if (q.t === "c") {
+  if (q.t === "theme") {
+    // 2026-09-13 — theme edits straight from the card (no full editor)
+    html = `<h3>Theme ${dateLabel}</h3>
+      <label class="field">Theme <input id="qe-theme" value="${esc(cur?.theme || "")}" placeholder="e.g. Missionary, Temple, Gratitude" autocomplete="off"></label>
+      <p class="row-sub" style="margin:.4rem 0 0">Shows beside the date on the card and the readout. Leave blank to clear it.</p>`;
+    onSave = (el) => {
+      const val = el.querySelector("#qe-theme").value.trim();
+      return (m) => { m.theme = val; };
+    };
+  } else if (q.t === "c") {
     // conducting needs no confirmation step — assigned is assigned
     html = `<h3>Conducting ${dateLabel}</h3>
       <label class="field">Conducting ${personSelect("qe-cond", cur?.conducting || "")}</label>`;
