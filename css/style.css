@@ -1009,3 +1009,8 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 
 /* readout: musical piece under the performer (2026-09-13) */
 .agenda-view .ag-piece { font-style: italic; color: var(--ink-soft); font-size: .92em; margin-top: .05rem; }
+
+/* readout: each program row (speaker / musical / choir) sits in a very subtle pill (2026-09-13) */
+.agenda-view .ag-prog { background: rgba(31,39,51,.035); border: 1px solid rgba(31,39,51,.07); border-radius: 9px; padding: .22rem .55rem; margin: .14rem 0; align-items: baseline; }
+.agenda-view .ag-prog:hover { background: rgba(31,78,121,.06); border-color: rgba(31,78,121,.18); }
+.agenda-view .ag-prog .ag-grip { align-self: center; }
