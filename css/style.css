@@ -354,6 +354,11 @@ label.field input:focus, label.field select:focus, label.field textarea:focus {
 @media (max-width: 900px) {
   .st-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+/* phones: one section per row, stacked (2026-09-13) */
+@media (max-width: 650px) {
+  .st-row { grid-template-columns: 1fr; gap: .45rem; }
+  .st-row > * { min-height: 0; }
+}
 .st-ok { background: #e3f2e8; color: var(--ok); }
 .st-pending { background: var(--pending-soft); color: var(--pending); }
 .st-miss { background: #fbe7e3; color: var(--danger); }
