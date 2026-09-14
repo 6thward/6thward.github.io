@@ -2,13 +2,13 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789346605";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789346605";
+import { db } from "./firebase-init.js?v=1789346747";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789346747";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789346605";
-import { HYMNS } from "./hymns.js?v=1789346605";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789346747";
+import { HYMNS } from "./hymns.js?v=1789346747";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -630,7 +630,7 @@ function statusChips(m, date) {
     const subLine = hasName && sub ? `<span class="st-sub">${esc(sub)}</span>` : "";
     // icon rides with the name (not the headline) so the title centers cleanly
     const dragAttr = can && confirmTarget && (confirmTarget.k === "musical" || confirmTarget.k === "choir") ? ` draggable="true" data-drag='${JSON.stringify({ k: confirmTarget.k, o: 0 })}'` : "";
-    return `<span class="st ${cls}${clickable ? " st-click" : ""}${dragAttr ? " st-drag" : ""}"${clickable ? ` data-qe='${JSON.stringify(qe)}'` : ""}${title ? ` title="${esc(title)}"` : ""}${dragAttr}><span class="st-head">${label}</span>${hasName ? `<span class="st-name">${iconHtml} ${esc(name)}</span>` : ""}${subLine}${orgBadge}</span>`;
+    return `<span class="st ${cls}${clickable ? " st-click" : ""}${dragAttr ? " st-drag" : ""}"${clickable ? ` data-qe='${JSON.stringify(qe)}'` : ""}${title ? ` title="${esc(title)}"` : ""}${dragAttr}><span class="st-head">${label}</span>${hasName ? `<span class="st-name">${esc(name)} ${iconHtml}</span>` : ""}${subLine}${orgBadge}</span>`;
   };
 
   // Hymns pill counts only actual hymn slots; the musical/choir slot gets its own pill
@@ -676,7 +676,9 @@ function statusChips(m, date) {
       const editAttr = l.inlineEdit && can ? ` data-ed='${JSON.stringify(l.inlineEdit)}' title="Click to type here"` : "";
       // 2026-09-13 — assignment lines are draggable between Sundays (and slots): drop on a like slot to swap
       const dragAttr = can && l.k && DRAG_KINDS.has(l.k) ? ` draggable="true" data-drag='${JSON.stringify({ k: l.k, o: l.o })}'` : "";
-      return `<span class="st-line${l.light ? " st-line-light" : ""}${dragAttr ? " st-drag" : ""}${l.name && !l.confirmed && !l.light ? " st-li-unconf" : ""}"${editAttr}${dragAttr}>${dot}<span class="st-li-tag">${esc(l.tag)}:</span> <span class="st-li-name${l.light ? " st-li-light" : ""}">${l.name ? esc(l.name) : "—"}</span>${orgTag}</span>`;
+      // speakers get a small "topic" button on the right: shows the topic on hover, click to add / change it
+      const topicBtn = l.topicable ? `<span class="st-topic${l.topic ? " has" : ""}" data-topic='${JSON.stringify({ k: l.k, o: l.o })}' title="${l.topic ? esc(l.topic) + (can ? " — click to change" : "") : (can ? "Add a topic" : "No topic yet")}">${l.topic ? "topic ✓" : "topic"}</span>` : "";
+      return `<span class="st-line${l.light ? " st-line-light" : ""}${dragAttr ? " st-drag" : ""}${l.name && !l.confirmed && !l.light ? " st-li-unconf" : ""}"${editAttr}${dragAttr}><span class="st-li-tag">${esc(l.tag)}:</span> <span class="st-li-name${l.light ? " st-li-light" : ""}">${l.name ? esc(l.name) : "—"}</span>${orgTag}${topicBtn}${l.light ? "" : dot}</span>`;
     }).join("");
     // no icon in the headline — the title stays cleanly centered; state
     // lives in the pill color and the per-line marks
@@ -687,6 +689,7 @@ function statusChips(m, date) {
 
   const spkLines = (kind, tagFn) => of(kind).map((it, i) => ({
     tag: tagFn(it, i), name: it.name, confirmed: isConf(it), confirmedBy: it.confirmedBy, k: kind, o: i,
+    topic: it.topic || "", topicable: !!it.name, // 2026-09-13 — topic button once there's a speaker
     none: !!it.none,
     inlineEdit: { t: "name", k: kind, o: i },
   }));
@@ -902,6 +905,14 @@ function renderCards(wrap) {
       e.stopPropagation();
       quickEdit(el.closest("[data-date]").dataset.date, JSON.parse(el.dataset.qe));
     }));
+  // speaker "topic" button (2026-09-13): read-only users get the tooltip; editors get a tiny editor
+  wrap.querySelectorAll("[data-topic]").forEach((el) =>
+    el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!canEdit) { toast(el.getAttribute("title") || "No topic yet"); return; }
+      const { k, o } = JSON.parse(el.dataset.topic);
+      quickEdit(el.closest("[data-date]").dataset.date, { t: "topic", k, o });
+    }));
   // the ✓ / ! mark toggles "not confirmed yet" — confirmed is the default
   wrap.querySelectorAll("[data-confirm]").forEach((el) =>
     el.addEventListener("click", async (e) => {
@@ -1058,7 +1069,16 @@ function quickEdit(date, q) {
       ${byLine ? `<span class="row-sub confirm-by">${esc(byLine)}</span>` : ""}
     </label>`;
 
-  if (q.t === "theme") {
+  if (q.t === "topic") {
+    const it = nthItem(items, q.k, q.o) || {};
+    html = `<h3>Topic ${dateLabel}</h3>
+      <p class="row-sub" style="margin:0 0 .6rem"><b>${esc(it.name || "Speaker")}</b> · ${esc(KINDS[q.k]?.label || "Speaker")}</p>
+      <label class="field">Topic <input id="qe-topic-only" value="${esc(it.topic || "")}" placeholder="e.g. Faith in Jesus Christ" autocomplete="off"></label>`;
+    onSave = (el) => {
+      const topic = el.querySelector("#qe-topic-only").value.trim();
+      return (m) => { const t = ensureQE(m, q); t.topic = topic; };
+    };
+  } else if (q.t === "theme") {
     // 2026-09-13 — theme edits straight from the card (no full editor)
     html = `<h3>Theme ${dateLabel}</h3>
       <label class="field">Theme <input id="qe-theme" value="${esc(cur?.theme || "")}" placeholder="e.g. Missionary, Temple, Gratitude" autocomplete="off"></label>

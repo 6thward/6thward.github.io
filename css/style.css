@@ -967,8 +967,8 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 
 /* hymn lines share the pill look (no grip — they don't drag) (2026-09-13) */
 .st-line.st-line-light { display:flex; align-items:center; gap:.3rem; background:rgba(255,255,255,.62); border:1px solid rgba(31,39,51,.12); border-radius:99px; padding:.14rem .6rem .14rem .55rem; margin:.1rem 0; box-shadow:0 1px 1px rgba(20,30,45,.05); }
-.st-line.st-line-light .st-li-tag { flex:0 0 4.6rem; }
-.st-line.st-line-light .st-li-name { white-space:normal; overflow:visible; text-overflow:clip; overflow-wrap:anywhere; min-width:0; flex:1 1 3.5rem; line-height:1.25; }
+.st-line.st-line-light .st-li-tag { flex:0 0 auto; } /* 2026-09-13 — hymn sits right after its label, no fixed indent */
+.st-line.st-line-light .st-li-name { white-space:normal; overflow:visible; text-overflow:clip; overflow-wrap:anywhere; min-width:0; flex:1 1 3.5rem; line-height:1.25; font-size:.84rem; font-weight:600; letter-spacing:0; }
 .st-line.st-line-light[data-ed]:hover, .st-line.st-line-light[data-hymned]:hover { border-color:rgba(31,78,121,.45); box-shadow:0 2px 6px rgba(20,30,45,.12); }
 
 /* chips: content starts at the top, not centred (2026-09-13) */
@@ -983,3 +983,13 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 /* one unconfirmed line goes amber by itself; the group keeps its colour (2026-09-13) */
 .st-line.st-li-unconf { border-color: #e6c98a !important; background: var(--pending-soft) !important; }
 .st-line.st-li-unconf .st-li-name { color: var(--pending) !important; }
+
+/* pills: tick on the right, topic button (2026-09-13) */
+.st-line.st-drag .st-li-ic { margin-left: auto; order: 9; flex: 0 0 auto; }
+.st-line.st-drag .st-li-org { margin-left: auto; order: 5; }
+.st-line.st-drag .st-li-org + .st-topic, .st-line.st-drag .st-li-org ~ .st-li-ic { margin-left: .35rem; }
+.st-topic { margin-left: auto; order: 6; flex: 0 0 auto; font-size: .62rem; font-weight: 700; letter-spacing: .03em; color: var(--ink-soft); border: 1px solid rgba(31,39,51,.18); border-radius: 99px; padding: .02rem .45rem; cursor: pointer; background: rgba(255,255,255,.7); }
+.st-topic:hover { color: var(--brand); border-color: var(--brand); }
+.st-topic.has { color: var(--brand); border-color: rgba(31,78,121,.4); background: var(--brand-soft); }
+.st-topic + .st-li-ic { margin-left: .35rem; }
+.st.st-drag .st-name .st-icon { margin-left: .2rem; }
