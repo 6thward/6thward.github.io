@@ -1066,3 +1066,12 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .wc-cnotes-empty { color: #b7bfcb; font-style: italic; border-left-color: #d3d9e1; }
 .wc-cnotes-ta { width: 100%; box-sizing: border-box; margin-top: .35rem; font: inherit; font-size: .9rem; line-height: 1.4; padding: .45rem .55rem; border: 1.5px solid var(--brand); border-radius: 8px; resize: none; }
 .wc-cnotes-ta:focus { outline: none; box-shadow: 0 0 0 3px var(--brand-soft); }
+
+/* Member Board: next-ordinance pill beside the name (2026-09-13) */
+.board-head { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.board-head .row-title { font-size: 1.05rem; }
+.ord-pill { font-size: .74rem; font-weight: 600; color: var(--violet); background: var(--violet-soft); border: 1px solid transparent; border-radius: 99px; padding: .12rem .6rem; white-space: nowrap; }
+.ord-pill.ord-edit { cursor: pointer; }
+.ord-pill.ord-edit:hover { border-color: var(--violet); }
+.ord-pill.ord-empty { background: transparent; color: #b7bfcb; border: 1px dashed rgba(31,39,51,.25); font-weight: 500; }
+.ord-sel { font: inherit; font-size: .78rem; padding: .1rem .4rem; border: 1px solid var(--violet); border-radius: 99px; background: #fff; color: var(--violet); }

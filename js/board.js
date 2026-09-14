@@ -3,13 +3,15 @@
 // added, renamed, reordered and removed. Data:
 //   boardColumns/{id}  { label, order }
 //   board/{id}         { name, notes, column, order, createdAt, updatedAt }
-import { db } from "./firebase-init.js?v=1789348595";
-import { ctx, can } from "./app.js?v=1789348595";
+import { db } from "./firebase-init.js?v=1789348771";
+import { ctx, can } from "./app.js?v=1789348771";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789348595";
+import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789348771";
 
+// Next ordinance a person is working toward — shown as a pill beside the name.
+const ORDINANCES = ["Sacrament", "Aaronic Priesthood", "Melchizedek Priesthood", "Endowment", "Sealing"];
 const PALETTE = ["#1f4e79", "#5b4b9e", "#2e7d4f", "#a8720d", "#b3402f", "#0e7490", "#7a5a14", "#5b6675"];
 const DEFAULT_COLUMNS = ["Ideas", "Talking to", "Settled"];
 
@@ -79,7 +81,7 @@ function render() {
     const open = activeTodos(k);
     return `
     <div class="list-row call-card call-card-v board-card" data-id="${k.id}" style="background:#fff;border:1px solid var(--line);border-left:5px solid ${colColor(cols.findIndex((c) => c.id === k.column))}">
-      <div class="row-title">${esc(k.name || "—")}</div>
+      <div class="board-head"><div class="row-title">${esc(k.name || "—")}</div>${k.nextOrdinance || editor ? `<span class="ord-pill${k.nextOrdinance ? "" : " ord-empty"}${editor ? " ord-edit" : ""}" data-ord="1" title="${editor ? "Click to change" : ""}">${k.nextOrdinance ? "Next: " + esc(k.nextOrdinance) : "+ next ordinance"}</span>` : ""}</div>
       ${k.notes || editor ? `<div class="row-sub board-note${k.notes ? "" : " board-note-empty"}${editor ? " board-note-edit" : ""}" data-notes="1" title="${editor ? "Click to edit" : ""}">${k.notes ? esc(k.notes) : "+ notes"}</div>` : ""}
       <div class="todo-pills">${open.map((t) => todoPill(k, t)).join("")}${editor ? `<span class="todo-pill todo-add-pill" data-addtodo="1" title="Add a to-do — type and press Enter">+</span>` : ""}</div>
       <div class="mtg-row">${meetingsPill(k, editor)}</div>
@@ -114,6 +116,8 @@ function render() {
       if (mp) { e.stopPropagation(); openMeetings(k); return; }
       const note = e.target.closest(".board-note");
       if (note && editor) { e.stopPropagation(); inlineNotes(row, k, note); return; }
+      const ord = e.target.closest(".ord-pill");
+      if (ord && editor) { e.stopPropagation(); inlineOrdinance(row, k, ord); return; }
       editCard(k);
     });
   });
@@ -247,6 +251,32 @@ function wireTodoList(el, k) {
   };
   inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); add(); } });
   inp.addEventListener("blur", () => { if (inp.value.trim()) add(); });
+}
+
+// Next-ordinance pill → a dropdown in its place; change saves, blur restores.
+function inlineOrdinance(row, k, pillEl) {
+  if (row.querySelector("select.ord-sel")) return;
+  const sel = document.createElement("select");
+  sel.className = "ord-sel";
+  sel.innerHTML = `<option value="">— none —</option>` + ORDINANCES.map((o) => `<option value="${esc(o)}"${k.nextOrdinance === o ? " selected" : ""}>${esc(o)}</option>`).join("");
+  pillEl.replaceWith(sel);
+  sel.focus();
+  row.draggable = false;
+  let done = false;
+  const finish = async (save) => {
+    if (done) return; done = true;
+    row.draggable = true;
+    if (save && sel.value !== (k.nextOrdinance || "")) {
+      try { await updateDoc(doc(db, "board", k.id), { nextOrdinance: sel.value, updatedAt: serverTimestamp() }); k.nextOrdinance = sel.value; toast("Saved"); }
+      catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
+    }
+    render();
+  };
+  sel.addEventListener("click", (e) => e.stopPropagation());
+  sel.addEventListener("mousedown", (e) => e.stopPropagation());
+  sel.addEventListener("change", () => finish(true));
+  sel.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.preventDefault(); finish(false); } });
+  sel.addEventListener("blur", () => setTimeout(() => finish(false), 120));
 }
 
 // Click the notes on a card → edit them right there. Blur or ⌘/Ctrl+Enter
@@ -467,6 +497,7 @@ function editCard(k, presetCol) {
       <label class="field"><span>Section</span>
         <select id="bc-col" ${editor ? "" : "disabled"}>${cols.map((c) => `<option value="${c.id}" ${c.id === colId ? "selected" : ""}>${esc(c.label)}</option>`).join("")}</select>
       </label>
+      <label class="field"><span>Next ordinance</span><select id="bc-ord" ${editor ? "" : "disabled"}><option value="">— none —</option>${ORDINANCES.map((o) => `<option value="${esc(o)}"${(k?.nextOrdinance || "") === o ? " selected" : ""}>${esc(o)}</option>`).join("")}</select></label>
       <label class="field full"><span>Notes</span><textarea id="bc-notes" ${editor ? "" : "disabled"} placeholder="Anything worth remembering — optional">${esc(k?.notes || "")}</textarea></label>
     </div>
     ${!isNew ? `<h4 style="margin:1rem 0 .3rem">To-dos <span class="row-sub" style="font-weight:400">· top = highest priority · ✓ archives</span></h4><div id="bc-todos">${todoListHtml(k)}</div>
@@ -491,14 +522,15 @@ function editCard(k, presetCol) {
     const name = el.querySelector("#bc-name").value.trim();
     const column = el.querySelector("#bc-col").value;
     const notes = el.querySelector("#bc-notes").value.trim();
+    const nextOrdinance = el.querySelector("#bc-ord").value;
     if (!name) { toast("Enter a name"); return; }
     try {
       if (isNew) {
         const order = cards.filter((x) => x.column === column).length;
-        await addDoc(collection(db, "board"), { name, notes, column, order, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), createdBy: ctx.name || "" });
+        await addDoc(collection(db, "board"), { name, notes, nextOrdinance, column, order, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), createdBy: ctx.name || "" });
         toast(`${name} added`);
       } else {
-        const patch = { name, notes, updatedAt: serverTimestamp() };
+        const patch = { name, notes, nextOrdinance, updatedAt: serverTimestamp() };
         if (column !== k.column) { patch.column = column; patch.order = cards.filter((x) => x.column === column).length; }
         await updateDoc(doc(db, "board", k.id), patch);
         toast("Saved");

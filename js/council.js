@@ -2,12 +2,12 @@
 // Member Board card's to-do marked "Ward council" shows here, grouped by
 // person, until it's ticked as discussed (it stays a to-do on the card) or
 // completed. Reads/writes the same `board` documents.
-import { db } from "./firebase-init.js?v=1789348595";
-import { ctx, can } from "./app.js?v=1789348595";
+import { db } from "./firebase-init.js?v=1789348771";
+import { ctx, can } from "./app.js?v=1789348771";
 import {
   collection, onSnapshot, updateDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, fmtDate } from "./ui.js?v=1789348595";
+import { toast, esc, fmtDate } from "./ui.js?v=1789348771";
 
 let cards = [];
 let started = false;
