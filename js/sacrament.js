@@ -2,13 +2,13 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789363795";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789363795";
+import { db } from "./firebase-init.js?v=1789366464";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789366464";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789363795";
-import { HYMNS } from "./hymns.js?v=1789363795";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789366464";
+import { HYMNS } from "./hymns.js?v=1789366464";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -974,8 +974,8 @@ function renderCards(wrap) {
         </div>
         <div style="display:flex;gap:.4rem">
           ${planned || isConf ? `<button class="btn btn-sm" data-view="${date}">View</button>` : ""}
-          ${canEdit && !isConf ? `<button class="btn btn-sm" data-addbaby="${date}">+ Baby</button>` : ""}
           ${canEdit ? `<button class="btn btn-sm" data-edit="${date}">${planned ? "Edit" : "Plan"}</button>` : ""}
+          ${canEdit && !isConf ? `<button class="btn btn-sm btn-ghost st-baby-btn" data-addbaby="${date}" title="Add a baby blessing">+ baby</button>` : ""}
         </div>
       </div>
       ${statusChips(m, date)}

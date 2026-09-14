@@ -1180,3 +1180,7 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 /* Member Board: bigger section headers (2026-09-13) */
 .card h3.board-col-head, .board-col-head { font-size: 1.4rem; font-weight: 700; letter-spacing: -.01em; margin: 0 0 .55rem; }
 .board-col-head .pill { font-size: .8rem; padding: .18rem .6rem; }
+
+/* "+ baby" is rare — a quiet text link after Edit, not a button (2026-09-14) */
+.st-baby-btn { opacity: .55; font-weight: 500; font-size: .8rem; padding: .3rem .35rem; }
+.st-baby-btn:hover { opacity: 1; background: transparent; text-decoration: underline; }
