@@ -1132,3 +1132,6 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 /* year dropdown styled as a pill (2026-09-13) */
 .chip-select { appearance: none; -webkit-appearance: none; font: inherit; font-size: .9rem; font-weight: 700; color: #fff; background: var(--brand) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='white' stroke-width='1.6'/%3E%3C/svg%3E") no-repeat right .7rem center; border: none; border-radius: 99px; padding: .45rem 1.9rem .45rem .95rem; cursor: pointer; }
 .chip-select:focus { outline: none; box-shadow: 0 0 0 3px var(--brand-soft); }
+
+/* chip section headers bolder + larger (2026-09-13) */
+.st .st-head { font-size: .95rem; font-weight: 800; letter-spacing: .01em; padding: .3rem .4rem; }
