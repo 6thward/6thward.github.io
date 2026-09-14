@@ -1149,6 +1149,6 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 
 /* Callings board: calling name as a coloured title band (2026-09-13) */
 .call-card { --col: var(--brand); }
-.call-card .call-card-title { display: block; margin: -.55rem -.75rem .45rem -.75rem; padding: .45rem .75rem; font-size: 1rem; font-weight: 800; letter-spacing: -.01em; color: #fff !important; background: var(--col); border-radius: 0 10px 0 0; }
+.call-card .call-card-title { display: block; margin: -.55rem -.75rem .45rem -.75rem; padding: .45rem .75rem; font-size: 1rem; font-weight: 600; letter-spacing: -.01em; color: #fff !important; background: var(--col); border-radius: 0 10px 0 0; }
 .call-card .call-card-title .call-card-org { color: rgba(255,255,255,.8); font-weight: 600; }
 .call-card .cand-line { font-size: 1rem; }
