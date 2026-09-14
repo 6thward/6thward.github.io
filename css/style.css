@@ -778,9 +778,12 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .perm-grid td.perm-cell input { width:1.1rem; height:1.1rem; cursor:pointer; }
 
 /* inline add-a-name box on Calling-to-Fill cards (2026-09-13) */
-.cand-add { display:block; width:100%; margin-top:.35rem; padding:.3rem .5rem; font: inherit; font-size:.85rem; color:var(--ink); background:rgba(255,255,255,.75); border:1px dashed rgba(31,39,51,.25); border-radius:7px; }
-.cand-add::placeholder { color:var(--ink-soft); }
-.cand-add:focus { outline:none; background:#fff; border-style:solid; border-color:var(--brand); box-shadow:0 0 0 3px var(--brand-soft); }
+/* 2026-09-13 — names carry the card; the add box is a quiet one-liner until focused */
+.cand-line { font-size: 1.02rem; font-weight: 600; color: var(--ink); padding: .1rem 0; }
+.cand-add { display:block; width:100%; margin-top:.3rem; padding:.15rem .1rem; font: inherit; font-size:.78rem; color:var(--ink-soft); background:transparent; border:none; border-bottom:1px dashed rgba(31,39,51,.18); border-radius:0; }
+.cand-add::placeholder { color:#a2aab5; }
+.cand-add:focus { background:#fff; border:1px solid var(--brand); border-radius:7px; padding:.3rem .5rem; font-size:.9rem; color:var(--ink); }
+.cand-add:focus { outline:none; box-shadow:0 0 0 3px var(--brand-soft); }
 
 /* drop marker while re-ordering cards inside a column (2026-09-13) */
 .bb-drop .list-row.bb-before { box-shadow: 0 -3px 0 0 var(--brand) !important; }
