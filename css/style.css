@@ -1176,3 +1176,7 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .st-subhead.st-music.st-sh-editing { gap:.2rem; }
 .st-subhead.st-music.st-sh-editing .st-music-row { background:rgba(255,255,255,.82); border:1px solid rgba(31,39,51,.1); border-radius:99px; padding:.1rem .55rem; font-size:.8rem; font-weight:600; }
 .st-subhead.st-music.st-sh-editing .st-music-row input { font-size:.8rem; border-radius:99px; }
+
+/* Member Board: bigger section headers (2026-09-13) */
+.card h3.board-col-head, .board-col-head { font-size: 1.4rem; font-weight: 700; letter-spacing: -.01em; margin: 0 0 .55rem; }
+.board-col-head .pill { font-size: .8rem; padding: .18rem .6rem; }
