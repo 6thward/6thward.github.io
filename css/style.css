@@ -902,3 +902,7 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .done-row { display:flex; align-items:center; gap:.6rem; }
 .done-row .row-main { flex:1; min-width:0; }
 .done-row .done-back { font: inherit; font-size:.8rem; padding:.25rem .4rem; border:1px solid var(--line); border-radius:7px; color:var(--ink-soft); background:#fff; max-width:11rem; }
+
+/* inline star on considered names (2026-09-13) */
+.cand-star-i { cursor:pointer; color:#c9a227; opacity:.55; font-size:1.05rem; margin-right:.3rem; line-height:1; }
+.cand-star-i:hover { opacity:1; transform:scale(1.15); }
