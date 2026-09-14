@@ -2,13 +2,13 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789330141";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789330141";
+import { db } from "./firebase-init.js?v=1789344449";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789344449";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789330141";
-import { HYMNS } from "./hymns.js?v=1789330141";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789344449";
+import { HYMNS } from "./hymns.js?v=1789344449";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -1701,6 +1701,37 @@ function viewMeeting(date) {
     });
     inp.addEventListener("blur", () => setTimeout(() => { if (!done) commit(); }, 100));
   };
+  // drag a speaker / musical number up or down to reorder the program
+  let dragIdx = null;
+  const clearMarks = () => el.querySelectorAll(".ag-before").forEach((r) => r.classList.remove("ag-before"));
+  el.addEventListener("dragstart", (e) => {
+    const r = e.target.closest("[data-pidx]"); if (!r) return;
+    dragIdx = Number(r.dataset.pidx);
+    e.dataTransfer.effectAllowed = "move";
+    try { e.dataTransfer.setData("text/plain", ""); } catch {}
+    r.classList.add("ag-dragging");
+  });
+  el.addEventListener("dragend", () => { dragIdx = null; clearMarks(); el.querySelectorAll(".ag-dragging").forEach((r) => r.classList.remove("ag-dragging")); });
+  el.addEventListener("dragover", (e) => {
+    const r = e.target.closest("[data-pidx]"); if (!r || dragIdx == null) return;
+    e.preventDefault();
+    clearMarks();
+    if (Number(r.dataset.pidx) !== dragIdx) r.classList.add("ag-before");
+  });
+  el.addEventListener("drop", async (e) => {
+    const r = e.target.closest("[data-pidx]"); if (!r || dragIdx == null) return;
+    e.preventDefault();
+    const from = dragIdx, to = Number(r.dataset.pidx);
+    dragIdx = null; clearMarks();
+    if (from === to) return;
+    await patchMeeting(date, (mm) => {
+      const items = mm.items || [];
+      const [moved] = items.splice(from, 1);
+      items.splice(to > from ? to - 1 : to, 0, moved);
+      mm.items = items;
+    });
+    refresh();
+  });
   el.addEventListener("click", (e) => {
     const t = e.target.closest("[data-tedit]");
     if (t && !t.querySelector("input")) {
@@ -1722,15 +1753,15 @@ function renderAgendaView(m, canEdit = false) {
   const fmtClock = (t) => `${((Math.floor(t / 60) + 11) % 12) + 1}:${String(t % 60).padStart(2, "0")}`;
   let totalMin = 0;
   // clock chip + minutes; minutes are click-to-edit for bishopric (idx = items index)
-  const timeCell = (time, idx) => {
-    if (!time && time !== 0) return "";
-    const startsAt = fmtClock(curClock);
-    const mins = Number(time) || 0;
-    curClock += mins; totalMin += mins;
-    return `<span class="ag-clock">${startsAt}</span><span class="ag-time${canEdit && idx != null ? " ag-tclick" : ""}"${canEdit && idx != null ? ` data-tedit="${idx}" title="Click to change the minutes"` : ""}>${time} min</span>`;
-  };
-  const row = (label, val, time, idx, cls) =>
-    `<div class="ag-row${cls ? " " + cls : ""}"><span class="ag-label">${esc(label)}:</span><span class="ag-val">${val}</span>${time ? timeCell(time, idx) : ""}</div>`;
+  // 2026-09-13 — the readout no longer shows the running clock or minutes
+  // (Jordan): those live in the planner. timeCell stays a no-op so the row
+  // plumbing below is unchanged.
+  const timeCell = () => "";
+  // program rows (speakers, musical numbers, choir) are drag-to-reorder for
+  // editors — the grip + data-pidx are what viewMeeting's drag wiring uses
+  const PROGRAM_KINDS = [...SPEAKER_KINDS, "musical", "choir"];
+  const row = (label, val, time, idx, cls, dragIdx) =>
+    `<div class="ag-row${cls ? " " + cls : ""}${dragIdx != null ? " ag-prog" : ""}"${dragIdx != null ? ` draggable="true" data-pidx="${dragIdx}" title="Drag to reorder"` : ""}>${dragIdx != null ? `<span class="ag-grip" aria-hidden="true">⋮⋮</span>` : ""}<span class="ag-label">${esc(label)}:</span><span class="ag-val">${val}</span>${time ? timeCell(time, idx) : ""}</div>`;
   const head = [
     m.presiding ? row("Presiding", esc(m.presiding)) : "",
     m.conducting ? row("Conducting", esc(m.conducting)) : "",
@@ -1786,10 +1817,10 @@ function renderAgendaView(m, canEdit = false) {
     const breakBefore = it.kind === "closingHymn" || it.kind === "openingHymn" ? `<div class="ag-head-break"></div>` : "";
     const breakAfter = it.kind === "invocation" ? `<div class="ag-head-break"></div>` : "";
     // sacrament hymn joins the blue administration band as one grouped block
-    return breakBefore + row(label, val, it.time || "", itemIdx, it.kind === "sacramentHymn" ? "ag-sac-hymn" : "") + extraBelow + breakAfter;
+    const dragIdx = canEdit && PROGRAM_KINDS.includes(it.kind) ? itemIdx : null;
+    return breakBefore + row(label, val, it.time || "", itemIdx, it.kind === "sacramentHymn" ? "ag-sac-hymn" : "", dragIdx) + extraBelow + breakAfter;
   }).join("");
-  const totalRow = `<div class="ag-row ag-total"><span class="ag-val"></span><span class="ag-clock">ends ~${fmtClock(curClock)}</span><span class="ag-time">${totalMin} min</span></div>`;
-  return `<div class="agenda-view" style="margin-top:.6rem">${head}${items}${totalRow}${m.notes ? row("Notes", esc(m.notes)) : ""}</div>`;
+  return `<div class="agenda-view" style="margin-top:.6rem">${head}${items}${m.notes ? row("Notes", esc(m.notes)) : ""}</div>`;
 }
 
 // ===== Table (spreadsheet) view =====

@@ -848,3 +848,36 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .todo-archive { margin-top:.6rem; }
 .todo-archive summary { cursor:pointer; color:var(--ink-soft); font-size:.85rem; }
 .todo-archived .todo-title { font-weight:400; color:var(--ink-soft); text-decoration:line-through; }
+
+/* Home Sacrament tab (2026-09-13) */
+.hs-nav { display:flex; align-items:center; gap:.5rem; margin:0 0 .9rem; flex-wrap:wrap; }
+.hs-date { font-weight:700; font-size:1.05rem; min-width:12rem; }
+.hs-visit { display:grid; gap:.35rem; }
+.hs-visit-row { display:flex; gap:1rem; align-items:baseline; padding:.45rem .6rem; background:#fbe7e3; border-radius:8px; }
+.hs-visit-name { font-weight:700; min-width:11rem; }
+.hs-visit-addr { color:var(--ink); }
+.hs-list { display:flex; flex-direction:column; }
+.hs-row { display:flex; align-items:center; justify-content:space-between; gap:.8rem; padding:.55rem 0; border-bottom:1px solid var(--line); }
+.hs-row:last-child { border-bottom:none; }
+.hs-name { font-weight:600; }
+.hs-addr { color:var(--ink-soft); font-size:.88rem; }
+.hs-status { display:flex; align-items:center; gap:.3rem; flex-shrink:0; }
+.hs-tog { border:1px solid var(--line); background:#fff; color:var(--ink-soft); font:inherit; font-size:.8rem; font-weight:600; padding:.3rem .6rem; cursor:pointer; }
+.hs-tog:first-child { border-radius:8px 0 0 8px; }
+.hs-tog:nth-child(2) { border-radius:0 8px 8px 0; margin-left:-1px; }
+.hs-tog.on[data-set="here"] { background:#e3f2e8; color:var(--ok); border-color:#b9dcc6; }
+.hs-tog.on[data-set="need"] { background:#fbe7e3; color:var(--danger); border-color:#efc2ba; }
+.hs-row.hs-here .hs-name { color:var(--ink-soft); }
+@media (max-width: 650px) {
+  .hs-row { flex-wrap:wrap; }
+  .hs-status { width:100%; justify-content:flex-start; }
+  .hs-visit-row { flex-direction:column; gap:.1rem; }
+}
+
+/* agenda readout: drag-to-reorder program rows (2026-09-13) */
+.agenda-view .ag-prog { cursor: grab; user-select: none; -webkit-user-select: none; border-radius: 6px; }
+.agenda-view .ag-prog:hover { background: #f4f6f9; }
+.agenda-view .ag-grip { color: #b7c0cb; font-size: .8rem; letter-spacing: -.15em; margin-right: .3rem; flex: none; }
+.agenda-view .ag-prog.ag-before { box-shadow: 0 -2px 0 0 var(--brand); }
+.agenda-view .ag-prog.ag-dragging { opacity: .45; }
+@media (max-width: 650px) { .agenda-view .ag-grip { order: -1; } }
