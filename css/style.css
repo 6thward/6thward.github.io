@@ -950,6 +950,6 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .hs-here-btn.on { background:#e3f2e8; color:var(--ok); border-color:#b9dcc6; }
 
 /* pill names always wrap, never clip (2026-09-13) */
-.st-group .st-line.st-drag .st-li-name, .st-line.st-drag .st-li-name { white-space:normal !important; overflow:visible !important; text-overflow:clip !important; overflow-wrap:anywhere; min-width:0; flex:1 1 8rem; line-height:1.25; }
+.st-group .st-line.st-drag .st-li-name, .st-line.st-drag .st-li-name { white-space:normal !important; overflow:visible !important; text-overflow:clip !important; overflow-wrap:anywhere; min-width:0; flex:1 1 3.5rem; line-height:1.25; }
 .st-line.st-drag { align-items:center; }
 .st-line.st-drag .st-li-org { margin-left:auto; flex:none; }
