@@ -921,8 +921,12 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 @media (max-width: 650px) { .releases-board { grid-template-columns: 1fr; } }
 
 /* Home Sacrament: single list — rows needing a visit are tinted (2026-09-13) */
-.hs-row.hs-need { background:#fbe7e3; margin:0 -.5rem; padding-left:.6rem; padding-right:.6rem; border-radius:8px; border-bottom:none; }
-.hs-row.hs-need + .hs-row { border-top:none; }
+/* each person is its own card with a gap between (2026-09-13) */
+.hs-list { gap:.45rem; }
+.hs-row { border:1px solid var(--line); border-radius:10px; padding:.6rem .8rem; background:#fff; }
+.hs-row:last-child { border-bottom:1px solid var(--line); }
+.hs-row.hs-need { background:#fbe7e3; border-color:#f0c9c2; border-left:4px solid var(--danger); }
+.hs-row.hs-here { background:#f4f8f5; border-left:4px solid #b9dcc6; }
 .hs-row.hs-need .hs-name { font-size:1.02rem; }
 .hs-row.hs-here { opacity:.8; }
 
