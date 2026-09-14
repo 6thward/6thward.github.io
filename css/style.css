@@ -940,7 +940,7 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .st-line.st-drag::before { content:"⋮⋮"; font-size:.68rem; letter-spacing:-.14em; color:rgba(31,39,51,.3); margin-right:.05rem; }
 .st-line.st-drag .st-li-name { white-space:normal; overflow-wrap:anywhere; min-width:0; flex:1 1 auto; }
 .st.st-drag { cursor: grab; }
-.st.st-drag .st-name { display:inline-flex; align-items:center; gap:.3rem; background:rgba(255,255,255,.62); border:1px solid rgba(31,39,51,.12); border-radius:99px; padding:.15rem .6rem; }
+.st.st-drag .st-name { display:block; text-align:center; background:rgba(255,255,255,.62); border:1px solid rgba(31,39,51,.12); border-radius:12px; padding:.3rem .6rem; white-space:normal; overflow-wrap:anywhere; line-height:1.25; }
 .st.st-drag:hover .st-name { border-color:rgba(31,78,121,.45); box-shadow:0 2px 6px rgba(20,30,45,.12); }
 .st-drop-ok.st-line, .st-drop-ok .st-name { border-style:dashed !important; border-color:rgba(31,78,121,.5) !important; }
 
@@ -948,3 +948,8 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .hs-here-btn { font:inherit; font-size:.82rem; font-weight:700; padding:.32rem .75rem; border-radius:99px; border:1.5px solid var(--line); background:#fff; color:var(--ink-soft); cursor:pointer; white-space:nowrap; }
 .hs-here-btn:hover { border-color:var(--ok); color:var(--ok); }
 .hs-here-btn.on { background:#e3f2e8; color:var(--ok); border-color:#b9dcc6; }
+
+/* pill names always wrap, never clip (2026-09-13) */
+.st-group .st-line.st-drag .st-li-name, .st-line.st-drag .st-li-name { white-space:normal !important; overflow:visible !important; text-overflow:clip !important; overflow-wrap:anywhere; min-width:0; flex:1 1 8rem; line-height:1.25; }
+.st-line.st-drag { align-items:center; }
+.st-line.st-drag .st-li-org { margin-left:auto; flex:none; }
