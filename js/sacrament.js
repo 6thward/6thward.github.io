@@ -2,13 +2,13 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789359429";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789359429";
+import { db } from "./firebase-init.js?v=1789361052";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789361052";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789359429";
-import { HYMNS } from "./hymns.js?v=1789359429";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789361052";
+import { HYMNS } from "./hymns.js?v=1789361052";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -460,12 +460,18 @@ async function loadBishopric() {
       await setDoc(doc(db, "settings", "leadership"), { bishopric: DEFAULT_BISHOPRIC, priests: [], organists: [], conductors: [] });
     }
   } catch { /* keep defaults */ }
-  try {
-    const hb = await getDoc(doc(db, "settings", "homebound"));
-    if (hb.exists() && Array.isArray(hb.data().people)) homebound = hb.data().people;
-  } catch { /* no homebound list yet */ }
+  // live: the roster is edited on the Home Sacrament tab, so keep the 🏠 button in step (2026-09-13)
+  if (!hbUnsub) {
+    try {
+      hbUnsub = onSnapshot(doc(db, "settings", "homebound"), (hb) => {
+        homebound = hb.exists() && Array.isArray(hb.data().people) ? hb.data().people : [];
+        render();
+      }, () => {});
+    } catch { /* no homebound list yet */ }
+  }
   render();
 }
+let hbUnsub = null;
 
 function editBishopric() {
   const nameRows = (cls, list) => list.map((n) =>
@@ -491,15 +497,6 @@ function editBishopric() {
     <p class="row-sub" style="margin:0 0 .5rem">Suggested in the Conductor field each week.</p>
     <div id="cond-rows">${nameRows("cond-name", conductors)}</div>
     <button class="btn btn-sm" id="cond-add" type="button">+ Add conductor</button>
-    <div class="mtg-sec-title" style="margin-top:1.1rem">Homebound members</div>
-    <p class="row-sub" style="margin:0 0 .5rem">Members who receive the sacrament at home. The list stays put week to week — assign who takes it from the 🏠 button on each Sunday's card.</p>
-    <div id="hb-rows">${homebound.map((p) => `
-      <div class="speaker-row" data-pid="${esc(p.id)}">
-        <input class="hb-name" placeholder="Name" value="${esc(p.name || "")}">
-        <input class="hb-addr" placeholder="Address" style="flex:1.4" value="${esc(p.address || "")}">
-        <button class="btn btn-sm set-del" type="button">✕</button>
-      </div>`).join("")}</div>
-    <button class="btn btn-sm" id="hb-add" type="button">+ Add homebound member</button>
     <div class="mtg-sec-title" style="margin-top:1.1rem">Custom hymns</div>
     <p class="row-sub" style="margin:0 0 .5rem">Both hymnbooks are built in. When the Church releases new hymns, add them here and they'll appear in every hymn dropdown.</p>
     <div id="ch-rows">${customHymns.map((h) => `
@@ -527,12 +524,6 @@ function editBishopric() {
   el.querySelector("#pr-add").addEventListener("click", () => addRow("#pr-rows", "pr-name"));
   el.querySelector("#org-add").addEventListener("click", () => addRow("#org-rows", "org-name"));
   el.querySelector("#cond-add").addEventListener("click", () => addRow("#cond-rows", "cond-name"));
-  el.querySelector("#hb-add").addEventListener("click", () => el.querySelector("#hb-rows").insertAdjacentHTML("beforeend", `
-      <div class="speaker-row">
-        <input class="hb-name" placeholder="Name">
-        <input class="hb-addr" placeholder="Address" style="flex:1.4">
-        <button class="btn btn-sm set-del" type="button">✕</button>
-      </div>`));
   el.querySelector("#ch-add").addEventListener("click", () => el.querySelector("#ch-rows").insertAdjacentHTML("beforeend", `
       <div class="speaker-row">
         <input class="ch-num" placeholder="#" inputmode="numeric" style="flex:0 0 5rem">
@@ -552,25 +543,18 @@ function editBishopric() {
       num: row.querySelector(".ch-num").value.trim(),
       title: row.querySelector(".ch-title").value.trim(),
     })).filter((h) => h.num || h.title);
-    // homebound people keep their id across edits so weekly assignments stay linked
-    const hbPeople = [...el.querySelectorAll("#hb-rows .speaker-row")].map((row) => ({
-      id: row.dataset.pid || "hb" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-      name: row.querySelector(".hb-name").value.trim(),
-      address: row.querySelector(".hb-addr").value.trim(),
-    })).filter((p) => p.name);
+    // homebound roster is managed on the Home Sacrament tab (moved out of Settings 2026-09-13)
     const mtime = el.querySelector("#set-mtime").value || "";
     try {
       // merge: the hymn-approvals manager keeps blockedHymns/sacramentApproved on this same doc (2026-09-13)
       await setDoc(doc(db, "settings", "leadership"),
         { bishopric: names, priests: priestNames, organists: organistNames, conductors: conductorNames, customHymns: hymnRows, meetingTime: mtime }, { merge: true });
-      await setDoc(doc(db, "settings", "homebound"), { people: hbPeople });
       meetingTime = mtime;
       bishopric = names;
       priests = priestNames;
       organists = organistNames;
       conductors = conductorNames;
       customHymns = hymnRows;
-      homebound = hbPeople;
       closeModal(); toast("Settings saved"); render();
     } catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
   });
@@ -1787,7 +1771,7 @@ function wbModal(date) {
 function hbModal(date) {
   const canEdit = canDo("sacrament", "edit");
   if (!homebound.length) {
-    toast(canEdit ? "No homebound members yet — add them under ⚙ Settings" : "No homebound members on the list");
+    toast(canEdit ? "No homebound members yet — add them on the Home Sacrament tab" : "No homebound members on the list");
     return;
   }
   const m0 = meetings[date];
