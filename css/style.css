@@ -1123,3 +1123,8 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 /* Member Board: shaded name band in the section's colour (2026-09-13) */
 .board-card .board-head { margin: -.6rem -.75rem .5rem -.75rem; padding: .5rem .75rem .45rem; border-bottom: 1px solid color-mix(in srgb, var(--cc, #1f4e79) 25%, #fff); background: color-mix(in srgb, var(--cc, #1f4e79) 11%, #fff); border-radius: 0 10px 0 0; }
 .board-card .board-head .row-title { color: color-mix(in srgb, var(--cc, #1f4e79) 70%, #000); }
+
+/* Member Board: notes clamp to three lines with a more/less toggle (2026-09-13) */
+.board-note-clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.board-note-more { font-size: .78rem; font-weight: 700; color: var(--brand); cursor: pointer; margin: .1rem 0 .2rem; user-select: none; }
+.board-note-more:hover { text-decoration: underline; }

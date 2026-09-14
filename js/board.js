@@ -3,12 +3,12 @@
 // added, renamed, reordered and removed. Data:
 //   boardColumns/{id}  { label, order }
 //   board/{id}         { name, notes, column, order, createdAt, updatedAt }
-import { db } from "./firebase-init.js?v=1789355725";
-import { ctx, can } from "./app.js?v=1789355725";
+import { db } from "./firebase-init.js?v=1789355812";
+import { ctx, can } from "./app.js?v=1789355812";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789355725";
+import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789355812";
 
 // Next ordinance a person is working toward — shown as a pill beside the name.
 const ORDINANCES = ["Sacrament", "Aaronic Priesthood", "Melchizedek Priesthood", "Endowment", "Sealing"];
@@ -18,6 +18,7 @@ const DEFAULT_COLUMNS = ["Ideas", "Talking to", "Settled"];
 let cols = [];
 let cards = [];
 let started = false;
+const expandedNotes = new Set(); // card ids whose long notes are shown in full
 let seeding = false;
 
 export function initBoard() {
@@ -82,7 +83,7 @@ function render() {
     return `
     <div class="list-row call-card call-card-v board-card" data-id="${k.id}" style="--cc:${colColor(cols.findIndex((c) => c.id === k.column))};background:#fff;border:1px solid var(--line);border-left:5px solid var(--cc)">
       <div class="board-head"><div class="row-title">${esc(k.name || "—")}</div>${k.nextOrdinance || editor ? `<span class="ord-pill${k.nextOrdinance ? "" : " ord-empty"}${editor ? " ord-edit" : ""}" data-ord="1" title="${editor ? "Click to change" : ""}">${k.nextOrdinance ? "Next: " + esc(k.nextOrdinance) : "+ next ordinance"}</span>` : ""}</div>
-      ${k.notes || editor ? `<div class="row-sub board-note${k.notes ? "" : " board-note-empty"}${editor ? " board-note-edit" : ""}" data-notes="1" title="${editor ? "Click to edit" : ""}">${k.notes ? esc(k.notes) : "+ notes"}</div>` : ""}
+      ${k.notes || editor ? `<div class="row-sub board-note${k.notes ? "" : " board-note-empty"}${editor ? " board-note-edit" : ""}${k.notes && !expandedNotes.has(k.id) ? " board-note-clamp" : ""}" data-notes="1" title="${editor ? "Click to edit" : ""}">${k.notes ? esc(k.notes) : "+ notes"}</div><div class="board-note-more" data-more="${k.id}" hidden>${expandedNotes.has(k.id) ? "less ▴" : "more ▾"}</div>` : ""}
       <div class="todo-pills">${open.map((t) => todoPill(k, t)).join("")}${editor ? `<span class="todo-pill todo-add-pill" data-addtodo="1" title="Add a to-do — type and press Enter">+</span>` : ""}</div>
       <div class="mtg-row">${meetingsPill(k, editor)}</div>
     </div>`;
@@ -106,6 +107,11 @@ function render() {
         <div class="bb-drop" data-col="">${cards.filter((k) => !colIds.has(k.column)).map(cardHtml).join("")}</div></div>` : "");
 
   wrap.querySelectorAll(".board-card").forEach((row) => {
+    const note = row.querySelector(".board-note"), more = row.querySelector(".board-note-more");
+    if (note && more && !note.classList.contains("board-note-empty")) {
+      const id = row.dataset.id;
+      more.hidden = !(expandedNotes.has(id) || note.scrollHeight > note.clientHeight + 2);
+    }
     row.addEventListener("click", (e) => {
       const k = cards.find((x) => x.id === row.dataset.id);
       if (!k) return;
@@ -114,6 +120,8 @@ function render() {
       if (pill) { e.stopPropagation(); const t = (k.todos || []).find((x) => x.id === pill.dataset.todo); if (t) editTodo(k, t); return; }
       const mp = e.target.closest(".mtg-pill");
       if (mp) { e.stopPropagation(); openMeetings(k); return; }
+      const more = e.target.closest(".board-note-more");
+      if (more) { e.stopPropagation(); if (expandedNotes.has(k.id)) expandedNotes.delete(k.id); else expandedNotes.add(k.id); render(); return; }
       const note = e.target.closest(".board-note");
       if (note && editor) { e.stopPropagation(); inlineNotes(row, k, note); return; }
       const ord = e.target.closest(".ord-pill");
