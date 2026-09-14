@@ -2,13 +2,13 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789345982";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789345982";
+import { db } from "./firebase-init.js?v=1789346143";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789346143";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789345982";
-import { HYMNS } from "./hymns.js?v=1789345982";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789346143";
+import { HYMNS } from "./hymns.js?v=1789346143";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -134,11 +134,15 @@ const DRAG_CAT = (k) => (k === "invocation" || k === "benediction") ? "prayer"
   : (k === "primarySpeaker" || k === "youthSpeaker" || k === "speaker") ? "speaker"
   : k; // musical, choir stand alone
 const DRAG_FIELDS = {
-  prayer: ["name", "org", "confirmed", "confirmedBy"],
-  speaker: ["name", "topic", "confirmed", "confirmedBy", "none"],
-  musical: ["who", "hymn", "accompanist", "confirmed", "confirmedBy"],
-  choir: ["hymn", "accompanist", "confirmed", "confirmedBy"],
+  prayer: ["name", "org", "confirmed", "confirmedBy", "unconfirmed"],
+  speaker: ["name", "topic", "confirmed", "confirmedBy", "none", "unconfirmed"],
+  musical: ["who", "hymn", "accompanist", "confirmed", "confirmedBy", "unconfirmed"],
+  choir: ["hymn", "accompanist", "confirmed", "confirmedBy", "unconfirmed"],
 };
+// 2026-09-13 — confirmation is the DEFAULT. An assignment counts as confirmed
+// unless someone flags it "not confirmed yet" (item.unconfirmed = true); the
+// old confirmed/confirmedBy fields are kept only as history.
+const isConf = (it) => !!it && !it.unconfirmed;
 async function swapAssignments(a, b) { // a,b = { date, k, o }
   const fields = DRAG_FIELDS[DRAG_CAT(a.k)];
   const snapshot = (m, t) => { const it = nthItem(m.items, t.k, t.o); const out = {}; fields.forEach((f) => { out[f] = it ? it[f] : undefined; }); return out; };
@@ -618,9 +622,9 @@ function statusChips(m, date) {
     // pending: an outline circle that confirms on the spot (bishopric only);
     // clicking anywhere else on the pill still opens the editor
     const iconHtml = hasName && confirmed
-      ? `<span class="st-icon">✓</span>`
-      : hasName && can && confirmTarget
-      ? `<span class="st-icon st-confirm-dot" data-confirm='${JSON.stringify(confirmTarget)}' title="Click to mark confirmed">○</span>`
+      ? `<span class="st-icon${can && confirmTarget ? " st-confirm-dot" : ""}"${can && confirmTarget ? ` data-confirm='${JSON.stringify(confirmTarget)}' title="Confirmed — click if this still needs confirming"` : ""}>✓</span>`
+      : hasName
+      ? `<span class="st-icon st-unconf${can && confirmTarget ? " st-confirm-dot" : ""}"${can && confirmTarget ? ` data-confirm='${JSON.stringify(confirmTarget)}' title="Not confirmed yet — click once it's confirmed"` : " title=\"Not confirmed yet\""}>!</span>`
       : `<span class="st-icon">○</span>`;
     const orgBadge = org ? `<span class="st-org org-${org.toLowerCase().replace(/[^a-z]+/g, "-")}" title="${esc(org)}">${esc(ORG_ABBR[org] || org)}</span>` : "";
     const subLine = hasName && sub ? `<span class="st-sub">${esc(sub)}</span>` : "";
@@ -661,9 +665,9 @@ function statusChips(m, date) {
       const dot = l.light
         ? ""
         : l.name && l.confirmed
-        ? `<span class="st-li-ic" title="${l.confirmedBy ? "Confirmed by " + esc(l.confirmedBy) : "Confirmed"}">✓</span>`
-        : l.name && can
-        ? `<span class="st-li-ic st-confirm-dot" data-confirm='${JSON.stringify({ k: l.k, o: l.o })}' title="Click to mark confirmed">○</span>`
+        ? `<span class="st-li-ic${can ? " st-confirm-dot" : ""}"${can ? ` data-confirm='${JSON.stringify({ k: l.k, o: l.o })}'` : ""} title="Confirmed${can ? " — click if this still needs confirming" : ""}">✓</span>`
+        : l.name
+        ? `<span class="st-li-ic st-unconf${can ? " st-confirm-dot" : ""}"${can ? ` data-confirm='${JSON.stringify({ k: l.k, o: l.o })}'` : ""} title="Not confirmed yet${can ? " — click once it's confirmed" : ""}">!</span>`
         : `<span class="st-li-ic"></span>`;
       const orgTag = l.org ? ` <span class="st-li-org">${esc(ORG_ABBR[l.org] || l.org)}</span>` : "";
       // inlineEdit lines edit in place on click instead of opening the popup
@@ -680,7 +684,7 @@ function statusChips(m, date) {
   };
 
   const spkLines = (kind, tagFn) => of(kind).map((it, i) => ({
-    tag: tagFn(it, i), name: it.name, confirmed: it.confirmed, confirmedBy: it.confirmedBy, k: kind, o: i,
+    tag: tagFn(it, i), name: it.name, confirmed: isConf(it), confirmedBy: it.confirmedBy, k: kind, o: i,
     none: !!it.none,
     inlineEdit: { t: "name", k: kind, o: i },
   }));
@@ -691,8 +695,8 @@ function statusChips(m, date) {
   const HYMN_TAGS = { openingHymn: "Open", sacramentHymn: "Sacrament", closingHymn: "Closing" };
   const chips = [
     groupChip("Prayers", { t: "prayers" }, [
-      { tag: "Open", name: inv?.name, org: inv?.org, confirmed: inv?.confirmed, confirmedBy: inv?.confirmedBy, k: "invocation", o: 0, inlineEdit: { t: "name", k: "invocation", o: 0 } },
-      { tag: "Closing", name: ben?.name, org: ben?.org, confirmed: ben?.confirmed, confirmedBy: ben?.confirmedBy, k: "benediction", o: 0, inlineEdit: { t: "name", k: "benediction", o: 0 } },
+      { tag: "Open", name: inv?.name, org: inv?.org, confirmed: isConf(inv), confirmedBy: inv?.confirmedBy, k: "invocation", o: 0, inlineEdit: { t: "name", k: "invocation", o: 0 } },
+      { tag: "Closing", name: ben?.name, org: ben?.org, confirmed: isConf(ben), confirmedBy: ben?.confirmedBy, k: "benediction", o: 0, inlineEdit: { t: "name", k: "benediction", o: 0 } },
     ]),
     groupChip("Hymns", { t: "h" }, hymnItems.map((h) => ({
       tag: HYMN_TAGS[h.kind] || KINDS[h.kind]?.label || h.kind,
@@ -717,9 +721,9 @@ function statusChips(m, date) {
     return before === 0 ? "before the speakers" : `after speaker ${before}`;
   })();
   if (slotMusical) {
-    chips.push(chip("Music Number", slotMusical.who, { t: "inter" }, slotMusical.confirmed, slotMusical.confirmedBy, null, [slotMusical.hymn, slotPos].filter(Boolean).join(" · "), { k: "musical", o: 0 }));
+    chips.push(chip("Music Number", slotMusical.who, { t: "inter" }, isConf(slotMusical), slotMusical.confirmedBy, null, [slotMusical.hymn, slotPos].filter(Boolean).join(" · "), { k: "musical", o: 0 }));
   } else if (slotChoir) {
-    chips.push(chip("Music Number", "Choir", { t: "inter" }, slotChoir.confirmed, slotChoir.confirmedBy, null, [slotChoir.hymn, slotPos].filter(Boolean).join(" · "), { k: "choir", o: 0 }));
+    chips.push(chip("Music Number", "Choir", { t: "inter" }, isConf(slotChoir), slotChoir.confirmedBy, null, [slotChoir.hymn, slotPos].filter(Boolean).join(" · "), { k: "choir", o: 0 }));
   } else if (slotInterHymn) {
     const hymnVal = [slotInterHymn.num ? "#" + slotInterHymn.num : "", slotInterHymn.title].filter(Boolean).join(" | ");
     chips.push(chip("Music Number", hymnVal, { t: "inter" }, true, null, null, slotPos));
@@ -876,7 +880,7 @@ function renderCards(wrap) {
       e.stopPropagation();
       quickEdit(el.closest("[data-date]").dataset.date, JSON.parse(el.dataset.qe));
     }));
-  // pending outline circle: one click marks the item confirmed, no popup
+  // the ✓ / ! mark toggles "not confirmed yet" — confirmed is the default
   wrap.querySelectorAll("[data-confirm]").forEach((el) =>
     el.addEventListener("click", async (e) => {
       e.stopPropagation();
@@ -885,8 +889,9 @@ function renderCards(wrap) {
       await patchMeeting(date, (m) => {
         const it = nthItem(m.items, k, o);
         if (it && (it.name || it.who || k === "choir")) {
-          it.confirmed = true;
-          it.confirmedBy = ctx.name;
+          it.unconfirmed = !it.unconfirmed;
+          it.confirmed = !it.unconfirmed;
+          it.confirmedBy = it.unconfirmed ? "" : ctx.name;
         }
       });
     }));
@@ -940,7 +945,7 @@ function renderCards(wrap) {
           let t = nthItem(mm.items, k, o);
           if (!t) { t = blankItem(k); insertCanonical(mm.items, t); }
           const newName = nameIn.value.trim();
-          if (newName !== (it?.name || "")) { t.confirmed = false; t.confirmedBy = ""; } // a different person isn't confirmed yet
+          if (newName !== (it?.name || "")) { t.unconfirmed = false; t.confirmed = true; t.confirmedBy = ""; } // new name: confirmed by default
           if (newName) t.none = false; // typing a name overrides a "none this week" mark
           t.name = newName;
         }));
@@ -1027,7 +1032,7 @@ function quickEdit(date, q) {
 
   const confirmField = (checked, byLine) => `
     <label class="field confirm-field" style="margin-top:.9rem">
-      <span><input type="checkbox" id="qe-confirmed" ${checked ? "checked" : ""}> Confirmed</span>
+      <span><input type="checkbox" id="qe-confirmed" ${checked ? "checked" : ""}> Not confirmed yet</span>
       ${byLine ? `<span class="row-sub confirm-by">${esc(byLine)}</span>` : ""}
     </label>`;
 
@@ -1181,8 +1186,7 @@ function quickEdit(date, q) {
         <label class="field">Name <input id="qe-${id}-name" value="${esc(it?.name || "")}"></label>
         <label class="field" style="margin-top:.4rem">Arranged by ${orgSel(`qe-${id}-org`, it?.org || "")}</label>
         <label class="field confirm-field" style="margin-top:.4rem">
-          <span><input type="checkbox" id="qe-${id}-conf" ${it?.confirmed ? "checked" : ""}> Confirmed</span>
-          ${it?.confirmed && it?.confirmedBy ? `<span class="row-sub confirm-by">Confirmed by ${esc(it.confirmedBy)}</span>` : ""}
+          <span><input type="checkbox" id="qe-${id}-conf" ${it?.unconfirmed ? "checked" : ""}> Not confirmed yet</span>
         </label>
       </div>`;
     html = `<h3>Prayers ${dateLabel}</h3>
@@ -1192,15 +1196,15 @@ function quickEdit(date, q) {
       const read = (id) => ({
         name: el.querySelector(`#qe-${id}-name`).value.trim(),
         org: el.querySelector(`#qe-${id}-org`).value,
-        confirmed: el.querySelector(`#qe-${id}-conf`).checked,
+        unconfirmed: el.querySelector(`#qe-${id}-conf`).checked,
       });
       const vals = [["invocation", read("inv"), inv], ["benediction", read("ben"), ben]];
       return (m) => {
         vals.forEach(([kind, v, prev]) => {
           const t = ensureQE(m, { k: kind, o: 0 });
           t.name = v.name; t.org = v.org;
-          t.confirmed = v.confirmed;
-          t.confirmedBy = v.confirmed ? (prev?.confirmed ? prev.confirmedBy : ctx.name) : "";
+          t.unconfirmed = v.unconfirmed; t.confirmed = !v.unconfirmed;
+          t.confirmedBy = v.unconfirmed ? "" : (prev?.confirmedBy || ctx.name);
         });
       };
     };
@@ -1216,7 +1220,7 @@ function quickEdit(date, q) {
         <input class="spk-name" placeholder="Name" autocomplete="off" style="flex:1" value="${esc(s.name || "")}">
         <input class="spk-topic" placeholder="Topic (optional)" autocomplete="off" style="flex:1" value="${esc(s.topic || "")}">
         <label style="display:flex;align-items:center;gap:.25rem;font-size:.78rem;white-space:nowrap">
-          <input type="checkbox" class="spk-conf" ${s.confirmed ? "checked" : ""}> Confirmed</label>
+          <input type="checkbox" class="spk-conf" ${s.unconfirmed ? "checked" : ""}> Not confirmed yet</label>
         <button class="btn btn-sm spk-del" type="button" title="Remove this speaker slot">✕</button>
       </div>`;
     const sectHtml = (kind) => {
@@ -1247,7 +1251,7 @@ function quickEdit(date, q) {
         rows: [...el.querySelectorAll(`.qe-spk-rows[data-kind="${kind}"] .spk-row`)].map((r) => ({
           name: r.querySelector(".spk-name").value.trim(),
           topic: r.querySelector(".spk-topic").value.trim(),
-          confirmed: r.querySelector(".spk-conf").checked,
+          unconfirmed: r.querySelector(".spk-conf").checked,
         })),
       }));
       return (m) => {
@@ -1268,15 +1272,14 @@ function quickEdit(date, q) {
             if (!it) {
               // a brand-new row only becomes a slot if something was entered —
               // opening via "+" and saving untouched must not add ghost slots
-              if (!r.name && !r.topic && !r.confirmed) return;
+              if (!r.name && !r.topic) return;
               it = blankItem(kind); insertCanonical(m.items, it);
             }
             used++;
-            const wasConfirmed = it.confirmed;
             it.none = false;
             it.name = r.name; it.topic = r.topic;
-            it.confirmed = r.confirmed;
-            it.confirmedBy = r.confirmed ? (wasConfirmed ? it.confirmedBy : ctx.name) : "";
+            it.unconfirmed = r.unconfirmed; it.confirmed = !r.unconfirmed;
+            it.confirmedBy = r.unconfirmed ? "" : (it.confirmedBy || ctx.name);
           });
           if (existing.length > rows.length) {
             const surplus = new Set(existing.slice(rows.length));
@@ -1346,37 +1349,37 @@ function quickEdit(date, q) {
   } else {
     const it = nthItem(items, q.k, q.o) || blankItem(q.k);
     const label = KINDS[q.k]?.label || q.k;
-    const byLine = it.confirmed && it.confirmedBy ? `Confirmed by ${it.confirmedBy}` : "";
+    const byLine = isConf(it) && it.confirmedBy ? `Confirmed by ${it.confirmedBy}` : "";
     if (PRAYER_KINDS.includes(q.k)) {
       html = `<h3>${label} ${dateLabel}</h3>
         <label class="field">Name <input id="qe-name" value="${esc(it.name || "")}"></label>
         <label class="field" style="margin-top:.6rem">Arranged by ${orgSel("qe-org", it.org || "")}</label>
-        ${confirmField(it.confirmed, byLine)}`;
+        ${confirmField(!!it.unconfirmed, byLine)}`;
       onSave = (el) => {
         const name = el.querySelector("#qe-name").value.trim();
         const org = el.querySelector("#qe-org").value;
-        const nowConfirmed = el.querySelector("#qe-confirmed").checked;
+        const nowUnconf = el.querySelector("#qe-confirmed").checked;
         return (m) => {
           const t = ensureQE(m, q);
           t.name = name; t.org = org;
-          t.confirmed = nowConfirmed;
-          t.confirmedBy = nowConfirmed ? (it.confirmed ? it.confirmedBy : ctx.name) : "";
+          t.unconfirmed = nowUnconf; t.confirmed = !nowUnconf;
+          t.confirmedBy = nowUnconf ? "" : (it.confirmedBy || ctx.name);
         };
       };
     } else if (SPEAKER_KINDS.includes(q.k)) {
       html = `<h3>${label} ${dateLabel}</h3>
         <label class="field">Name <input id="qe-name" value="${esc(it.name || "")}"></label>
         <label class="field" style="margin-top:.6rem">Topic (optional) <input id="qe-topic" value="${esc(it.topic || "")}"></label>
-        ${confirmField(it.confirmed, byLine)}`;
+        ${confirmField(!!it.unconfirmed, byLine)}`;
       onSave = (el) => {
         const name = el.querySelector("#qe-name").value.trim();
         const topic = el.querySelector("#qe-topic").value.trim();
-        const nowConfirmed = el.querySelector("#qe-confirmed").checked;
+        const nowUnconf = el.querySelector("#qe-confirmed").checked;
         return (m) => {
           const t = ensureQE(m, q);
           t.name = name; t.topic = topic;
-          t.confirmed = nowConfirmed;
-          t.confirmedBy = nowConfirmed ? (it.confirmed ? it.confirmedBy : ctx.name) : "";
+          t.unconfirmed = nowUnconf; t.confirmed = !nowUnconf;
+          t.confirmedBy = nowUnconf ? "" : (it.confirmedBy || ctx.name);
         };
       };
     } else if (q.k === "musical") {
@@ -1384,17 +1387,17 @@ function quickEdit(date, q) {
         <label class="field">Who (person/group) <input id="qe-who" value="${esc(it.who || "")}"></label>
         <label class="field" style="margin-top:.6rem">Hymn / piece <input id="qe-hymn" value="${esc(it.hymn || "")}"></label>
         <label class="field" style="margin-top:.6rem">Accompanist <input id="qe-acc" value="${esc(it.accompanist || "")}"></label>
-        ${confirmField(it.confirmed, byLine)}`;
+        ${confirmField(!!it.unconfirmed, byLine)}`;
       onSave = (el) => {
         const who = el.querySelector("#qe-who").value.trim();
         const hymn = el.querySelector("#qe-hymn").value.trim();
         const acc = el.querySelector("#qe-acc").value.trim();
-        const nowConfirmed = el.querySelector("#qe-confirmed").checked;
+        const nowUnconf = el.querySelector("#qe-confirmed").checked;
         return (m) => {
           const t = ensureQE(m, q);
           t.who = who; t.hymn = hymn; t.accompanist = acc;
-          t.confirmed = nowConfirmed;
-          t.confirmedBy = nowConfirmed ? (it.confirmed ? it.confirmedBy : ctx.name) : "";
+          t.unconfirmed = nowUnconf; t.confirmed = !nowUnconf;
+          t.confirmedBy = nowUnconf ? "" : (it.confirmedBy || ctx.name);
         };
       };
     } else return;

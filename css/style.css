@@ -960,3 +960,7 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .theme-tag.theme-add { color:#b7bfcb; font-style:normal; font-weight:600; font-size:.72rem; cursor:pointer; border:1px dashed #d3d9e1; border-radius:99px; padding:.05rem .5rem; opacity:0; transition:opacity .15s; }
 .card:hover .theme-tag.theme-add { opacity:1; }
 .theme-tag.theme-add:hover { color:var(--violet); border-color:var(--violet); }
+
+/* "not confirmed yet" mark (the exception) — amber "!" (2026-09-13) */
+.st-icon.st-unconf, .st-li-ic.st-unconf { color: var(--pending) !important; opacity: 1 !important; font-weight: 900; }
+.st-li-ic.st-confirm-dot, .st-icon.st-confirm-dot { cursor: pointer; }
