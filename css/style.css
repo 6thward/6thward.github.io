@@ -1114,3 +1114,8 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 }
 .st-line.st-li-unconf .st-li-name { color: var(--pending) !important; }
 .st-line .st-li-name.st-none { color: var(--ink-soft) !important; }
+
+/* Member Board: names as headlines (2026-09-13) */
+.board-head { padding-bottom: .35rem; margin-bottom: .35rem; border-bottom: 1px solid var(--line); }
+.board-head .row-title { font-size: 1.2rem; font-weight: 800; letter-spacing: -.01em; color: var(--ink); line-height: 1.2; }
+.board-card .board-note { font-size: .9rem; }
