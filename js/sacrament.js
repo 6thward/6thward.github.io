@@ -2,13 +2,13 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789355930";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789355930";
+import { db } from "./firebase-init.js?v=1789356133";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789356133";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789355930";
-import { HYMNS } from "./hymns.js?v=1789355930";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789356133";
+import { HYMNS } from "./hymns.js?v=1789356133";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -318,10 +318,10 @@ export function initSacrament() {
         <p class="panel-sub">Agenda, speakers, hymns, and prayers for each Sunday.</p>
       </div>
       <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
-        <div class="chips">
-          ${[viewYear, viewYear + 1].map((y) => `<button class="chip" data-year="${y}">${y}</button>`).join("")}
-        </div>
-        <div class="chips">
+        <select id="sch-year-sel" class="chip chip-select" title="Year">
+          ${[viewYear - 1, viewYear, viewYear + 1, viewYear + 2].map((y) => `<option value="${y}"${y === viewYear ? " selected" : ""}>${y}</option>`).join("")}
+        </select>
+        <div class="chips" style="display:none"><!-- 2026-09-13 — Table view retired (Cards only); code kept -->
           <button class="chip" data-view-mode="cards">Cards</button>
           <button class="chip" data-view-mode="table">Table</button>
         </div>
@@ -342,11 +342,11 @@ export function initSacrament() {
       localStorage.setItem("sw-sacview", viewMode);
       render();
     }));
-  panel.querySelectorAll("[data-year]").forEach((b) =>
-    b.addEventListener("click", () => {
-      viewYear = Number(b.dataset.year);
-      render();
-    }));
+  panel.querySelector("#sch-year-sel")?.addEventListener("change", (e) => {
+    viewYear = Number(e.target.value);
+    render();
+  });
+  viewMode = "cards"; // table view retired 2026-09-13
 
   loadBishopric();
   onSnapshot(collection(db, "meetings"), (qs) => {
@@ -796,8 +796,8 @@ function render() {
   if (!wrap) return;
   document.querySelectorAll("#panel-sacrament [data-view-mode]").forEach((b) =>
     b.classList.toggle("active", b.dataset.viewMode === viewMode));
-  document.querySelectorAll("#panel-sacrament [data-year]").forEach((b) =>
-    b.classList.toggle("active", Number(b.dataset.year) === viewYear));
+  const ysel = document.getElementById("sch-year-sel");
+  if (ysel && Number(ysel.value) !== viewYear) ysel.value = String(viewYear);
   const pastBtn = document.getElementById("btn-toggle-past");
   if (pastBtn) {
     pastBtn.textContent = showPast ? "Hide previous Sundays" : "Show previous Sundays";
