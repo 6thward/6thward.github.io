@@ -1070,11 +1070,14 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 /* Member Board: next-ordinance pill beside the name (2026-09-13) */
 .board-head { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
 .board-head .row-title { font-size: 1.05rem; }
-.ord-pill { font-size: .74rem; font-weight: 600; color: var(--violet); background: var(--violet-soft); border: 1px solid transparent; border-radius: 99px; padding: .12rem .6rem; white-space: nowrap; }
+/* next-ordinance pill: monochrome with the card (2026-09-13) — the card's colour, darkened
+   via color-mix; empty state fades almost entirely into the band */
+.ord-pill { font-size: .74rem; font-weight: 600; color: color-mix(in srgb, var(--cc, var(--violet)) 78%, #000); background: color-mix(in srgb, var(--cc, var(--violet)) 14%, transparent); border: 1px solid transparent; border-radius: 99px; padding: .12rem .6rem; white-space: nowrap; }
 .ord-pill.ord-edit { cursor: pointer; }
-.ord-pill.ord-edit:hover { border-color: var(--violet); }
-.ord-pill.ord-empty { background: transparent; color: #b7bfcb; border: 1px dashed rgba(31,39,51,.25); font-weight: 500; }
-.ord-sel { font: inherit; font-size: .78rem; padding: .1rem .4rem; border: 1px solid var(--violet); border-radius: 99px; background: #fff; color: var(--violet); }
+.ord-pill.ord-edit:hover { border-color: color-mix(in srgb, var(--cc, var(--violet)) 55%, transparent); }
+.ord-pill.ord-empty { background: transparent; color: color-mix(in srgb, var(--cc, var(--violet)) 38%, transparent); border: 1px dashed color-mix(in srgb, var(--cc, var(--violet)) 22%, transparent); font-weight: 500; }
+.ord-pill.ord-empty.ord-edit:hover { color: color-mix(in srgb, var(--cc, var(--violet)) 70%, transparent); }
+.ord-sel { font: inherit; font-size: .78rem; padding: .1rem .4rem; border: 1px solid var(--cc, var(--violet)); border-radius: 99px; background: #fff; color: color-mix(in srgb, var(--cc, var(--violet)) 78%, #000); }
 
 /* Ward Council agendas (2026-09-13) */
 .wc-num { font-weight: 800; color: var(--ink-soft); min-width: 1.6rem; padding-top: .05rem; }
@@ -1124,8 +1127,8 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .board-card .board-head { margin: -.6rem -.75rem .5rem -.75rem; padding: .5rem .75rem .45rem; border-bottom: 1px solid color-mix(in srgb, var(--cc, #1f4e79) 25%, #fff); background: color-mix(in srgb, var(--cc, #1f4e79) 11%, #fff); border-radius: 0 10px 0 0; }
 .board-card .board-head .row-title { color: color-mix(in srgb, var(--cc, #1f4e79) 70%, #000); }
 
-/* Member Board: notes clamp to three lines with a more/less toggle (2026-09-13) */
-.board-note-clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+/* Member Board: notes clamp to ten lines with a more/less toggle (2026-09-13) */
+.board-note-clamp { display: -webkit-box; -webkit-line-clamp: 10; -webkit-box-orient: vertical; overflow: hidden; }
 .board-note-more { font-size: .78rem; font-weight: 700; color: var(--brand); cursor: pointer; margin: .1rem 0 .2rem; user-select: none; }
 .board-note-more:hover { text-decoration: underline; }
 

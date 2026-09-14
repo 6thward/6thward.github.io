@@ -2,13 +2,13 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789357123";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789357123";
+import { db } from "./firebase-init.js?v=1789357710";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789357710";
 import {
-  collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, serverTimestamp,
+  collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789357123";
-import { HYMNS } from "./hymns.js?v=1789357123";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789357710";
+import { HYMNS } from "./hymns.js?v=1789357710";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -321,13 +321,55 @@ export async function addSustainingToNext(name, calling) {
     const nd = new Date(d + "T12:00:00"); nd.setDate(nd.getDate() + 7);
     d = `${nd.getFullYear()}-${String(nd.getMonth() + 1).padStart(2, "0")}-${String(nd.getDate()).padStart(2, "0")}`;
   }
-  await patchMeeting(d, (m) => {
+  await patchMeetingFresh(d, (m) => {
     let wb = m.items.find((i) => i.kind === "wardBusiness");
     if (!wb) { wb = blankItem("wardBusiness"); insertCanonical(m.items, wb); }
     wb.sustainings = wb.sustainings || [];
     if (!wb.sustainings.some((x) => x.name === name && (x.calling || "") === (calling || ""))) wb.sustainings.push({ name, calling: calling || "" });
   });
   return d;
+}
+
+// Like patchMeeting, but reads the Sunday straight from Firestore first, so
+// the Callings tab can call it even when this tab's live cache isn't loaded
+// (a stale cache + full setDoc would wipe a planned Sunday).
+async function patchMeetingFresh(date, mutate) {
+  let cur = meetings[date];
+  try {
+    const snap = await getDoc(doc(db, "meetings", date));
+    if (snap.exists()) cur = snap.data();
+  } catch (e) { console.warn("[sacrament] fresh read", e); }
+  const type = cur?.type || defaultTypeFor(date);
+  const m = cur
+    ? JSON.parse(JSON.stringify(cur))
+    : { date, type, customType: "", theme: "", presiding: "", conducting: "", chorister: "", organist: "", items: defaultItems(type), notes: "" };
+  if (!Array.isArray(m.items)) m.items = defaultItems(type);
+  mutate(m);
+  m.updatedAt = serverTimestamp();
+  await setDoc(doc(db, "meetings", date), m);
+  if (meetings[date]) meetings[date] = m;
+}
+
+// Undo of the above: when a call falls through (moved back out of Calls to
+// Sustain), pull that sustaining off every upcoming Sunday's Ward Business.
+export async function removeSustaining(name, calling) {
+  if (!name) return 0;
+  const from = upcomingSunday();
+  const same = (x) => x.name === name && (x.calling || "") === (calling || "");
+  let n = 0;
+  const snap = await getDocs(query(collection(db, "meetings"), where("date", ">=", from)));
+  for (const ds of snap.docs) {
+    const d = ds.id;
+    if (d < from) continue;
+    const wb = (ds.data()?.items || []).find((i) => i.kind === "wardBusiness");
+    if (!wb || !(wb.sustainings || []).some(same)) continue;
+    await patchMeetingFresh(d, (m) => {
+      const w = m.items.find((i) => i.kind === "wardBusiness");
+      if (w) w.sustainings = (w.sustainings || []).filter((x) => !same(x));
+    });
+    n++;
+  }
+  return n;
 }
 
 export function initSacrament() {

@@ -5,13 +5,13 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1789357123";
+import { db } from "./firebase-init.js?v=1789357710";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789357123";
-import { addSustainingToNext } from "./sacrament.js?v=1789357123";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789357710";
+import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1789357710";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
@@ -128,23 +128,47 @@ async function reorderWithin(stage, draggedId, beforeId) {
 }
 
 // every stage move gets stamped so you can see when it happened
-const save = async (id, data) => {
+// Keep the Sacrament tab's Ward Business in step with the calling flow (2026-09-13):
+//  • reaching "Calls to Sustain" adds the sustaining to the next Sunday with a ward meeting
+//  • falling back to Fill / Issue (or deleting the calling) takes it off every upcoming Sunday
+const BACK_STAGES = ["fill", "issue"];
+const ON_BUSINESS = ["sustain", "apart"];
+const isCallingRec = (x) => x && (x.kind || "calling") === "calling";
+async function wardBusinessSync(prev, upd) {
+  try {
+    const nextStage = upd?.stage;
+    if (nextStage && BACK_STAGES.includes(nextStage) && isCallingRec(prev) && ON_BUSINESS.includes(prev.stage) && prev.decided) {
+      const n = await removeSustaining(prev.decided, prev.calling);
+      if (n) toast(`Removed from Ward Business (${n} Sunday${n === 1 ? "" : "s"})`);
+    }
+    if (nextStage === "sustain" && prev?.stage !== "sustain") {
+      const name = upd.decided || prev?.decided;
+      const calling = upd.calling ?? prev?.calling;
+      if (name && isCallingRec({ ...prev, ...upd })) {
+        const d = await addSustainingToNext(name, calling);
+        if (d) toast(`Added to Ward Business for ${new Date(d + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}`);
+      }
+    }
+  } catch (e) { console.warn("[callings] ward business sync", e); }
+}
+// Deleting a calling that was already on Ward Business pulls it back off.
+async function wardBusinessForget(prev) {
+  if (!isCallingRec(prev) || !ON_BUSINESS.includes(prev.stage) || !prev.decided) return;
+  try {
+    const n = await removeSustaining(prev.decided, prev.calling);
+    if (n) toast(`Removed from Ward Business (${n} Sunday${n === 1 ? "" : "s"})`);
+  } catch (e) { console.warn("[callings] ward business forget", e); }
+}
+
+const save = async (id, data, prevSnap) => {
+  // prevSnap: the record before the caller mutated it in place (drop handler)
+  const prev = prevSnap || items.find((x) => x.id === id);
   const upd = { ...data, updatedAt: serverTimestamp() };
   if (upd.stage) upd["stamps." + upd.stage] = serverTimestamp();
   if (upd.setApart === true) upd["stamps.setApartDone"] = serverTimestamp();
   if (upd.mlsDone === true) upd["stamps.mlsDone"] = serverTimestamp();
   await updateDoc(doc(db, "callings", id), upd);
-  // reaching "Calls to Sustain" puts the sustaining on the next Sunday's Ward Business (2026-09-13)
-  if (upd.stage === "sustain") {
-    const it = items.find((x) => x.id === id);
-    const name = upd.decided || it?.decided;
-    if (name && it && (it.kind || "calling") === "calling") {
-      try {
-        const d = await addSustainingToNext(name, it.calling);
-        if (d) toast(`Added to Ward Business for ${new Date(d + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}`);
-      } catch (e) { console.warn("[callings] ward business", e); }
-    }
-  }
+  await wardBusinessSync(prev, upd);
 };
 const fmtStamp = (ts) => {
   const d = ts?.toDate?.() || (ts ? new Date(ts) : null);
@@ -499,8 +523,9 @@ function render() {
       const upd = { stage: st };
       if (st === "fill") upd.decided = ""; // dragged back = reconsidering
       else if (!it.decided) upd.decided = (it.candidates || [])[0];
+      const before = { ...it }; // ward-business sync needs the pre-drag stage
       it.stage = st;
-      save(it.id, upd).then(() => reorderWithin(st, it.id, beforeId));
+      save(it.id, upd, before).then(() => reorderWithin(st, it.id, beforeId));
     });
   });
 }
@@ -601,6 +626,7 @@ function editCalling(c) {
   el.querySelector("#cl-delete")?.addEventListener("click", async () => {
     if (!confirm("Delete this calling?")) return;
     await deleteDoc(doc(db, "callings", c.id));
+    await wardBusinessForget(c);
     closeModal(); toast("Deleted");
   });
   el.querySelector("#cl-save").addEventListener("click", async () => {
@@ -629,6 +655,7 @@ function editCalling(c) {
       else {
         if (data.stage !== c.stage) data["stamps." + data.stage] = serverTimestamp();
         await updateDoc(doc(db, "callings", c.id), data);
+        await wardBusinessSync(c, data);
       }
       const matched = decided && needy.find((p) => p.name.toLowerCase() === decided.toLowerCase());
       if (matched && data.stage !== "fill" && confirm(`Remove ${matched.name} from the "needs a calling" pool?`)) {
