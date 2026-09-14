@@ -2,13 +2,13 @@
 //  * PIN people — created here: a name, a 6-digit PIN, and a permission per
 //    area (Hidden / View / Edit). They sign in with just the PIN.
 //  * Google sign-ins — approve and assign a role, as before.
-import { db } from "./firebase-init.js?v=1789357710";
-import { ctx, AREAS } from "./app.js?v=1789357710";
+import { db } from "./firebase-init.js?v=1789358482";
+import { ctx, AREAS } from "./app.js?v=1789358482";
 import {
   collection, onSnapshot, updateDoc, setDoc, deleteDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1789357710";
-import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1789357710";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1789358482";
+import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1789358482";
 
 const ROLES = [
   ["pending", "Pending (no access)"],

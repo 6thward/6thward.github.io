@@ -1155,3 +1155,9 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .call-card .call-card-title { display: block; margin: -.55rem -.75rem .45rem -.75rem; padding: .45rem .75rem; font-size: 1rem; font-weight: 600; letter-spacing: -.01em; color: #fff !important; background: var(--col); border-radius: 0 10px 0 0; }
 .call-card .call-card-title .call-card-org { color: rgba(255,255,255,.8); font-weight: 600; }
 .call-card .cand-line { font-size: 1rem; }
+
+/* Member Board to-do pill: ✓ circle on the right archives in one click (2026-09-13) */
+.todo-pill .todo-tick { display:inline-flex; align-items:center; justify-content:center; width:1.05rem; height:1.05rem; margin-right:-.25rem; border-radius:50%; border:1px solid rgba(31,39,51,.3); color:transparent; font-size:.7rem; line-height:1; cursor:pointer; flex:none; transition:background .12s,color .12s,border-color .12s; }
+.todo-pill .todo-tick:hover { background:var(--ok); border-color:var(--ok); color:#fff; }
+.todo-pill.todo-overdue .todo-tick { border-color:rgba(176,52,43,.45); }
+.todo-pill .todo-pill-text { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

@@ -3,12 +3,12 @@
 // added, renamed, reordered and removed. Data:
 //   boardColumns/{id}  { label, order }
 //   board/{id}         { name, notes, column, order, createdAt, updatedAt }
-import { db } from "./firebase-init.js?v=1789357710";
-import { ctx, can } from "./app.js?v=1789357710";
+import { db } from "./firebase-init.js?v=1789358482";
+import { ctx, can } from "./app.js?v=1789358482";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789357710";
+import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789358482";
 
 // Next ordinance a person is working toward — shown as a pill beside the name.
 const ORDINANCES = ["Sacrament", "Aaronic Priesthood", "Melchizedek Priesthood", "Endowment", "Sealing"];
@@ -115,6 +115,8 @@ function render() {
     row.addEventListener("click", (e) => {
       const k = cards.find((x) => x.id === row.dataset.id);
       if (!k) return;
+      const tick = e.target.closest(".todo-tick");
+      if (tick && editor) { e.stopPropagation(); archiveTodoFromCard(k, tick.dataset.tick); return; }
       const pill = e.target.closest(".todo-pill");
       if (pill && pill.dataset.addtodo) { e.stopPropagation(); inlineNewTodo(row, k, pill); return; }
       if (pill) { e.stopPropagation(); const t = (k.todos || []).find((x) => x.id === pill.dataset.todo); if (t) editTodo(k, t); return; }
@@ -229,7 +231,16 @@ function dueState(t) {
 const fmtDue = (iso) => { if (!iso) return ""; const d = new Date(iso + "T12:00:00"); return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }); };
 function todoPill(k, t) {
   const st = dueState(t);
-  return `<span class="todo-pill${st ? " todo-" + st : ""}${t.council ? " todo-council" : ""}" data-todo="${t.id}" title="${esc((t.council ? "On the ward council agenda · " : "") + (t.notes ? t.notes : "Click for notes"))}">${t.council ? "📋 " : ""}${esc(t.title)}${t.due ? `<span class="todo-due">${st === "overdue" ? "⚠ " : ""}${fmtDue(t.due)}</span>` : ""}</span>`;
+  // ○ on the right: one click marks it done and archives it off the board (2026-09-13);
+  // archived to-dos stay in the person's profile under "Archived"
+  const tick = can("board", "edit") ? `<span class="todo-tick" data-tick="${t.id}" title="Done — archive" role="button">✓</span>` : "";
+  return `<span class="todo-pill${st ? " todo-" + st : ""}${t.council ? " todo-council" : ""}" data-todo="${t.id}" title="${esc((t.council ? "On the ward council agenda · " : "") + (t.notes ? t.notes : "Click for notes"))}">${t.council ? "📋 " : ""}<span class="todo-pill-text">${esc(t.title)}</span>${t.due ? `<span class="todo-due">${st === "overdue" ? "⚠ " : ""}${fmtDue(t.due)}</span>` : ""}${tick}</span>`;
+}
+// Mark a to-do done from the board pill; the archived copy lives in the profile.
+async function archiveTodoFromCard(k, id) {
+  const todos = (k.todos || []).map((x) => (x.id === id ? { ...x, done: true, doneAt: new Date().toISOString() } : x));
+  await saveTodos(k, todos);
+  toast("Done — archived (see their profile)");
 }
 async function saveTodos(k, todos) {
   k.todos = todos;
