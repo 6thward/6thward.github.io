@@ -340,7 +340,7 @@ label.field input:focus, label.field select:focus, label.field textarea:focus {
    across cards, even when a Sunday (e.g. Fast) has fewer of them */
 /* columns: Prayers · Hymns · Music Number · Youth Speakers · Speakers —
    Hymns gets extra width (long titles), Music Number needs the least */
-.st-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .3rem; margin-top: .55rem; } /* 2026-09-13 — equal columns (was 1 / 1.45 / .7 / .925 / .925) */
+.st-row { display: grid; grid-template-columns: .8fr 1.55fr .95fr .85fr .85fr; gap: .3rem; margin-top: .55rem; } /* 2026-09-13 — prayers narrower, hymns get the room */
 .st {
   font-size: .74rem; font-weight: 600;
   padding: 0 .3rem .3rem; border-radius: 6px;
