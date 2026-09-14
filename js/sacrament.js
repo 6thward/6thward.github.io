@@ -2,13 +2,13 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789356516";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789356516";
+import { db } from "./firebase-init.js?v=1789356563";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789356563";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789356516";
-import { HYMNS } from "./hymns.js?v=1789356516";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789356563";
+import { HYMNS } from "./hymns.js?v=1789356563";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -2012,7 +2012,8 @@ function renderAgendaView(m, canEdit = false) {
     const breakAfter = it.kind === "invocation" ? `<div class="ag-head-break"></div>` : "";
     // sacrament hymn joins the blue administration band as one grouped block
     const dragIdx = canEdit && PROGRAM_KINDS.includes(it.kind) ? itemIdx : null;
-    return breakBefore + row(label, val, it.time || "", itemIdx, it.kind === "sacramentHymn" ? "ag-sac-hymn" : "", dragIdx) + extraBelow + breakAfter;
+    const rowCls = it.kind === "sacramentHymn" ? "ag-sac-hymn" : (it.kind === "musical" || it.kind === "choir") ? "ag-music" : "";
+    return breakBefore + row(label, val, it.time || "", itemIdx, rowCls, dragIdx) + extraBelow + breakAfter;
   }).join("");
   return `<div class="agenda-view" style="margin-top:.6rem">${head}${items}${m.notes ? row("Notes", esc(m.notes)) : ""}</div>`;
 }
