@@ -1030,3 +1030,10 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .mtg-date { font-weight: 700; font-size: .88rem; color: var(--brand); }
 .mtg-notes { white-space: pre-wrap; font-size: .92rem; line-height: 1.4; }
 @media (max-width: 650px) { .mtg-entry { grid-template-columns: 1fr auto; } .mtg-notes { grid-column: 1 / -1; } }
+
+/* Member Board: click-to-edit notes on the card (2026-09-13) */
+.board-note-edit { cursor: text; border-radius: 6px; padding: .1rem .25rem; margin-left: -.25rem; }
+.board-note-edit:hover { background: rgba(31,78,121,.06); }
+.board-note-empty { color: #b7bfcb; font-style: italic; }
+.board-note-ta { width: 100%; box-sizing: border-box; font: inherit; font-size: .88rem; line-height: 1.4; color: var(--ink); padding: .4rem .5rem; border: 1.5px solid var(--brand); border-radius: 8px; resize: none; margin-top: .15rem; background: #fff; }
+.board-note-ta:focus { outline: none; box-shadow: 0 0 0 3px var(--brand-soft); }

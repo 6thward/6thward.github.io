@@ -3,12 +3,12 @@
 // added, renamed, reordered and removed. Data:
 //   boardColumns/{id}  { label, order }
 //   board/{id}         { name, notes, column, order, createdAt, updatedAt }
-import { db } from "./firebase-init.js?v=1789347743";
-import { ctx, can } from "./app.js?v=1789347743";
+import { db } from "./firebase-init.js?v=1789347815";
+import { ctx, can } from "./app.js?v=1789347815";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789347743";
+import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789347815";
 
 const PALETTE = ["#1f4e79", "#5b4b9e", "#2e7d4f", "#a8720d", "#b3402f", "#0e7490", "#7a5a14", "#5b6675"];
 const DEFAULT_COLUMNS = ["Ideas", "Talking to", "Settled"];
@@ -80,7 +80,7 @@ function render() {
     return `
     <div class="list-row call-card call-card-v board-card" data-id="${k.id}" style="background:#fff;border:1px solid var(--line);border-left:5px solid ${colColor(cols.findIndex((c) => c.id === k.column))}">
       <div class="row-title">${esc(k.name || "—")}</div>
-      ${k.notes ? `<div class="row-sub board-note">${esc(k.notes)}</div>` : ""}
+      ${k.notes || editor ? `<div class="row-sub board-note${k.notes ? "" : " board-note-empty"}${editor ? " board-note-edit" : ""}" data-notes="1" title="${editor ? "Click to edit" : ""}">${k.notes ? esc(k.notes) : "+ notes"}</div>` : ""}
       <div class="todo-pills">${open.map((t) => todoPill(k, t)).join("")}${editor ? `<span class="todo-pill todo-add-pill" data-addtodo="1" title="Add a to-do with a date">+ to-do</span>` : ""}</div>
       <div class="mtg-row">${meetingsPill(k, editor)}</div>
     </div>`;
@@ -112,6 +112,8 @@ function render() {
       if (pill) { e.stopPropagation(); const t = (k.todos || []).find((x) => x.id === pill.dataset.todo); if (t) editTodo(k, t); return; }
       const mp = e.target.closest(".mtg-pill");
       if (mp) { e.stopPropagation(); openMeetings(k); return; }
+      const note = e.target.closest(".board-note");
+      if (note && editor) { e.stopPropagation(); inlineNotes(row, k, note); return; }
       editCard(k);
     });
   });
@@ -245,6 +247,40 @@ function wireTodoList(el, k) {
   };
   inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); add(); } });
   inp.addEventListener("blur", () => { if (inp.value.trim()) add(); });
+}
+
+// Click the notes on a card → edit them right there. Blur or ⌘/Ctrl+Enter
+// saves, Esc cancels. The textarea grows with the text.
+function inlineNotes(row, k, noteEl) {
+  if (row.querySelector("textarea.board-note-ta")) return;
+  const ta = document.createElement("textarea");
+  ta.className = "board-note-ta";
+  ta.value = k.notes || "";
+  ta.placeholder = "Notes about this person…";
+  noteEl.replaceWith(ta);
+  const grow = () => { ta.style.height = "auto"; ta.style.height = Math.max(48, ta.scrollHeight + 2) + "px"; };
+  grow();
+  ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+  row.draggable = false; // don't start a card drag while typing
+  let done = false;
+  const finish = async (save) => {
+    if (done) return; done = true;
+    row.draggable = true;
+    const val = ta.value.trim();
+    if (save && val !== (k.notes || "")) {
+      try { await updateDoc(doc(db, "board", k.id), { notes: val, updatedAt: serverTimestamp() }); k.notes = val; toast("Saved"); }
+      catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
+    }
+    render();
+  };
+  ta.addEventListener("input", grow);
+  ta.addEventListener("click", (e) => e.stopPropagation());
+  ta.addEventListener("mousedown", (e) => e.stopPropagation());
+  ta.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { e.preventDefault(); finish(false); }
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); finish(true); }
+  });
+  ta.addEventListener("blur", () => setTimeout(() => finish(true), 80));
 }
 
 // Quick add straight from the card: title + deadline (+ optional notes).
