@@ -6,12 +6,12 @@
 //   meetings/{date}.hbSkip[]      ids marked "at church" that Sunday
 //   meetings/{date}.hbOn          true once attendance is being tracked
 // The 🏠 button on each Sunday's card still assigns who takes it.
-import { db } from "./firebase-init.js?v=1789345645";
-import { ctx, can } from "./app.js?v=1789345645";
+import { db } from "./firebase-init.js?v=1789345699";
+import { ctx, can } from "./app.js?v=1789345699";
 import {
   doc, getDoc, setDoc, updateDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789345645";
+import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789345699";
 
 let people = [];
 let date = "";          // selected Sunday, YYYY-MM-DD
@@ -90,7 +90,7 @@ function render() {
     <div class="card">
       <h3 style="margin:0 0 .2rem;display:flex;align-items:center;gap:.5rem">Take the sacrament to <span class="pill ${need.length ? "pill-overdue" : "pill-done"}">${need.length}</span>
         <span class="row-sub" style="font-weight:400;margin-left:auto">${atChurch.length} at church · ${people.length} on the list</span></h3>
-      <p class="row-sub" style="margin:0 0 .6rem">Red rows need a visit this Sunday.${editor ? " Tap At church when someone makes it." : ""}</p>
+      <p class="row-sub" style="margin:0 0 .6rem">Everyone needs the sacrament unless marked at church.${editor ? " Click “At church?” when someone makes it." : ""}</p>
       <div class="hs-list">
         ${people.map((p) => {
           const here = skip.has(p.id);
@@ -102,7 +102,7 @@ function render() {
             </div>
             <div class="hs-status">
               ${editor
-                ? `<button class="hs-tog${here ? "" : " on"}" data-set="need" type="button">Needs sacrament</button><button class="hs-tog${here ? " on" : ""}" data-set="here" type="button">At church ✓</button>`
+                ? `<button class="hs-here-btn${here ? " on" : ""}" type="button" title="${here ? "Marked at church — click to undo" : "Click if they made it to church this Sunday"}">${here ? "✓ At church" : "At church?"}</button>`
                 : `<span class="pill ${here ? "pill-done" : "pill-overdue"}">${here ? "At church" : "Needs sacrament"}</span>`}
               ${editor ? `<button class="btn btn-sm hs-edit" title="Edit name / address">✎</button>` : ""}
             </div>
@@ -115,7 +115,7 @@ function render() {
   if (!editor) return;
   body.querySelectorAll(".hs-row").forEach((row) => {
     const p = people.find((x) => x.id === row.dataset.id);
-    row.querySelectorAll(".hs-tog").forEach((b) => b.addEventListener("click", () => setStatus(p, b.dataset.set === "here")));
+    row.querySelector(".hs-here-btn").addEventListener("click", () => setStatus(p, !skip.has(p.id))); // one toggle: default = needs the sacrament
     row.querySelector(".hs-edit").addEventListener("click", () => editPerson(p));
   });
 }

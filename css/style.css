@@ -939,3 +939,8 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .st.st-drag .st-name { display:inline-flex; align-items:center; gap:.3rem; background:rgba(255,255,255,.62); border:1px solid rgba(31,39,51,.12); border-radius:99px; padding:.15rem .6rem; }
 .st.st-drag:hover .st-name { border-color:rgba(31,78,121,.45); box-shadow:0 2px 6px rgba(20,30,45,.12); }
 .st-drop-ok.st-line, .st-drop-ok .st-name { border-style:dashed !important; border-color:rgba(31,78,121,.5) !important; }
+
+/* Home Sacrament: single "At church" toggle (2026-09-13) */
+.hs-here-btn { font:inherit; font-size:.82rem; font-weight:700; padding:.32rem .75rem; border-radius:99px; border:1.5px solid var(--line); background:#fff; color:var(--ink-soft); cursor:pointer; white-space:nowrap; }
+.hs-here-btn:hover { border-color:var(--ok); color:var(--ok); }
+.hs-here-btn.on { background:#e3f2e8; color:var(--ok); border-color:#b9dcc6; }
