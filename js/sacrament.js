@@ -2,13 +2,13 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789344449";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789344449";
+import { db } from "./firebase-init.js?v=1789344771";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789344771";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789344449";
-import { HYMNS } from "./hymns.js?v=1789344449";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789344771";
+import { HYMNS } from "./hymns.js?v=1789344771";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -123,6 +123,75 @@ const KINDS = {
 };
 
 const HYMN_KINDS = ["openingHymn", "sacramentHymn", "intermediateHymn", "closingHymn"];
+
+// ---- drag assignments between Sundays (2026-09-13) ----
+// A prayer, speaker or musical number line on a card can be dragged onto the
+// same kind of slot on any other card (or another slot on the same card).
+// The two slots SWAP their assignment — so a week never gains or loses a
+// slot, and dropping onto an empty slot is simply a move.
+const DRAG_KINDS = new Set(["invocation", "benediction", "primarySpeaker", "youthSpeaker", "speaker", "musical", "choir"]);
+const DRAG_CAT = (k) => (k === "invocation" || k === "benediction") ? "prayer"
+  : (k === "primarySpeaker" || k === "youthSpeaker" || k === "speaker") ? "speaker"
+  : k; // musical, choir stand alone
+const DRAG_FIELDS = {
+  prayer: ["name", "org", "confirmed", "confirmedBy"],
+  speaker: ["name", "topic", "confirmed", "confirmedBy", "none"],
+  musical: ["who", "hymn", "accompanist", "confirmed", "confirmedBy"],
+  choir: ["hymn", "accompanist", "confirmed", "confirmedBy"],
+};
+async function swapAssignments(a, b) { // a,b = { date, k, o }
+  const fields = DRAG_FIELDS[DRAG_CAT(a.k)];
+  const snapshot = (m, t) => { const it = nthItem(m.items, t.k, t.o); const out = {}; fields.forEach((f) => { out[f] = it ? it[f] : undefined; }); return out; };
+  const apply = (m, t, vals) => { const it = nthItem(m.items, t.k, t.o); if (!it) return; fields.forEach((f) => { if (vals[f] === undefined) delete it[f]; else it[f] = vals[f]; }); };
+  const modelFor = (date) => {
+    const cur = meetings[date];
+    return cur ? JSON.parse(JSON.stringify(cur)) : { items: itemsFor(null, date) };
+  };
+  const ma = modelFor(a.date), mb = a.date === b.date ? ma : modelFor(b.date);
+  const va = snapshot(ma, a), vb = snapshot(mb, b);
+  if (a.date === b.date) {
+    await patchMeeting(a.date, (m) => { apply(m, a, vb); apply(m, b, va); });
+  } else {
+    await patchMeeting(a.date, (m) => apply(m, a, vb));
+    await patchMeeting(b.date, (m) => apply(m, b, va));
+  }
+}
+function wireCardDrag(wrap) {
+  let src = null;
+  const nodes = wrap.querySelectorAll("[data-drag]");
+  const clear = () => wrap.querySelectorAll(".st-drop-ok, .st-drop-over").forEach((n) => n.classList.remove("st-drop-ok", "st-drop-over"));
+  const info = (n) => { const d = JSON.parse(n.dataset.drag); return { date: n.closest("[data-date]").dataset.date, k: d.k, o: d.o }; };
+  const compatible = (t) => src && DRAG_CAT(t.k) === DRAG_CAT(src.k) && (DRAG_CAT(t.k) !== "musical" && DRAG_CAT(t.k) !== "choir" || t.k === src.k);
+  nodes.forEach((n) => {
+    n.addEventListener("dragstart", (e) => {
+      src = info(n);
+      e.dataTransfer.effectAllowed = "move";
+      try { e.dataTransfer.setData("text/plain", ""); } catch {}
+      n.classList.add("st-dragging");
+      // light up every slot this can land on
+      nodes.forEach((t) => { if (t !== n && compatible(info(t))) t.classList.add("st-drop-ok"); });
+    });
+    n.addEventListener("dragend", () => { src = null; clear(); n.classList.remove("st-dragging"); });
+    n.addEventListener("dragover", (e) => {
+      if (!src) return;
+      const t = info(n);
+      if (!compatible(t) || (t.date === src.date && t.k === src.k && t.o === src.o)) return;
+      e.preventDefault(); e.stopPropagation();
+      wrap.querySelectorAll(".st-drop-over").forEach((x) => x.classList.remove("st-drop-over"));
+      n.classList.add("st-drop-over");
+    });
+    n.addEventListener("dragleave", () => n.classList.remove("st-drop-over"));
+    n.addEventListener("drop", async (e) => {
+      if (!src) return;
+      const t = info(n);
+      e.preventDefault(); e.stopPropagation();
+      const ok = compatible(t) && !(t.date === src.date && t.k === src.k && t.o === src.o); // check BEFORE clearing src
+      const from = src; src = null; clear();
+      if (!ok) return;
+      await swapAssignments(from, t);
+    });
+  });
+}
 // compact labels for the table's Type column
 const SHORT_TYPE = {
   sacrament: "—", fast: "Fast & Testimony", conference: "Gen. Conference",
@@ -556,7 +625,8 @@ function statusChips(m, date) {
     const orgBadge = org ? `<span class="st-org org-${org.toLowerCase().replace(/[^a-z]+/g, "-")}" title="${esc(org)}">${esc(ORG_ABBR[org] || org)}</span>` : "";
     const subLine = hasName && sub ? `<span class="st-sub">${esc(sub)}</span>` : "";
     // icon rides with the name (not the headline) so the title centers cleanly
-    return `<span class="st ${cls}${clickable ? " st-click" : ""}"${clickable ? ` data-qe='${JSON.stringify(qe)}'` : ""}${title ? ` title="${esc(title)}"` : ""}><span class="st-head">${label}</span>${hasName ? `<span class="st-name">${iconHtml} ${esc(name)}</span>` : ""}${subLine}${orgBadge}</span>`;
+    const dragAttr = can && confirmTarget && (confirmTarget.k === "musical" || confirmTarget.k === "choir") ? ` draggable="true" data-drag='${JSON.stringify({ k: confirmTarget.k, o: 0 })}'` : "";
+    return `<span class="st ${cls}${clickable ? " st-click" : ""}${dragAttr ? " st-drag" : ""}"${clickable ? ` data-qe='${JSON.stringify(qe)}'` : ""}${title ? ` title="${esc(title)}"` : ""}${dragAttr}><span class="st-head">${label}</span>${hasName ? `<span class="st-name">${iconHtml} ${esc(name)}</span>` : ""}${subLine}${orgBadge}</span>`;
   };
 
   // Hymns pill counts only actual hymn slots; the musical/choir slot gets its own pill
@@ -583,7 +653,8 @@ function statusChips(m, date) {
     const body = lines.map((l) => {
       if (l.none) {
         const editAttr = l.inlineEdit && can ? ` data-ed='${JSON.stringify(l.inlineEdit)}' title="Click to type here"` : "";
-        return `<span class="st-line"${editAttr}><span class="st-li-ic"></span><span class="st-li-tag">${esc(l.tag)}:</span> <span class="st-li-name st-none">none</span></span>`;
+        const dragAttrN = can && l.k && DRAG_KINDS.has(l.k) ? ` draggable="true" data-drag='${JSON.stringify({ k: l.k, o: l.o })}'` : "";
+        return `<span class="st-line${dragAttrN ? " st-drag" : ""}"${editAttr}${dragAttrN}><span class="st-li-ic"></span><span class="st-li-tag">${esc(l.tag)}:</span> <span class="st-li-name st-none">none</span></span>`;
       }
       // "light" lines (hymns) skip the icon column entirely — left-flush
       // tags and wrapping names buy room for long hymn titles
@@ -597,7 +668,9 @@ function statusChips(m, date) {
       const orgTag = l.org ? ` <span class="st-li-org">${esc(ORG_ABBR[l.org] || l.org)}</span>` : "";
       // inlineEdit lines edit in place on click instead of opening the popup
       const editAttr = l.inlineEdit && can ? ` data-ed='${JSON.stringify(l.inlineEdit)}' title="Click to type here"` : "";
-      return `<span class="st-line${l.light ? " st-line-light" : ""}"${editAttr}>${dot}<span class="st-li-tag">${esc(l.tag)}:</span> <span class="st-li-name${l.light ? " st-li-light" : ""}">${l.name ? esc(l.name) : "—"}</span>${orgTag}</span>`;
+      // 2026-09-13 — assignment lines are draggable between Sundays (and slots): drop on a like slot to swap
+      const dragAttr = can && l.k && DRAG_KINDS.has(l.k) ? ` draggable="true" data-drag='${JSON.stringify({ k: l.k, o: l.o })}'` : "";
+      return `<span class="st-line${l.light ? " st-line-light" : ""}${dragAttr ? " st-drag" : ""}"${editAttr}${dragAttr}>${dot}<span class="st-li-tag">${esc(l.tag)}:</span> <span class="st-li-name${l.light ? " st-li-light" : ""}">${l.name ? esc(l.name) : "—"}</span>${orgTag}</span>`;
     }).join("");
     // no icon in the headline — the title stays cleanly centered; state
     // lives in the pill color and the per-line marks
@@ -781,6 +854,7 @@ function renderCards(wrap) {
     </div>`;
   }).join("") + musicDatalists() + hymnDatalists();
 
+  if (canEdit) wireCardDrag(wrap); // drag a prayer / speaker / musical number to another Sunday's slot to swap
   wrap.querySelectorAll("[data-edit]").forEach((b) =>
     b.addEventListener("click", (e) => { e.stopPropagation(); editMeeting(b.dataset.edit); }));
   wrap.querySelectorAll("[data-view]").forEach((b) =>

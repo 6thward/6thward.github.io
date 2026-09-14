@@ -1,22 +1,22 @@
 // Bishopric tab (bishopric+): the callings flow.
 //   1. Callings to Fill — names under consideration; mark the settled name
 //   2. Call issued & accepted — awaiting sustaining and setting apart
-//   3. Sustained & set apart — waiting on the membership clerk to record it
+//   3. Sustained & set apart — waiting to be updated in MLS (two clicks: set apart, then MLS → complete)
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1789344449";
+import { db } from "./firebase-init.js?v=1789344771";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789344449";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789344771";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
   ["issue", "Calls to Issue"],
   ["sustain", "Calls to Sustain"],
-  ["apart", "Set Apart"],
+  ["apart", "Set Apart & MLS"],
   ["done", "Complete"],
 ];
 const REL_STAGES = [
@@ -198,10 +198,10 @@ const apartRow = (c) => `
     <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}</div>
     <div class="row-title">${esc(c.decided || "—")}</div>
     ${c.setApart
-      ? `${stampLine("Set apart", c.stamps?.setApartDone)}<div class="row-sub">Waiting for the clerk to record it</div>`
-      : stampLine("Sustained", c.stamps?.apart)}
+      ? `${stampLine("Set apart", c.stamps?.setApartDone)}<div class="row-sub">Step 2 of 2 — waiting to be updated in MLS</div>`
+      : `${stampLine("Sustained", c.stamps?.apart)}<div class="row-sub">Step 1 of 2 — set apart</div>`}
     <div class="call-card-actions">${c.setApart
-      ? `<button class="btn btn-sm" data-adv="done" type="button">Clerk updated ✓</button>`
+      ? `<button class="btn btn-sm btn-primary" data-adv="done" type="button" title="Recorded in MLS — completes and archives this calling">Updated in MLS ✓</button>`
       : `<button class="btn btn-sm" data-setapart="1" type="button">Set apart ✓</button>`}</div>
   </div>`;
 
@@ -264,7 +264,7 @@ function render() {
       by("issue").map(issueRow), "No calls waiting to be issued.", "issue") +
     bucket("Calls to Sustain", "Accepted — present for sustaining.",
       by("sustain").map(sustainRow), "No one waiting to be sustained.", "sustain") +
-    bucket("Set Apart", "Set apart, then the clerk records it.",
+    bucket("Set Apart & MLS", "Click once when set apart, again when updated in MLS — that completes and archives it.",
       by("apart").map(apartRow), "No one waiting to be set apart.", "apart") +
     `</div>` +
     bucket("Releases", "Decided → notified → released → recorded by the clerk.",
