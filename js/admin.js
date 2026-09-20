@@ -15,13 +15,13 @@
 // whose profile doc carries `alias: <googleUid>` plus a mirror of the name /
 // organization / calling / pages, so the rules see the same access either
 // way. The table shows one row; the mirror is kept in step on every save.
-import { db } from "./firebase-init.js?v=1789882689";
-import { ctx, AREAS, normalizePerms } from "./app.js?v=1789882689";
+import { db } from "./firebase-init.js?v=1789882784";
+import { ctx, AREAS, normalizePerms } from "./app.js?v=1789882784";
 import {
   collection, onSnapshot, updateDoc, setDoc, deleteDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1789882689";
-import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1789882689";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1789882784";
+import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1789882784";
 
 let users = [];   // profiles (alias PIN docs are folded into their Google row)
 let aliasPins = {}; // googleUid -> the PIN profile doc that aliases it
@@ -30,6 +30,9 @@ let pins = {};          // uid -> pin (bishop-only collection)
 let started = false;
 
 const APP_URL = "https://6thward.github.io/";
+// "Last used" is the bishop's eyes only (2026-09-19) — helpers with the Users page don't see it
+const BISHOP_EMAIL = "jordanchri@gmail.com";
+const showLastUsed = () => (ctx.email || "").toLowerCase() === BISHOP_EMAIL;
 
 export function initAdmin() {
   if (started) return;
@@ -46,7 +49,7 @@ export function initAdmin() {
     <div class="card">
       <div class="us-wrap">
         <table class="simple us-table" id="users-table">
-          <thead><tr><th>Name</th><th>Organization</th><th>Calling</th><th>Access</th><th>Last used</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Organization</th><th>Calling</th><th>Access</th>${showLastUsed() ? "<th>Last used</th>" : ""}<th></th></tr></thead>
           <tbody id="user-rows"></tbody>
         </table>
       </div>
@@ -116,7 +119,7 @@ function render() {
     const rank = (u) => (u.role === "pending" ? 0 : u.invite ? 1 : u.revoked ? 3 : 2);
     return rank(a) - rank(b) || (a.name || a.email || "").localeCompare(b.name || b.email || "");
   });
-  if (!rows.length) { tbody.innerHTML = `<tr><td colspan="6" class="empty-note">Nobody yet — use “+ Add user”.</td></tr>`; return; }
+  if (!rows.length) { tbody.innerHTML = `<tr><td colspan="${showLastUsed() ? 6 : 5}" class="empty-note">Nobody yet — use “+ Add user”.</td></tr>`; return; }
   tbody.innerHTML = rows.map((u) => {
     const id = u.invite ? "inv:" + u.email : u.uid;
     const me = u.uid === ctx.uid;
@@ -126,7 +129,7 @@ function render() {
       <td>${esc(u.organization || "")}</td>
       <td>${esc(u.calling || "")}</td>
       <td class="us-access"><div class="us-pills">${u.revoked ? `<span class="pill pill-muted">—</span>` : accessPills(permsOf(u))}</div></td>
-      <td>${u.invite ? `<span class="row-sub">invited ${fmtSeen(u.invitedAt).replace(/<[^>]+>/g, "")}</span>` : fmtSeen(latestSeen(u))}</td>
+      ${showLastUsed() ? `<td>${u.invite ? `<span class="row-sub">invited ${fmtSeen(u.invitedAt).replace(/<[^>]+>/g, "")}</span>` : fmtSeen(latestSeen(u))}</td>` : ""}
       <td class="us-actions">
         ${isBishopUser(u) && !me ? "" : ""}
         <button class="btn btn-sm" data-edit="${esc(id)}">${u.role === "pending" ? "Give access" : "Edit"}</button>
