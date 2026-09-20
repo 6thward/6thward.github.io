@@ -1184,3 +1184,10 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 /* "+ baby" is rare — a quiet text link after Edit, not a button (2026-09-14) */
 .st-baby-btn { opacity: .55; font-weight: 500; font-size: .8rem; padding: .3rem .35rem; }
 .st-baby-btn:hover { opacity: 1; background: transparent; text-decoration: underline; }
+
+/* Printed program (2026-09-19): settings logo row + generate-dialog options */
+.pg-logo-row { display:flex; align-items:center; gap:.8rem; margin:.5rem 0 .2rem; }
+.pg-logo-thumb { width:3.2rem; height:3.2rem; object-fit:contain; border:1px solid var(--line); border-radius:8px; background:#fff; padding:.15rem; }
+.pg-opts { display:flex; flex-direction:column; gap:.35rem; }
+.pg-opt { display:flex; align-items:center; gap:.5rem; font-size:.92rem; }
+.pg-opt input { width:1rem; height:1rem; }

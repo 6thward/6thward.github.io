@@ -2,13 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789366464";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789366464";
+import { db } from "./firebase-init.js?v=1789880695";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789880695";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789366464";
-import { HYMNS } from "./hymns.js?v=1789366464";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789880695";
+import { HYMNS } from "./hymns.js?v=1789880695";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog } from "./program.js?v=1789880695";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -460,6 +461,7 @@ async function loadBishopric() {
       await setDoc(doc(db, "settings", "leadership"), { bishopric: DEFAULT_BISHOPRIC, priests: [], organists: [], conductors: [] });
     }
   } catch { /* keep defaults */ }
+  await loadProgramSettings(); // printed-program logo + ward/stake names (2026-09-19)
   // live: the roster is edited on the Home Sacrament tab, so keep the 🏠 button in step (2026-09-13)
   if (!hbUnsub) {
     try {
@@ -481,6 +483,7 @@ function editBishopric() {
     <div class="mtg-sec-title">Sacrament meeting time</div>
     <p class="row-sub" style="margin:0 0 .5rem">When a call is moved to “Calls to Sustain” on a Sunday, it goes on <b>this</b> Sunday's Ward Business if the meeting hasn't started yet, otherwise on <b>next</b> Sunday's.</p>
     <div class="speaker-row"><input type="time" id="set-mtime" value="${esc(meetingTime)}" style="flex:0 0 9rem"><span class="row-sub">${meetingTime ? "" : "Not set — sustainings always go on the coming Sunday, even after the meeting."}</span></div>
+    ${programSettingsSection()}
     <div class="mtg-sec-title" style="margin-top:1.1rem">Bishopric</div>
     <p class="row-sub" style="margin:0 0 .5rem">These names fill the Presiding and Conducting dropdowns.</p>
     <div id="bp-rows">${nameRows("bp-name", bishopric)}</div>
@@ -524,6 +527,7 @@ function editBishopric() {
   el.querySelector("#pr-add").addEventListener("click", () => addRow("#pr-rows", "pr-name"));
   el.querySelector("#org-add").addEventListener("click", () => addRow("#org-rows", "org-name"));
   el.querySelector("#cond-add").addEventListener("click", () => addRow("#cond-rows", "cond-name"));
+  const saveProgram = wireProgramSettings(el);
   el.querySelector("#ch-add").addEventListener("click", () => el.querySelector("#ch-rows").insertAdjacentHTML("beforeend", `
       <div class="speaker-row">
         <input class="ch-num" placeholder="#" inputmode="numeric" style="flex:0 0 5rem">
@@ -546,6 +550,7 @@ function editBishopric() {
     // homebound roster is managed on the Home Sacrament tab (moved out of Settings 2026-09-13)
     const mtime = el.querySelector("#set-mtime").value || "";
     try {
+      await saveProgram();
       // merge: the hymn-approvals manager keeps blockedHymns/sacramentApproved on this same doc (2026-09-13)
       await setDoc(doc(db, "settings", "leadership"),
         { bishopric: names, priests: priestNames, organists: organistNames, conductors: conductorNames, customHymns: hymnRows, meetingTime: mtime }, { merge: true });
@@ -974,6 +979,7 @@ function renderCards(wrap) {
         </div>
         <div style="display:flex;gap:.4rem">
           ${planned || isConf ? `<button class="btn btn-sm" data-view="${date}">View</button>` : ""}
+          ${planned && !isConf ? `<button class="btn btn-sm" data-program="${date}" title="Build the printed program">Program</button>` : ""}
           ${canEdit ? `<button class="btn btn-sm" data-edit="${date}">${planned ? "Edit" : "Plan"}</button>` : ""}
           ${canEdit && !isConf ? `<button class="btn btn-sm btn-ghost st-baby-btn" data-addbaby="${date}" title="Add a baby blessing">+ baby</button>` : ""}
         </div>
@@ -1007,6 +1013,8 @@ function renderCards(wrap) {
     b.addEventListener("click", (e) => { e.stopPropagation(); editMeeting(b.dataset.edit); }));
   wrap.querySelectorAll("[data-view]").forEach((b) =>
     b.addEventListener("click", (e) => { e.stopPropagation(); viewMeeting(b.dataset.view); }));
+  wrap.querySelectorAll("[data-program]").forEach((b) =>
+    b.addEventListener("click", (e) => { e.stopPropagation(); openProgram(b.dataset.program); }));
   wrap.querySelectorAll("[data-wbicon]").forEach((el) =>
     el.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -1914,6 +1922,16 @@ function hbModal(date) {
 }
 
 // ===== View modal =====
+// Printed two-up program for one Sunday (2026-09-19) — see program.js
+export function programCtx(date) {
+  const labels = Object.fromEntries(Object.entries(KINDS).map(([k, v]) => [k, v.label]));
+  return { m: meetings[date], date, labels, fmtDate: (d) => new Date(d + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) };
+}
+function openProgram(date) {
+  if (!meetings[date]) return toast("Plan this Sunday first");
+  openProgramDialog(programCtx(date));
+}
+
 function viewMeeting(date) {
   const m = meetings[date];
   const canEdit = canDo("sacrament", "edit");
@@ -1926,7 +1944,7 @@ function viewMeeting(date) {
       ${m.theme ? `<div class="theme-tag" style="margin-top:.2rem">“${esc(m.theme)}”</div>` : ""}</h3>
     <div id="ag-wrap">${renderAgendaView(m, canEdit)}</div>
     <div class="modal-actions">
-      <button class="btn" id="vw-print" title="Print or save as PDF">🖨 Print</button>
+      <div style="display:flex;gap:.4rem"><button class="btn" id="vw-print" title="Print or save as PDF">🖨 Print</button><button class="btn" id="vw-program" title="Two-up printed program">Program</button></div>
       <div class="right">
         <button class="btn" id="vw-close">Close</button>
         ${canEdit ? `<button class="btn btn-primary" id="vw-edit">Edit</button>` : ""}
@@ -1934,6 +1952,7 @@ function viewMeeting(date) {
     </div>`);
   el.querySelector("#vw-close").addEventListener("click", closeModal);
   el.querySelector("#vw-edit")?.addEventListener("click", () => { closeModal(); editMeeting(date); });
+  el.querySelector("#vw-program").addEventListener("click", () => { closeModal(); openProgram(date); });
   // Print: swap in a clean print-only copy of the agenda and open the system
   // print dialog (which includes Save as PDF)
   el.querySelector("#vw-print").addEventListener("click", () => {
