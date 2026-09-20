@@ -10,15 +10,21 @@
 //     sign-in claims the invite and creates their profile. (role = 'user')
 // Older Google profiles with role bishopric/member keep working; the first
 // time their access is edited here they become explicit per-page grants.
-import { db } from "./firebase-init.js?v=1789882284";
-import { ctx, AREAS, normalizePerms } from "./app.js?v=1789882284";
+//
+// A Google user can ALSO have a PIN (2026-09-19): a second hidden account
+// whose profile doc carries `alias: <googleUid>` plus a mirror of the name /
+// organization / calling / pages, so the rules see the same access either
+// way. The table shows one row; the mirror is kept in step on every save.
+import { db } from "./firebase-init.js?v=1789882543";
+import { ctx, AREAS, normalizePerms } from "./app.js?v=1789882543";
 import {
   collection, onSnapshot, updateDoc, setDoc, deleteDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1789882284";
-import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1789882284";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1789882543";
+import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1789882543";
 
-let users = [];
+let users = [];   // profiles (alias PIN docs are folded into their Google row)
+let aliasPins = {}; // googleUid -> the PIN profile doc that aliases it
 let invites = [];
 let pins = {};          // uid -> pin (bishop-only collection)
 let started = false;
@@ -48,7 +54,10 @@ export function initAdmin() {
   panel.querySelector("#btn-new-user").addEventListener("click", () => editUser(null));
 
   onSnapshot(collection(db, "users"), (qs) => {
-    users = qs.docs.map((d) => ({ uid: d.id, ...d.data() }));
+    const all = qs.docs.map((d) => ({ uid: d.id, ...d.data() }));
+    aliasPins = {};
+    all.filter((u) => u.alias).forEach((u) => { aliasPins[u.alias] = u; });
+    users = all.filter((u) => !u.alias);
     render();
   });
   onSnapshot(collection(db, "invites"), (qs) => {
@@ -77,6 +86,12 @@ const accessPills = (perms) => {
   if (on.length === AREAS.length) return `<span class="pill pill-ok">All pages</span>`;
   return on.map((a) => `<span class="pill us-pill">${esc(a.label)}</span>`).join(" ");
 };
+// a Google user with a PIN has two sign-in docs — show whichever was used last
+function latestSeen(u) {
+  const a = u.lastSeen, b = aliasPins[u.uid]?.lastSeen;
+  const t = (x) => (x?.toDate?.() || (x ? new Date(x) : null))?.getTime() || 0;
+  return t(b) > t(a) ? b : a;
+}
 function fmtSeen(ts) {
   const d = ts?.toDate?.() || (ts ? new Date(ts) : null);
   if (!d || isNaN(d)) return `<span class="row-sub">never</span>`;
@@ -89,7 +104,8 @@ function signInPill(u) {
   if (u.revoked) return `<span class="pill pill-danger">revoked</span>`;
   if (u.role === "pending") return `<span class="pill pill-pending" title="Signed in with Google but hasn't been given any pages">waiting</span>`;
   if (u.role === "pin") return `<span class="pill pill-muted" title="Signs in with a PIN">PIN ${esc(pins[u.uid] || "")}</span>`;
-  return `<span class="pill pill-muted" title="${esc(u.email || "")}">Google</span>`;
+  const ap = aliasPins[u.uid];
+  return `<span class="pill pill-muted" title="${esc(u.email || "")}">Google</span>${ap ? ` <span class="pill pill-muted" title="Also signs in with a PIN">PIN ${esc(pins[ap.uid] || "")}</span>` : ""}`;
 }
 
 function render() {
@@ -110,11 +126,11 @@ function render() {
       <td>${esc(u.organization || "")}</td>
       <td>${esc(u.calling || "")}</td>
       <td class="us-access"><div class="us-pills">${u.revoked ? `<span class="pill pill-muted">—</span>` : accessPills(permsOf(u))}</div></td>
-      <td>${u.invite ? `<span class="row-sub">invited ${fmtSeen(u.invitedAt).replace(/<[^>]+>/g, "")}</span>` : fmtSeen(u.lastSeen)}</td>
+      <td>${u.invite ? `<span class="row-sub">invited ${fmtSeen(u.invitedAt).replace(/<[^>]+>/g, "")}</span>` : fmtSeen(latestSeen(u))}</td>
       <td class="us-actions">
         ${isBishopUser(u) && !me ? "" : ""}
         <button class="btn btn-sm" data-edit="${esc(id)}">${u.role === "pending" ? "Give access" : "Edit"}</button>
-        ${u.invite || u.role === "pin" ? `<button class="btn btn-sm" data-invite="${esc(id)}" title="Copy the invitation message">✉</button>` : ""}
+        ${u.invite || u.role === "pin" || aliasPins[u.uid] ? `<button class="btn btn-sm" data-invite="${esc(id)}" title="Copy the invitation message">✉</button>` : ""}
         ${u.invite ? `<button class="btn btn-sm btn-ghost btn-danger" data-cancel="${esc(id)}">Cancel</button>`
           : isBishopUser(u) ? ""
           : u.revoked ? `<button class="btn btn-sm" data-restore="${esc(id)}">Restore</button><button class="btn btn-sm btn-ghost btn-danger" data-remove="${esc(id)}">Remove</button>`
@@ -137,7 +153,8 @@ function editUser(u) {
   const perms = u ? permsOf(u) : normalizePerms({});
   const method = isNew ? "pin" : u.invite || u.role !== "pin" ? "google" : "pin";
   const bishop = u && isBishopUser(u);
-  const pin = isNew ? randomPin() : (u.role === "pin" ? pins[u.uid] || "" : "");
+  const ap = !isNew && !u.invite && u.role !== "pin" ? aliasPins[u.uid] : null; // Google user's PIN doc, if any
+  const pin = isNew ? randomPin() : (u.role === "pin" ? pins[u.uid] || "" : ap ? pins[ap.uid] || "" : "");
   const el = openModal(`
     <h3>${isNew ? "Add a user" : "Edit " + esc(u.name || u.email || "user")}</h3>
     <div class="form-grid">
@@ -159,7 +176,12 @@ function editUser(u) {
       <label class="field"><span>PIN</span>
         <div style="display:flex;gap:.5rem;align-items:center"><input id="uu-pin" class="pin-code-input" value="${esc(pin)}" readonly><button class="btn btn-sm" type="button" id="uu-changepin">Change PIN…</button></div>
       </label>` : `
-      <label class="field"><span>Google email</span><input value="${esc(u.email || "")}" readonly></label>`}
+      <label class="field"><span>Google email</span><input value="${esc(u.email || "")}" readonly></label>
+      ${u.invite ? "" : `<div class="field"><span>PIN <span class="row-sub">(optional — a second way in, same pages)</span></span>
+        ${ap
+          ? `<div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap"><input id="uu-pin" class="pin-code-input" value="${esc(pin)}" readonly><button class="btn btn-sm" type="button" id="uu-changepin">Change PIN…</button><button class="btn btn-sm btn-ghost btn-danger" type="button" id="uu-droppin">Remove PIN</button></div>`
+          : `<div id="uu-pin-wrap"><button class="btn btn-sm" type="button" id="uu-setpin">Set a PIN…</button></div>`}
+      </div>`}`}
     </div>
     <datalist id="dl-orgs">${["Bishopric", "Ward Clerk", "Executive Secretary", "Relief Society", "Elders Quorum", "Primary", "Young Women", "Young Men", "Sunday School", "Music", "Missionary", "Temple & Family History"].map((o) => `<option value="${o}">`).join("")}</datalist>
     <h4 style="margin:1rem 0 .3rem">Pages they can open</h4>
@@ -176,7 +198,19 @@ function editUser(u) {
     </div>`);
   el.querySelector("#uu-cancel").addEventListener("click", closeModal);
   el.querySelector("#uu-shuffle")?.addEventListener("click", () => { el.querySelector("#uu-pin").value = randomPin(); });
-  el.querySelector("#uu-changepin")?.addEventListener("click", () => changePin(u));
+  el.querySelector("#uu-changepin")?.addEventListener("click", () => changePin(ap || u));
+  let newAliasPin = null; // Google user: PIN to create on save
+  el.querySelector("#uu-setpin")?.addEventListener("click", () => {
+    newAliasPin = randomPin();
+    el.querySelector("#uu-pin-wrap").innerHTML = `<div style="display:flex;gap:.5rem;align-items:center"><input id="uu-pin" class="pin-code-input" value="${esc(newAliasPin)}" inputmode="numeric" maxlength="6" autocomplete="off"><button class="btn btn-sm" type="button" id="uu-shuffle2" title="Pick another random PIN">🎲</button><span class="row-sub">saves with this form</span></div>`;
+    el.querySelector("#uu-shuffle2").addEventListener("click", () => { el.querySelector("#uu-pin").value = randomPin(); });
+    el.querySelector("#uu-pin").addEventListener("input", () => { newAliasPin = el.querySelector("#uu-pin").value.trim(); });
+  });
+  el.querySelector("#uu-droppin")?.addEventListener("click", async () => {
+    if (!confirm(`Remove ${u.name || "their"} PIN? Google sign-in keeps working.`)) return;
+    try { await removeAliasPin(ap); toast("PIN removed"); closeModal(); editUser(users.find((x) => x.uid === u.uid) || u); }
+    catch (err) { showErr(err.message || err.code || String(err)); }
+  });
   el.querySelector("#uu-all")?.addEventListener("click", () => el.querySelectorAll("[data-area]").forEach((c) => { c.checked = true; }));
   el.querySelector("#uu-none")?.addEventListener("click", () => el.querySelectorAll("[data-area]").forEach((c) => { c.checked = false; }));
   el.querySelectorAll('input[name="uu-method"]').forEach((r) => r.addEventListener("change", () => {
@@ -232,6 +266,16 @@ function editUser(u) {
         if (newPerms) { patch.perms = newPerms; if (u.role !== "pin") patch.role = "user"; }
         await updateDoc(doc(db, "users", u.uid), patch);
         if (pins[u.uid]) await updateDoc(doc(db, "pins", u.uid), { name }).catch(() => {});
+        // keep the Google user's PIN mirror in step (name / org / calling / pages)
+        if (ap) {
+          await updateDoc(doc(db, "users", ap.uid), { name, organization, calling, perms: newPerms || permsOf(u) });
+          await updateDoc(doc(db, "pins", ap.uid), { name }).catch(() => {});
+        }
+        if (newAliasPin) {
+          if (!validPin(newAliasPin)) throw new Error("PIN must be exactly 6 digits.");
+          await createAliasPin({ ...u, name, organization, calling }, newAliasPin, newPerms || permsOf(u));
+          toast(`Saved — ${name} can also sign in with PIN ${newAliasPin}`); closeModal(); return;
+        }
       }
       toast("Saved"); closeModal();
     } catch (err) {
@@ -241,13 +285,34 @@ function editUser(u) {
   });
 }
 
+// A PIN for a Google user: hidden account + mirror profile aliasing theirs.
+async function createAliasPin(u, pin, perms) {
+  const pinUid = await createPinAccount(pin);
+  await setDoc(doc(db, "users", pinUid), {
+    alias: u.uid, name: u.name || "", organization: u.organization || "", calling: u.calling || "",
+    role: "pin", perms, email: "", revoked: !!u.revoked,
+    createdAt: serverTimestamp(), createdBy: ctx.name || ctx.email || "",
+  });
+  await setDoc(doc(db, "pins", pinUid), { pin, name: u.name || "", alias: u.uid, updatedAt: serverTimestamp() });
+  return pinUid;
+}
+async function removeAliasPin(ap) {
+  if (!ap) return;
+  await deleteDoc(doc(db, "users", ap.uid));
+  await deleteDoc(doc(db, "pins", ap.uid)).catch(() => {});
+  if (pins[ap.uid]) await deletePinAccount(pins[ap.uid]).catch(() => {});
+}
+
 // The invitation text to send (copy, or open in Mail). No email server on
 // this plan, so the bishop sends it himself.
 function inviteMessage(u) {
   const pages = AREAS.filter((a) => (permsOf(u)[a.key] || (u.perms || {})[a.key]) === "edit").map((a) => a.label).join(", ");
-  const pin = u.role === "pin" ? pins[u.uid] || u.pin || "" : "";
+  const ap = u.uid ? aliasPins[u.uid] : null;
+  const pin = u.role === "pin" ? pins[u.uid] || u.pin || "" : ap ? pins[ap.uid] || "" : "";
   const body = u.role === "pin"
     ? `Hi ${u.name || ""},\n\nYou've been given access to the 6th Ward app.\n\nOpen ${APP_URL} and enter your PIN: ${pin}\n\nYou'll see: ${pages}.\n\nPlease don't share the PIN.`
+    : pin
+    ? `Hi ${u.name || ""},\n\nYou've been given access to the 6th Ward app.\n\nOpen ${APP_URL} and either enter your PIN: ${pin}, or choose "Sign in with Google" using ${u.email}.\n\nYou'll see: ${pages}.\n\nPlease don't share the PIN.`
     : `Hi ${u.name || ""},\n\nYou've been given access to the 6th Ward app.\n\nOpen ${APP_URL} and choose "Sign in with Google" using ${u.email}.\n\nYou'll see: ${pages}.`;
   const el = openModal(`
     <h3>Invite ${esc(u.name || u.email || "")}</h3>
@@ -280,6 +345,8 @@ async function setRevoked(u, on) {
   if (on && !confirm(`Revoke ${u.name || "this person"}'s access? They're signed out the next time the app checks.`)) return;
   try {
     await updateDoc(doc(db, "users", u.uid), { revoked: on, revokedAt: on ? serverTimestamp() : null });
+    const ap = aliasPins[u.uid];
+    if (ap) await updateDoc(doc(db, "users", ap.uid), { revoked: on }).catch(() => {});
     toast(on ? "Access revoked" : "Access restored");
   } catch (err) { toast("Couldn't update: " + (err.code || err.message)); }
 }
@@ -288,6 +355,7 @@ async function removeUser(u) {
   if (!u || !confirm(`Remove ${u.name || "this person"} completely? This can't be undone.`)) return;
   try {
     await deleteDoc(doc(db, "users", u.uid));
+    await removeAliasPin(aliasPins[u.uid]);
     if (u.role === "pin") {
       await deleteDoc(doc(db, "pins", u.uid)).catch(() => {});
       if (pins[u.uid]) await deletePinAccount(pins[u.uid]).catch(() => {});
@@ -317,7 +385,7 @@ function changePin(u) {
       <button class="btn" id="cp-cancel">Cancel</button>
       <button class="btn btn-primary" id="cp-save">Change PIN</button>
     </div>`);
-  el.querySelector("#cp-cancel").addEventListener("click", () => editUser(u));
+  el.querySelector("#cp-cancel").addEventListener("click", () => editUser(u.alias ? users.find((x) => x.uid === u.alias) || u : u));
   el.querySelector("#cp-shuffle").addEventListener("click", () => { el.querySelector("#cp-pin").value = randomPin(); });
   el.querySelector("#cp-save").addEventListener("click", async () => {
     const newPin = el.querySelector("#cp-pin").value.trim();
@@ -329,10 +397,11 @@ function changePin(u) {
       const newUid = await createPinAccount(newPin);
       await setDoc(doc(db, "users", newUid), {
         name: u.name || "", organization: u.organization || "", calling: u.calling || "",
-        role: "pin", perms: permsOf(u), email: "", lastSeen: u.lastSeen || null,
+        role: "pin", perms: u.alias ? normalizePerms(u.perms) : permsOf(u), email: "", lastSeen: u.lastSeen || null,
+        ...(u.alias ? { alias: u.alias, revoked: !!u.revoked } : {}),
         createdAt: serverTimestamp(), createdBy: ctx.name || ctx.email || "", replaces: u.uid,
       });
-      await setDoc(doc(db, "pins", newUid), { pin: newPin, name: u.name || "", updatedAt: serverTimestamp() });
+      await setDoc(doc(db, "pins", newUid), { pin: newPin, name: u.name || "", ...(u.alias ? { alias: u.alias } : {}), updatedAt: serverTimestamp() });
       await deleteDoc(doc(db, "users", u.uid));
       await deleteDoc(doc(db, "pins", u.uid)).catch(() => {});
       if (oldPin) await deletePinAccount(oldPin).catch(() => {});
