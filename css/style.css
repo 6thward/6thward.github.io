@@ -1277,3 +1277,9 @@ th.us-sort:hover, th.us-sort.on { color: var(--brand); }
 /* Stake pop-up (2026-09-20) */
 .stake-list { display: flex; flex-direction: column; gap: .6rem; }
 .stake-list .call-card { cursor: default; }
+
+/* needs-calling rows: draggable onto a Fill card; ✕ removes (2026-09-20) */
+.member-row { cursor: grab; align-items: center; gap: .5rem; }
+.member-row .member-x { opacity: .35; cursor: pointer; font-size: .85rem; padding: .1rem .25rem; }
+.member-row .member-x:hover { opacity: 1; color: var(--danger); }
+.call-card.cand-target { outline: 2px dashed var(--brand); outline-offset: 2px; background: var(--brand-soft) !important; }

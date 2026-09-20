@@ -5,13 +5,13 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1789940623";
+import { db } from "./firebase-init.js?v=1789940722";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789940623";
-import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1789940623";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789940722";
+import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1789940722";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
@@ -315,7 +315,8 @@ const releaseRow = (r) => `
 // sisters, amber when not set; click the pill to cycle it (2026-09-20)
 const GENDER_PILL = { m: "pill-male", f: "pill-female" };
 const memberRow = (p) => `
-  <div class="list-row" data-id="${p.id}">
+  <div class="list-row member-row" data-id="${p.id}" draggable="true" data-member="${p.id}" title="Drag onto a calling in Calling to Fill to add ${esc(p.name)} as a name to consider">
+    <span class="cand-x member-x" data-rmmember="${p.id}" title="Remove ${esc(p.name)} from this list">✕</span>
     <div class="row-main">
       <div class="row-title">${esc(p.name)}</div>
       ${p.notes ? `<div class="row-sub">${esc(p.notes.slice(0, 90))}</div>` : ""}
@@ -435,6 +436,12 @@ function render() {
       const item = it();
       if (!item) return;
       if (t.classList.contains("cand-add")) { e.stopPropagation(); return; } // typing a name, not opening the editor
+      if (t.dataset.rmmember) { // ✕ on a needs-calling row (2026-09-20)
+        e.stopPropagation();
+        if (!confirm(`Remove ${item.name} from the “needs a calling” list?`)) return;
+        deleteDoc(doc(db, "callings", item.id)).then(() => toast("Removed")).catch((err) => toast("Couldn't remove: " + (err.code || err.message)));
+        return;
+      }
       if (t.dataset.gender) { // pill on a needs-calling row: cycle brother → sister → not set
         e.stopPropagation();
         const next = item.gender === "m" ? "f" : item.gender === "f" ? "" : "m";
@@ -538,6 +545,42 @@ function render() {
       else if (b.dataset.add === "release") editRelease(null);
       else editMember(null);
     }));
+
+  // drag a "needs a calling" name onto a Calling to Fill card (2026-09-20):
+  // the name joins that calling's list of names to consider
+  let dragMember = null;
+  document.querySelectorAll("#panel-callings .member-row").forEach((row) => {
+    row.addEventListener("dragstart", (e) => {
+      dragMember = items.find((x) => x.id === row.dataset.member) || null;
+      e.dataTransfer.effectAllowed = "copy";
+      try { e.dataTransfer.setData("text/plain", dragMember?.name || ""); } catch { /* older browsers */ }
+    });
+    row.addEventListener("dragend", () => {
+      dragMember = null;
+      document.querySelectorAll("#panel-callings .cand-target").forEach((r) => r.classList.remove("cand-target"));
+    });
+  });
+  document.querySelectorAll('#panel-callings .bb-drop[data-stage="fill"] .list-row').forEach((card) => {
+    card.addEventListener("dragover", (e) => {
+      if (!dragMember) return;
+      e.preventDefault(); e.stopPropagation();
+      e.dataTransfer.dropEffect = "copy";
+      card.classList.add("cand-target");
+    });
+    card.addEventListener("dragleave", () => card.classList.remove("cand-target"));
+    card.addEventListener("drop", async (e) => {
+      if (!dragMember) return;
+      e.preventDefault(); e.stopPropagation();
+      card.classList.remove("cand-target");
+      const c = items.find((x) => x.id === card.dataset.id);
+      const name = dragMember.name; dragMember = null;
+      if (!c || !name) return;
+      const cands = c.candidates || [];
+      if (cands.some((n) => n.toLowerCase() === name.toLowerCase())) { toast(`${name} is already on ${c.calling}`); return; }
+      await save(c.id, { candidates: [...cands, name] });
+      toast(`${name} added to ${c.calling}`);
+    });
+  });
 
   // drag a calling row between the three flow columns
   let dragId = null;
