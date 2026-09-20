@@ -6,9 +6,9 @@
 // meeting content comes straight from that Sunday's plan.
 //
 //   settings/program  { wardName, stakeName, logo (data URL | "" = built-in), opts: {...} }
-import { db } from "./firebase-init.js?v=1789883656";
+import { db } from "./firebase-init.js?v=1789883712";
 import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789883656";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789883712";
 
 export const DEFAULT_LOGO = "assets/program-logo.jpg"; // Christus arch, built in
 // Fixed by Jordan (2026-09-19): Presiding + Conducting always shown, speaker
@@ -235,14 +235,15 @@ export function buildProgramHtml(ctx, opts = {}) {
   .inner { height: 100%; display: flex; flex-direction: column; }
   .prog:first-child { border-right: 1px dashed #b8bec7; }
   .top { display: flex; flex-direction: column; align-items: center; }
-  .logo { max-height: 2.6in; max-width: 2.4in; object-fit: contain; margin-bottom: .14in; }
-  .ward { font-size: 15pt; font-weight: 700; letter-spacing: .04em; }
+  .inner { --gap: .16in; --logo: 2.6in; --head: 1; }   /* fit() trims these before shrinking the text */
+  .logo { max-height: var(--logo); max-width: 2.4in; object-fit: contain; margin-bottom: calc(.14in * var(--head)); }
+  .ward { font-size: calc(15pt * var(--head)); font-weight: 700; letter-spacing: .04em; }
   .stake { font-size: 10.5pt; letter-spacing: .06em; text-transform: uppercase; color: #333; margin-top: .03in; }
-  .title { font-size: 17pt; font-variant: small-caps; letter-spacing: .06em; margin-top: .2in; }
+  .title { font-size: calc(17pt * var(--head)); font-variant: small-caps; letter-spacing: .06em; margin-top: calc(.2in * var(--head)); }
   .date { font-size: 10.5pt; color: #333; margin-top: .04in; }
   .theme { font-style: italic; font-size: 10.5pt; margin-top: .06in; }
-  .grp { margin-top: .16in; }            /* air between blocks */
-  .rule { height: 1px; background: #222; margin: .12in .2in .06in; }
+  .grp { margin-top: var(--gap); }            /* air between blocks */
+  .rule { height: 1px; background: #222; margin: calc(.12in * var(--head)) .2in .06in; }
   .officers + .rule { margin: .06in .2in .02in; }
   .officers { padding: 0 .05in; }
   .r { display: flex; align-items: baseline; font-size: 10.5pt; line-height: 1.35; padding: .012in 0; }
@@ -254,7 +255,7 @@ export function buildProgramHtml(ctx, opts = {}) {
   .c .c2 { font-style: normal; }
   .c .c3 { font-size: 9pt; color: #333; }
   .band { text-align: center; font-weight: 700; font-size: 11pt; padding: .02in 0; }
-  .grp-sac { padding: .16in 0; margin: .18in 0; border-top: 1px solid #ddd; border-bottom: 1px solid #ddd; } /* the sacrament: hymn + administration, set apart */
+  .grp-sac { padding: var(--gap) 0; margin: calc(var(--gap) + .02in) 0; border-top: 1px solid #ddd; border-bottom: 1px solid #ddd; } /* the sacrament: hymn + administration, set apart */
   .grp-sac .c, .grp-sac .band { padding: .03in 0; }
   .grp-testimonies .band { padding: .1in 0; }
   .grp-baby .c3 { font-style: italic; font-size: 10pt; }
@@ -269,12 +270,18 @@ export function buildProgramHtml(ctx, opts = {}) {
 <div class="bar"><button onclick="window.print()">🖨 Print</button><span>Letter, portrait, 100% scale — no margins. Cut along the dashed line.</span></div>
 <div class="sheet">${program}${program}</div>
 <script>
-  // long Sundays: shrink the whole program a step at a time until it fits the 11in column
+  // Always one page: on a long Sunday, trim in this order until it fits the
+  // 11in column — spacing between blocks, then the logo, then the header
+  // sizes, and only then the whole program (zoom). (2026-09-19)
   function fit() {
     document.querySelectorAll(".inner").forEach((el) => {
-      let k = 1;
-      el.style.zoom = "";
-      while (k > 0.62 && el.scrollHeight > el.clientHeight + 1) { k -= 0.03; el.style.zoom = k.toFixed(2); }
+      const over = () => el.scrollHeight > el.clientHeight + 1;
+      el.style.zoom = ""; el.style.removeProperty("--gap"); el.style.removeProperty("--logo"); el.style.removeProperty("--head");
+      let gap = 0.16, logo = 2.6, head = 1, k = 1;
+      while (over() && gap > 0.06) { gap -= 0.02; el.style.setProperty("--gap", gap.toFixed(2) + "in"); }
+      while (over() && logo > 1.3) { logo -= 0.15; el.style.setProperty("--logo", logo.toFixed(2) + "in"); }
+      while (over() && head > 0.8) { head -= 0.05; el.style.setProperty("--head", head.toFixed(2)); }
+      while (over() && k > 0.6) { k -= 0.03; el.style.zoom = k.toFixed(2); }
     });
   }
   window.addEventListener("load", fit);
