@@ -5,13 +5,13 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1789941139";
+import { db } from "./firebase-init.js?v=1789941362";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789941139";
-import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1789941139";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789941362";
+import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1789941362";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
@@ -32,6 +32,7 @@ let groups = [];   // Calling-to-Fill groupings: callingGroups/{id} { label, ord
 let showDone = false;
 let stakeOpen = false; // the Stake pop-up is showing (re-rendered on data changes)
 let dragName = "";     // a person's name being dragged (needs-calling row) — for the Stake pill drop
+let dragCard = null;   // a whole calling card being dragged (board) — dropping it on the pill makes it a stake calling
 let started = false;
 
 // legacy docs from the earlier pipeline get mapped into the new flow
@@ -93,9 +94,25 @@ export function initCallings() {
   panel.querySelector("#chip-stake").addEventListener("click", () => openStake()); // pop-up list (2026-09-20)
   // drop a name on the pill → the pop-up opens with that name ready to recommend
   const chipStake = panel.querySelector("#chip-stake");
-  chipStake.addEventListener("dragover", (e) => { if (!dragName) return; e.preventDefault(); chipStake.classList.add("drop-over"); });
+  chipStake.addEventListener("dragover", (e) => { if (!dragName && !dragCard) return; e.preventDefault(); chipStake.classList.add("drop-over"); });
   chipStake.addEventListener("dragleave", () => chipStake.classList.remove("drop-over"));
-  chipStake.addEventListener("drop", (e) => { if (!dragName) return; e.preventDefault(); chipStake.classList.remove("drop-over"); const n = dragName; dragName = null; openStake(n); });
+  chipStake.addEventListener("drop", async (e) => {
+    if (!dragName && !dragCard) return;
+    e.preventDefault(); chipStake.classList.remove("drop-over");
+    if (dragCard) { // a whole calling card → becomes a stake calling, recommended (2026-09-20)
+      const c = dragCard; dragCard = null;
+      if (c.kind === "release") { toast("Releases don't go to the stake"); return; }
+      const name = c.decided || (c.candidates || [])[0] || "";
+      try {
+        await updateDoc(doc(db, "callings", c.id), { kind: "stake", name, stage: "recommend", "stamps.recommend": serverTimestamp(), fromWardStage: c.stage || "", updatedAt: serverTimestamp() });
+        await wardBusinessForget(c); // if it had already reached Ward Business
+        toast(`${c.calling} moved to Stake Callings${name ? " — " + name : ""}`);
+        openStake(name ? "" : "");
+      } catch (err) { toast("Couldn't move: " + (err.code || err.message)); }
+      return;
+    }
+    const n = dragName; dragName = ""; openStake(n);
+  });
   panel.querySelector("#chip-done").addEventListener("click", (e) => {
     showDone = !showDone;
     e.target.classList.toggle("active", showDone);
@@ -617,12 +634,14 @@ function render() {
     row.draggable = true;
     row.addEventListener("dragstart", (e) => {
       dragId = row.dataset.id;
+      dragCard = items.find((x) => x.id === dragId) || null;
       e.dataTransfer.effectAllowed = "move";
       try { e.dataTransfer.setData("text/plain", ""); } catch { /* older browsers */ }
     });
     row.addEventListener("dragend", () => {
-      dragId = null;
+      dragId = null; dragCard = null;
       document.querySelectorAll(".bb-drop").forEach((z) => z.classList.remove("bb-over"));
+      document.getElementById("chip-stake")?.classList.remove("drop-over");
     });
   });
   // hovering a card shows a drop line above it (reorder target)
