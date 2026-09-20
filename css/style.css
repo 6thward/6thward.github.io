@@ -1235,3 +1235,6 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .topbar-title { display: flex; align-items: center; gap: .45rem; }
 .topbar-logo { height: 1.7rem; width: auto; display: block; }
 .login-logo-img { height: 7rem; width: auto; display: inline-block; }
+
+/* Home Sacrament: no need to span the whole desktop — cap the page at ~half width (2026-09-19) */
+#panel-homesac { max-width: 56rem; }
