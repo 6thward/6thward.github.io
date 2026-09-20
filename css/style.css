@@ -1264,8 +1264,10 @@ th.us-sort:hover, th.us-sort.on { color: var(--brand); }
 .stake-wrap .call-card-actions .btn { margin-left: auto; }
 
 /* Callings header: Stake pill (count) that expands the submitted list (2026-09-20) */
-.stake-chip { display: inline-flex; align-items: center; gap: .4rem; font-weight: 600; }
-.stake-chip .pill { font-size: .72rem; padding: .05rem .45rem; }
+.stake-chip { display: inline-flex; align-items: center; gap: .55rem; font-weight: 800; font-size: 1.05rem; padding: .45rem 1rem; border-radius: 99px; letter-spacing: .01em; }
+.stake-chip .pill { font-size: .9rem; font-weight: 800; padding: .1rem .6rem; }
+.stake-chip.active { background: var(--brand); color: #fff; border-color: var(--brand); }
+.stake-chip.active .pill { background: rgba(255,255,255,.22); color: #fff; }
 .stake-wrap { margin-top: .8rem; }
 
 /* calling cards: date + action on one line (2026-09-20) */
