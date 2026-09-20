@@ -1226,3 +1226,12 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .st-inter .st-music-in::placeholder { font-weight: 500; color: #9aa4b1; }
 .st-inter .st-music-field:focus-within { border-color: var(--brand); }
 .st-inter .st-place { margin-top: .1rem; }
+
+/* Youth Speakers pill: "+ youth" / "+ primary" adders (2026-09-19) */
+.st-add-row { display: flex; gap: .6rem; justify-content: center; margin-top: .15rem; }
+.st-add-row .st-add { font-size: .72rem; font-weight: 600; padding: 0 .3rem; }
+
+/* Christus logo replaces the ⛪ emoji (2026-09-19) */
+.topbar-title { display: flex; align-items: center; gap: .45rem; }
+.topbar-logo { height: 1.7rem; width: auto; display: block; }
+.login-logo-img { height: 7rem; width: auto; display: inline-block; }

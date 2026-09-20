@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789882543";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789882543";
+import { db } from "./firebase-init.js?v=1789882678";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789882678";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789882543";
-import { HYMNS } from "./hymns.js?v=1789882543";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog } from "./program.js?v=1789882543";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789882678";
+import { HYMNS } from "./hymns.js?v=1789882678";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog } from "./program.js?v=1789882678";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -146,13 +146,30 @@ const KINDS = {
 
 const HYMN_KINDS = ["openingHymn", "sacramentHymn", "intermediateHymn", "closingHymn"];
 
+// Speakers the music number can be placed after — primary, youth and adult
+// speakers alike, in program order (2026-09-19). Each anchor: item index +
+// a label ("Primary", "Youth 2", "speaker 3", with the name when known).
+const ANCHOR_KINDS = ["primarySpeaker", "youthSpeaker", "speaker"];
+function speakerAnchors(items) {
+  const counts = { primarySpeaker: 0, youthSpeaker: 0, speaker: 0 };
+  const totals = { primarySpeaker: 0, youthSpeaker: 0, speaker: 0 };
+  items.forEach((it) => { if (ANCHOR_KINDS.includes(it.kind) && !it.none) totals[it.kind]++; });
+  const out = [];
+  items.forEach((it, idx) => {
+    if (!ANCHOR_KINDS.includes(it.kind) || it.none) return;
+    const n = ++counts[it.kind];
+    const base = it.kind === "speaker" ? `speaker ${n}` : it.kind === "primarySpeaker" ? (totals.primarySpeaker > 1 ? `Primary ${n}` : "Primary") : (totals.youthSpeaker > 1 ? `Youth ${n}` : "Youth");
+    out.push({ idx, label: base, name: it.name || "" });
+  });
+  return out;
+}
 // Move the intermediate slot (musical / choir / intermediate hymn) so it
-// falls before the speakers (after = 0) or after adult speaker N.
+// falls before the speakers (after = 0) or after the Nth speaker anchor.
 function moveInterSlot(m, after) {
   const si = m.items.findIndex((i) => ["intermediateHymn", "musical", "choir"].includes(i.kind));
   if (si < 0) return;
   const [slot] = m.items.splice(si, 1);
-  const sp = m.items.map((it, i) => (it.kind === "speaker" ? i : -1)).filter((i) => i >= 0);
+  const sp = speakerAnchors(m.items).map((a) => a.idx);
   let at;
   if (!sp.length) at = si;
   else if (after <= 0) at = sp[0];
@@ -840,10 +857,10 @@ function statusChips(m, date) {
   // where the music number sits relative to the adult speakers (small subtext)
   const slotPos = (() => {
     const slotIdx = items.findIndex((i) => ["intermediateHymn", "musical", "choir"].includes(i.kind));
-    const spkIdxs = items.map((it, i) => (it.kind === "speaker" ? i : -1)).filter((i) => i >= 0);
-    if (slotIdx < 0 || !spkIdxs.length) return "";
-    const before = spkIdxs.filter((i) => i < slotIdx).length;
-    return before === 0 ? "before the speakers" : `after speaker ${before}`;
+    const anchors = speakerAnchors(items);
+    if (slotIdx < 0 || !anchors.length) return "";
+    const before = anchors.filter((a) => a.idx < slotIdx).length;
+    return before === 0 ? "before the speakers" : `after ${anchors[before - 1].label}`;
   })();
   // 2026-09-13 — placement ("after speaker 3") is its own pill; click to move the slot
   const placePill = slotPos && planned ? `<span class="st-place${can ? " st-click" : ""}"${can ? ` data-place="1" title="Click to change where it falls in the program"` : ""}>${esc(slotPos)}</span>` : "";
@@ -891,7 +908,11 @@ function statusChips(m, date) {
     ...spkLines("primarySpeaker", (it, i) => prim.length > 1 ? `Primary ${i + 1}` : "Primary"),
     ...spkLines("youthSpeaker", (it, i) => yth.length > 1 ? `Youth ${i + 1}` : "Youth"),
   ];
-  if (youthLines.length) chips.push(groupChip("Youth Speakers", { t: "py" }, youthLines));
+  if (youthLines.length || (can && type !== "fast")) {
+    // 2026-09-19 — "+" adds another youth or primary speaker right on the pill
+    const addY = can ? `<span class="st-add-row"><span class="st-add" data-addspk="youthSpeaker" title="Add another youth speaker">+ youth</span><span class="st-add" data-addspk="primarySpeaker" title="Add another primary speaker">+ primary</span></span>` : "";
+    chips.push(groupChip("Youth Speakers", { t: "py" }, youthLines, null, addY));
+  }
   if (adultSpk.length) {
     // "+" under the last speaker line: opens the editor with a fresh row ready
     const addBtn = can ? `<span class="st-add" data-addspk="speaker" title="Add another speaker">+</span>` : ""; // 2026-09-13 — inline pill, not the editor
@@ -1018,15 +1039,16 @@ function renderCards(wrap) {
   // "+" under Speakers: drop in a fresh pill with a name box; Enter saves, Esc or empty cancels
   wrap.querySelectorAll("[data-addspk]").forEach((btn) => btn.addEventListener("click", (e) => {
     e.stopPropagation();
-    const group = btn.parentElement;
+    const group = btn.closest(".st-group") || btn.parentElement;
     if (group.querySelector(".st-line.st-new")) { group.querySelector(".st-line.st-new input")?.focus(); return; }
     const date = btn.closest("[data-date]").dataset.date;
     const kind = btn.dataset.addspk;
     const n = group.querySelectorAll(".st-line").length + 1;
+    const tag = kind === "primarySpeaker" ? "Primary" : kind === "youthSpeaker" ? "Youth" : String(n);
     const line = document.createElement("span");
     line.className = "st-line st-drag st-new";
-    line.innerHTML = `<span class="st-li-ic"></span><span class="st-li-tag">${n}:</span> <input class="st-in-title" autocomplete="off" placeholder="Name" style="flex:1;min-width:4rem">`;
-    btn.before(line);
+    line.innerHTML = `<span class="st-li-ic"></span><span class="st-li-tag">${tag}:</span> <input class="st-in-title" autocomplete="off" placeholder="Name" style="flex:1;min-width:4rem">`;
+    (btn.closest(".st-add-row") || btn).before(line);
     const inp = line.querySelector("input");
     inp.focus();
     wireInline(line, [inp], () => {
@@ -1066,10 +1088,10 @@ function renderCards(wrap) {
       const date = el.closest("[data-date]").dataset.date;
       const its = itemsFor(meetings[date], date);
       const slotIdx = its.findIndex((i) => ["intermediateHymn", "musical", "choir"].includes(i.kind));
-      const spkIdxs = its.map((it, i) => (it.kind === "speaker" ? i : -1)).filter((i) => i >= 0);
-      const before = slotIdx < 0 ? 0 : spkIdxs.filter((i) => i < slotIdx).length;
+      const anchors = speakerAnchors(its);
+      const before = slotIdx < 0 ? 0 : anchors.filter((a) => a.idx < slotIdx).length;
       const opts = [`<option value="0"${before === 0 ? " selected" : ""}>before the speakers</option>`]
-        .concat(spkIdxs.map((si, i) => `<option value="${i + 1}"${before === i + 1 ? " selected" : ""}>after speaker ${i + 1}${its[si].name ? " — " + esc(its[si].name) : ""}</option>`));
+        .concat(anchors.map((a, i) => `<option value="${i + 1}"${before === i + 1 ? " selected" : ""}>after ${esc(a.label)}${a.name ? " — " + esc(a.name) : ""}</option>`));
       el.innerHTML = `<select class="st-place-sel">${opts.join("")}</select>`;
       const sel = el.querySelector("select");
       sel.focus();
@@ -1289,7 +1311,7 @@ function setInterSlot(m, mode, interVal, posVal) {
   if (posVal) {
     const slot = m.items.find((i) => i.kind === targetKind);
     m.items = m.items.filter((i) => i !== slot);
-    const spks = m.items.filter((i) => i.kind === "speaker");
+    const spks = speakerAnchors(m.items).map((a) => m.items[a.idx]);
     let at = -1;
     if (posVal === "start" && spks[0]) at = m.items.indexOf(spks[0]);
     else if (posVal.startsWith("spk:")) {
@@ -1338,11 +1360,10 @@ function quickEdit(date, q) {
 
   if (q.t === "place") { /* kept for keyboard / legacy callers; the card pill edits inline now */
     const slotIdx = items.findIndex((i) => ["intermediateHymn", "musical", "choir"].includes(i.kind));
-    const spkIdxs = items.map((it, i) => (it.kind === "speaker" ? i : -1)).filter((i) => i >= 0);
-    const before = slotIdx < 0 ? 0 : spkIdxs.filter((i) => i < slotIdx).length;
-    const spkName = (i) => { const it = items[spkIdxs[i]]; return it && it.name ? ` (${it.name})` : ""; };
+    const anchors = speakerAnchors(items);
+    const before = slotIdx < 0 ? 0 : anchors.filter((a) => a.idx < slotIdx).length;
     const opts = [`<option value="0" ${before === 0 ? "selected" : ""}>Before the speakers</option>`]
-      .concat(spkIdxs.map((_, i) => `<option value="${i + 1}" ${before === i + 1 ? "selected" : ""}>After speaker ${i + 1}${esc(spkName(i))}</option>`));
+      .concat(anchors.map((a, i) => `<option value="${i + 1}" ${before === i + 1 ? "selected" : ""}>After ${esc(a.label)}${a.name ? ` (${esc(a.name)})` : ""}</option>`));
     html = `<h3>Music number placement ${dateLabel}</h3>
       <label class="field">Where does it fall? <select id="qe-place">${opts.join("")}</select></label>`;
     onSave = (el) => {
@@ -1411,19 +1432,18 @@ function quickEdit(date, q) {
       `<button class="chip ${interMode === mode ? "active" : ""}" data-inter-mode="${mode}" type="button">${label}</button>`;
     // where the number lands in the meeting, relative to the adult speakers
     const SLOT_KINDS_POS = ["intermediateHymn", "musical", "choir"];
-    const spkIdxs = items.map((it, i) => (it.kind === "speaker" ? i : -1)).filter((i) => i >= 0);
+    const anchors = speakerAnchors(items);
     const slotIdx = items.findIndex((i) => SLOT_KINDS_POS.includes(i.kind));
-    const spkNames = items.filter((i) => i.kind === "speaker").map((s) => s.name);
     let curPos = "spk:0";
-    if (slotIdx >= 0 && spkIdxs.length) {
-      const before = spkIdxs.filter((i) => i < slotIdx).length;
+    if (slotIdx >= 0 && anchors.length) {
+      const before = anchors.filter((a) => a.idx < slotIdx).length;
       curPos = before === 0 ? "start" : `spk:${before - 1}`;
     }
-    const posSel = spkIdxs.length ? `
+    const posSel = anchors.length ? `
       <label class="field" style="margin:.6rem 0 .2rem">Position in the meeting
         <select id="qe-inter-pos">
           <option value="start" ${curPos === "start" ? "selected" : ""}>Before the speakers</option>
-          ${spkNames.map((n, i) => `<option value="spk:${i}" ${curPos === `spk:${i}` ? "selected" : ""}>After speaker ${i + 1}${n ? ` (${esc(n)})` : ""}</option>`).join("")}
+          ${anchors.map((a, i) => `<option value="spk:${i}" ${curPos === `spk:${i}` ? "selected" : ""}>After ${esc(a.label)}${a.name ? ` (${esc(a.name)})` : ""}</option>`).join("")}
         </select>
       </label>` : "";
     html = `<h3>Intermediate ${dateLabel}</h3>
