@@ -1198,7 +1198,8 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .us-table td { vertical-align: top; }
 .us-sub { margin-top: .2rem; display: flex; gap: .35rem; align-items: center; flex-wrap: wrap; }
 .us-access { max-width: 26rem; }
-.us-access .pill { margin: .1rem .1rem .1rem 0; }
+.us-pills { display: flex; flex-wrap: wrap; gap: .45rem .35rem; } /* 2026-09-19: breathing room between pill rows */
+.us-access .pill { margin: 0; }
 .us-pill { background: var(--brand-soft); color: var(--brand); }
 .pill-pending { background: var(--pending-soft); color: var(--pending); }
 .pill-danger { background: #fbe7e3; color: var(--danger); }

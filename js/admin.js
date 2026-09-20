@@ -10,13 +10,13 @@
 //     sign-in claims the invite and creates their profile. (role = 'user')
 // Older Google profiles with role bishopric/member keep working; the first
 // time their access is edited here they become explicit per-page grants.
-import { db } from "./firebase-init.js?v=1789881895";
-import { ctx, AREAS, normalizePerms } from "./app.js?v=1789881895";
+import { db } from "./firebase-init.js?v=1789881969";
+import { ctx, AREAS, normalizePerms } from "./app.js?v=1789881969";
 import {
   collection, onSnapshot, updateDoc, setDoc, deleteDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1789881895";
-import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1789881895";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1789881969";
+import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1789881969";
 
 let users = [];
 let invites = [];
@@ -109,7 +109,7 @@ function render() {
       <td><b>${esc(u.name || u.email || "—")}</b>${me ? " <span class='row-sub'>(you)</span>" : ""}<div class="us-sub">${signInPill(u)}${u.email && !u.invite && u.role !== "pin" ? ` <span class="row-sub">${esc(u.email)}</span>` : ""}${u.invite ? ` <span class="row-sub">${esc(u.email)}</span>` : ""}</div></td>
       <td>${esc(u.organization || "")}</td>
       <td>${esc(u.calling || "")}</td>
-      <td class="us-access">${u.revoked ? `<span class="pill pill-muted">—</span>` : accessPills(permsOf(u))}</td>
+      <td class="us-access"><div class="us-pills">${u.revoked ? `<span class="pill pill-muted">—</span>` : accessPills(permsOf(u))}</div></td>
       <td>${u.invite ? `<span class="row-sub">invited ${fmtSeen(u.invitedAt).replace(/<[^>]+>/g, "")}</span>` : fmtSeen(u.lastSeen)}</td>
       <td class="us-actions">
         ${isBishopUser(u) && !me ? "" : ""}
