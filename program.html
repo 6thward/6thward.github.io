@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sacrament Meeting Program</title>
+<link rel="icon" href="assets/program-logo.jpg">
+<style>
+  html, body { margin: 0; background: #e9ecef; }
+  #pp { display: flex; justify-content: center; padding: .6rem; }
+  /* one column that fits a phone: the print sheet becomes a single program */
+  #pp .sheet.pp-sheet { display: block; width: 100%; max-width: 4.6in; height: auto; margin: 0 auto; box-shadow: 0 4px 18px rgba(0,0,0,.14); }
+  #pp .sheet.pp-sheet .prog { height: auto; min-height: 0; border-right: none !important; padding: .45in .38in .5in; }
+  #pp .sheet.pp-sheet .inner { height: auto; }
+  #pp .sheet.pp-sheet .ann { margin-top: .25in; }
+  .pp-msg { font: 15px/1.5 -apple-system, "Segoe UI", sans-serif; color: #1f2733; text-align: center; padding: 3rem 1.2rem; }
+  .pp-foot { text-align: center; font: 12px -apple-system, "Segoe UI", sans-serif; color: #5b6675; padding: .6rem 0 1.2rem; }
+  @media print { html, body { background: #fff; } #pp { padding: 0; } #pp .sheet.pp-sheet { box-shadow: none; max-width: none; } .pp-foot { display: none; } }
+</style>
+</head>
+<body>
+<div id="pp"><div class="pp-msg">Loading the program…</div></div>
+<div class="pp-foot">6th Ward · <a href="./" style="color:inherit">sign in</a></div>
+<div id="modal-backdrop" class="hidden" hidden><div id="modal"></div></div>
+<div id="toast" hidden></div>
+<script type="module">
+  import { renderPublicProgram } from "./js/public-program.js?v=1789884347";
+  const token = new URLSearchParams(location.search).get("p") || "";
+  renderPublicProgram(token, document.getElementById("pp"));
+</script>
+</body>
+</html>

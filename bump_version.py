@@ -18,15 +18,18 @@ VERSION = str(int(time.time()))
 IMPORT_RE = re.compile(r'(from\s+"\.\/([\w-]+)\.js)(?:\?v=\d+)?(")')
 # index.html script tag: src="js/name.js" or "...?v=OLD"
 SCRIPT_RE = re.compile(r'(src="js\/([\w-]+)\.js)(?:\?v=\d+)?(")')
+# program.html inline-module import: from "./js/name.js"
+PAGE_IMPORT_RE = re.compile(r'(from\s+"\.\/js\/([\w-]+)\.js)(?:\?v=\d+)?(")')
 # index.html stylesheet: href="css/style.css" or "...?v=OLD"
 STYLE_RE = re.compile(r'(href="css\/style\.css)(?:\?v=\d+)?(")')
 
-targets = list(ROOT.glob("js/*.js")) + [ROOT / "index.html"]
+targets = list(ROOT.glob("js/*.js")) + [ROOT / "index.html", ROOT / "program.html"]  # program.html = public program page (2026-09-20)
 changed = 0
 for path in targets:
     text = path.read_text()
     new = IMPORT_RE.sub(lambda m: f'{m.group(1)}?v={VERSION}{m.group(3)}', text)
     new = SCRIPT_RE.sub(lambda m: f'{m.group(1)}?v={VERSION}{m.group(3)}', new)
+    new = PAGE_IMPORT_RE.sub(lambda m: f'{m.group(1)}?v={VERSION}{m.group(3)}', new)
     new = STYLE_RE.sub(lambda m: f'{m.group(1)}?v={VERSION}{m.group(2)}', new)
     if new != text:
         path.write_text(new)

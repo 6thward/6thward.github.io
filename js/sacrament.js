@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789883956";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789883956";
+import { db } from "./firebase-init.js?v=1789884347";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789884347";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789883956";
-import { HYMNS } from "./hymns.js?v=1789883956";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog } from "./program.js?v=1789883956";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789884347";
+import { HYMNS } from "./hymns.js?v=1789884347";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1789884347";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -367,6 +367,7 @@ async function patchMeetingFresh(date, mutate) {
   m.updatedAt = serverTimestamp();
   await setDoc(doc(db, "meetings", date), m);
   if (meetings[date]) meetings[date] = m;
+  republish(m);
 }
 
 // The Sunday a new sustaining belongs to: the coming Sunday — but on a Sunday
@@ -505,36 +506,51 @@ function agendaText(m, date) {
   return L.join("\n");
 }
 
-// "Link" on the readout: copy a link to this Sunday, share it from a phone,
-// or text the agenda itself. PDF = Print → Save as PDF.
-function shareMeeting(date) {
+// "Link" on the readout (2026-09-20): a public link to the PROGRAM for this
+// Sunday — no PIN or sign-in needed to open it. The first click mints a
+// random token, stores it on the plan and publishes a program-only snapshot
+// to public/{token}; every later save republishes so the link stays current.
+async function shareMeeting(date) {
   const m = meetings[date];
   if (!m) return;
-  const url = meetingLink(date);
-  const text = agendaText(m, date);
+  let token = m.shareToken;
+  try {
+    if (!token) {
+      token = newShareToken();
+      await patchMeeting(date, (mm) => { mm.shareToken = token; }); // patchMeeting republishes
+    } else {
+      await publishProgram(token, m, programCtx(date));
+    }
+  } catch (e) { toast("Couldn't publish the program: " + (e.code || e.message)); return; }
+  const url = publicLink(token);
+  const title = `Sacrament meeting program · ${fmtDay(date, { year: true })}`;
+  const msg = `${title}\n${url}`;
   const canShare = typeof navigator.share === "function";
   const el = openModal(`
-    <h3>Share ${fmtDay(date, { year: true })}</h3>
-    <label class="field"><span>Link to this Sunday <span class="row-sub">(opens the readout after sign-in)</span></span>
+    <h3>Share the program · ${fmtDay(date, { year: true })}</h3>
+    <p class="row-sub" style="margin:0 0 .6rem">Anyone with this link can open the program — no PIN or sign-in. It shows what the printed program shows (no ward business or notes) and updates whenever the plan is saved.</p>
+    <label class="field"><span>Link</span>
       <div style="display:flex;gap:.4rem"><input id="sh-url" value="${esc(url)}" readonly style="flex:1"><button class="btn" id="sh-copy-url">Copy</button></div></label>
-    <label class="field" style="margin-top:.6rem"><span>Agenda as text</span>
-      <textarea id="sh-text" readonly style="width:100%;min-height:9rem;font:inherit;font-size:.9rem;padding:.5rem;border:1px solid var(--line);border-radius:8px">${esc(text)}</textarea></label>
     <div class="modal-actions" style="flex-wrap:wrap;gap:.4rem">
       <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+        <a class="btn btn-primary" id="sh-sms" href="sms:?&body=${encodeURIComponent(msg)}">💬 Text it</a>
         ${canShare ? `<button class="btn" id="sh-share">📤 Share…</button>` : ""}
-        <a class="btn" id="sh-sms" href="sms:?&body=${encodeURIComponent(url + "\n\n" + text)}">💬 Text it</a>
-        <button class="btn" id="sh-copy-text">Copy text</button>
-        <button class="btn" id="sh-pdf" title="Opens the print dialog — choose Save as PDF">PDF</button>
+        <a class="btn" id="sh-open" href="${esc(url)}" target="_blank" rel="noopener">Open</a>
+        <button class="btn btn-ghost btn-danger" id="sh-revoke" title="Old link stops working; a new one is made next time">New link</button>
       </div>
       <div class="right"><button class="btn" id="sh-close">Close</button></div>
     </div>`);
-  const copy = async (v, msg) => { try { await navigator.clipboard.writeText(v); toast(msg); } catch { toast("Select and copy the text"); } };
+  const copy = async (v, ok) => { try { await navigator.clipboard.writeText(v); toast(ok); } catch { toast("Select and copy the text"); } };
   el.querySelector("#sh-copy-url").addEventListener("click", () => copy(url, "Link copied"));
-  el.querySelector("#sh-copy-text").addEventListener("click", () => copy(url + "\n\n" + text, "Agenda copied"));
   el.querySelector("#sh-share")?.addEventListener("click", async () => {
-    try { await navigator.share({ title: `Sacrament meeting · ${fmtDay(date, { year: true })}`, text, url }); } catch { /* cancelled */ }
+    try { await navigator.share({ title, text: title, url }); } catch { /* cancelled */ }
   });
-  el.querySelector("#sh-pdf").addEventListener("click", () => { closeModal(); viewMeeting(date); setTimeout(() => document.getElementById("vw-print")?.click(), 150); });
+  el.querySelector("#sh-revoke").addEventListener("click", async () => {
+    if (!confirm("Make a new link? The old one stops working.")) return;
+    try { await deleteDoc(doc(db, "public", token)); } catch {}
+    await patchMeeting(date, (mm) => { delete mm.shareToken; });
+    closeModal(); shareMeeting(date);
+  });
   el.querySelector("#sh-close").addEventListener("click", () => { closeModal(); viewMeeting(date); });
 }
 
@@ -2479,9 +2495,15 @@ async function patchMeeting(date, mutate) {
   try {
     await setDoc(doc(db, "meetings", date), m);
     toast("Saved");
+    republish(m);
   } catch (err) {
     toast("Couldn't save: " + (err.code || err.message));
   }
+}
+// keep a shared (public) program in step with the plan (2026-09-20)
+function republish(m) {
+  if (!m?.shareToken) return;
+  publishProgram(m.shareToken, m, programCtx(m.date)).catch((e) => console.warn("[program] republish", e));
 }
 
 function commitCell(el) {

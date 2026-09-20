@@ -6,9 +6,9 @@
 // meeting content comes straight from that Sunday's plan.
 //
 //   settings/program  { wardName, stakeName, logo (data URL | "" = built-in), opts: {...} }
-import { db } from "./firebase-init.js?v=1789883956";
+import { db } from "./firebase-init.js?v=1789884347";
 import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789883956";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789884347";
 
 export const DEFAULT_LOGO = "assets/program-logo.jpg"; // Christus arch, built in
 // Fixed by Jordan (2026-09-19): Presiding + Conducting always shown, speaker
@@ -139,6 +139,45 @@ export function openProgramWindow(html) {
   return w;
 }
 
+// ---- Public, no-sign-in copy (2026-09-20) ----
+// A Sunday's program is published to public/{token} — only what the printed
+// program shows (no ward business, topics, notes, or confirmation marks).
+// The token is random and lives on the meeting doc; anyone holding the link
+// can read that one document and nothing else.
+const PUBLIC_KINDS = new Set(["announcements", "openingHymn", "invocation", "sacramentHymn", "sacrament", "blessing", "testimonies",
+  "primarySpeaker", "youthSpeaker", "speaker", "musical", "choir", "intermediateHymn", "babyBlessing", "closingHymn", "benediction", "custom"]);
+export function publicSnapshot(m, ctx) {
+  const items = (m.items || []).filter((it) => PUBLIC_KINDS.has(it.kind)).map((it) => {
+    const k = it.kind;
+    const out = { kind: k };
+    if (["openingHymn", "sacramentHymn", "intermediateHymn", "closingHymn"].includes(k)) { out.num = it.num || ""; out.title = it.title || ""; }
+    else if (["primarySpeaker", "youthSpeaker", "speaker"].includes(k)) { out.name = it.name || ""; out.none = !!it.none; }
+    else if (k === "invocation" || k === "benediction") { out.name = it.name || ""; }
+    else if (k === "musical") { out.who = it.who || ""; out.hymn = it.hymn || ""; out.accompanist = it.accompanist || ""; }
+    else if (k === "choir") { out.hymn = it.hymn || ""; out.accompanist = it.accompanist || ""; out.youth = !!it.youth; }
+    else if (k === "babyBlessing") { out.name = it.name || ""; out.by = it.by || ""; }
+    else if (k === "announcements") { out.text = it.text || ""; }
+    else if (k === "custom") { out.label = it.label || ""; out.text = it.text || ""; }
+    return out;
+  });
+  return {
+    date: m.date || ctx.date, type: m.type || "sacrament", theme: m.theme || "",
+    presiding: m.presiding || ctx.presidingDefault || "", conducting: m.conducting || "", chorister: m.chorister || "", organist: m.organist || "",
+    items,
+    settings: { wardName: programSettings.wardName, stakeName: programSettings.stakeName, logo: programSettings.logo || "", opts: { footer: programSettings.opts?.footer || "" } },
+    labels: ctx.labels || {},
+    publishedAt: new Date().toISOString(),
+  };
+}
+export const publicLink = (token) => `${location.origin}${location.pathname.replace(/[^/]*$/, "")}program.html?p=${token}`;
+export function newShareToken() {
+  const a = new Uint8Array(12); crypto.getRandomValues(a);
+  return [...a].map((b) => b.toString(36).padStart(2, "0")).join("").slice(0, 20);
+}
+export async function publishProgram(token, m, ctx) {
+  await setDoc(doc(db, "public", token), publicSnapshot(m, ctx));
+}
+
 // ---- HTML builder (pure: no DOM, no Firestore) ----
 const HYMN_KINDS = ["openingHymn", "sacramentHymn", "intermediateHymn", "closingHymn"];
 const SPEAKER_KINDS = ["primarySpeaker", "youthSpeaker", "speaker"];
@@ -146,7 +185,7 @@ const PRAYER_KINDS = ["invocation", "benediction"];
 
 export function buildProgramHtml(ctx, opts = {}) {
   const o = { ...DEFAULT_OPTS, ...opts };
-  const s = programSettings;
+  const s = ctx.settings || programSettings; // the public page passes the snapshot's settings
   const m = ctx.m || {};
   const L = (k) => ctx.labels?.[k] || k;
   const logoSrc = s.logo || new URL(DEFAULT_LOGO, ctx.baseHref || document.baseURI).href;

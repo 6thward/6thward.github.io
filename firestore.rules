@@ -156,6 +156,15 @@ service cloud.firestore {
         || (canView('calendar') && resource.data.createdBy == request.auth.uid);
     }
 
+    // ---- Published programs (2026-09-20): one Sunday's program-only snapshot
+    // under a random token; anyone holding the link may read that one doc.
+    // Listing is closed, so tokens can't be enumerated.
+    match /public/{token} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if canEdit('sacrament');
+    }
+
     // ---- Shared settings (rosters, hymns, homebound list, program) ----
     match /settings/{id} {
       allow read: if hasAccess();
