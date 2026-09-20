@@ -1238,3 +1238,8 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 
 /* Home Sacrament: no need to span the whole desktop — cap the page at ~half width (2026-09-19) */
 #panel-homesac { max-width: 56rem; }
+
+/* Users table: sortable headers (2026-09-19) */
+th.us-sort { cursor: pointer; user-select: none; white-space: nowrap; }
+th.us-sort:hover, th.us-sort.on { color: var(--brand); }
+.us-sort-ic { font-size: .7em; }

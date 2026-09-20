@@ -15,14 +15,15 @@
 // whose profile doc carries `alias: <googleUid>` plus a mirror of the name /
 // organization / calling / pages, so the rules see the same access either
 // way. The table shows one row; the mirror is kept in step on every save.
-import { db } from "./firebase-init.js?v=1789882784";
-import { ctx, AREAS, normalizePerms } from "./app.js?v=1789882784";
+import { db } from "./firebase-init.js?v=1789882924";
+import { ctx, AREAS, normalizePerms } from "./app.js?v=1789882924";
 import {
   collection, onSnapshot, updateDoc, setDoc, deleteDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1789882784";
-import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1789882784";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1789882924";
+import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1789882924";
 
+let sort = { key: "created", dir: 1 }; // default: oldest at the top; click a header for A→Z / Z→A (2026-09-19)
 let users = [];   // profiles (alias PIN docs are folded into their Google row)
 let aliasPins = {}; // googleUid -> the PIN profile doc that aliases it
 let invites = [];
@@ -49,12 +50,16 @@ export function initAdmin() {
     <div class="card">
       <div class="us-wrap">
         <table class="simple us-table" id="users-table">
-          <thead><tr><th>Name</th><th>Organization</th><th>Calling</th><th>Access</th>${showLastUsed() ? "<th>Last used</th>" : ""}<th></th></tr></thead>
+          <thead><tr>${[["name", "Name"], ["organization", "Organization"], ["calling", "Calling"], ["access", "Access"]].concat(showLastUsed() ? [["lastUsed", "Last used"]] : []).map(([k, l]) => `<th class="us-sort" data-sort="${k}" title="Sort by ${l}">${l}<span class="us-sort-ic"></span></th>`).join("")}<th></th></tr></thead>
           <tbody id="user-rows"></tbody>
         </table>
       </div>
     </div>`;
   panel.querySelector("#btn-new-user").addEventListener("click", () => editUser(null));
+  panel.querySelectorAll("[data-sort]").forEach((th) => th.addEventListener("click", () => {
+    sort = sort.key === th.dataset.sort ? { key: sort.key, dir: -sort.dir } : { key: th.dataset.sort, dir: 1 };
+    render();
+  }));
 
   onSnapshot(collection(db, "users"), (qs) => {
     const all = qs.docs.map((d) => ({ uid: d.id, ...d.data() }));
@@ -115,9 +120,31 @@ function render() {
   const tbody = document.getElementById("user-rows");
   if (!tbody) return;
   const rows = [...users, ...invites];
+  const ms = (x) => (x?.toDate?.() || (x ? new Date(x) : null))?.getTime() || 0;
+  const created = (u) => ms(u.invite ? u.invitedAt : u.createdAt);
+  const accessKey = (u) => AREAS.filter((a) => permsOf(u)[a.key] === "edit").map((a) => a.label).join(", ");
+  const keyOf = (u) => sort.key === "name" ? (u.name || u.email || "").toLowerCase()
+    : sort.key === "organization" ? (u.organization || "").toLowerCase()
+    : sort.key === "calling" ? (u.calling || "").toLowerCase()
+    : sort.key === "access" ? accessKey(u).toLowerCase()
+    : sort.key === "lastUsed" ? ms(u.invite ? null : latestSeen(u))
+    : created(u);
   rows.sort((a, b) => {
-    const rank = (u) => (u.role === "pending" ? 0 : u.invite ? 1 : u.revoked ? 3 : 2);
-    return rank(a) - rank(b) || (a.name || a.email || "").localeCompare(b.name || b.email || "");
+    const ka = keyOf(a), kb = keyOf(b);
+    if (typeof ka === "number" || typeof kb === "number") {
+      // oldest first by default; people with no date (never used / no stamp) sink to the bottom
+      if (!ka && kb) return 1; if (ka && !kb) return -1;
+      if (ka !== kb) return (ka - kb) * sort.dir;
+    } else {
+      if (ka && !kb) return -1; if (!ka && kb) return 1; // blanks last either way
+      const c = ka.localeCompare(kb);
+      if (c) return c * sort.dir;
+    }
+    return (a.name || a.email || "").localeCompare(b.name || b.email || "");
+  });
+  document.querySelectorAll("#users-table [data-sort]").forEach((th) => {
+    th.classList.toggle("on", th.dataset.sort === sort.key);
+    th.querySelector(".us-sort-ic").textContent = th.dataset.sort === sort.key ? (sort.dir === 1 ? " ▲" : " ▼") : "";
   });
   if (!rows.length) { tbody.innerHTML = `<tr><td colspan="${showLastUsed() ? 6 : 5}" class="empty-note">Nobody yet — use “+ Add user”.</td></tr>`; return; }
   tbody.innerHTML = rows.map((u) => {
