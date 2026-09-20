@@ -6,15 +6,15 @@
 // meeting content comes straight from that Sunday's plan.
 //
 //   settings/program  { wardName, stakeName, logo (data URL | "" = built-in), opts: {...} }
-import { db } from "./firebase-init.js?v=1789883361";
+import { db } from "./firebase-init.js?v=1789883477";
 import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789883361";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789883477";
 
 export const DEFAULT_LOGO = "assets/program-logo.jpg"; // Christus arch, built in
 // Fixed by Jordan (2026-09-19): Presiding + Conducting always shown, speaker
 // topics and ward-business names never, announcements always at the bottom.
 // The only choice left is the optional line at the very bottom.
-const DEFAULT_OPTS = { footer: "" };
+const DEFAULT_OPTS = { footer: "", leaders: true }; // leaders: dotted lines between label and name
 
 export let programSettings = { wardName: "6th Ward", stakeName: "St. George East Stake", logo: "", opts: { ...DEFAULT_OPTS } };
 
@@ -115,6 +115,12 @@ export function openProgramDialog(ctx) {
     <h3 style="margin-bottom:.2rem">Program · ${esc(ctx.fmtDate(ctx.date))}</h3>
     <p class="row-sub" style="margin:0 0 .8rem">Two programs per letter sheet, side by side — cut down the middle. Uses the logo and names from ⚙ Settings.</p>
     <div class="pg-opts">
+      <div class="field"><span>Name lines</span>
+        <div class="us-method">
+          <label><input type="radio" name="pg-o-leaders" value="1" ${o.leaders !== false ? "checked" : ""}> Dotted leaders <span class="row-sub">— Presiding ·········· Bishop Christensen</span></label>
+          <label><input type="radio" name="pg-o-leaders" value="0" ${o.leaders === false ? "checked" : ""}> Plain <span class="row-sub">— label left, name right, no dots</span></label>
+        </div>
+      </div>
       <label class="field"><span>Line at the bottom (optional)</span><input id="pg-o-footer" value="${esc(o.footer || "")}" placeholder="e.g. Please silence phones · Nursery is in room 12"></label>
     </div>
     <div class="modal-actions">
@@ -126,7 +132,7 @@ export function openProgramDialog(ctx) {
     </div>`);
   el.querySelector("#pg-cancel").addEventListener("click", closeModal);
   el.querySelector("#pg-go").addEventListener("click", async () => {
-    const opts = { footer: el.querySelector("#pg-o-footer").value.trim() };
+    const opts = { footer: el.querySelector("#pg-o-footer").value.trim(), leaders: el.querySelector('input[name="pg-o-leaders"]:checked').value === "1" };
     try { await persist({ opts }); } catch { /* still print */ }
     openProgramWindow(buildProgramHtml(ctx, opts));
   });
@@ -215,12 +221,13 @@ export function buildProgramHtml(ctx, opts = {}) {
       <div class="title">Sacrament Meeting</div>
       <div class="date">${esc(ctx.fmtDate(ctx.date))}</div>
       ${m.theme ? `<div class="theme">“${esc(m.theme)}”</div>` : ""}
-      <div class="officers grp">${officers}</div>
+      <div class="rule"></div><div class="officers">${officers}</div><div class="rule"></div>
       <div class="rows">${rows.join("")}</div>
       ${announcements ? `<div class="ann"><div class="ann-h">Announcements</div>${announcements}</div>` : ""}
       ${o.footer ? `<div class="foot">${esc(o.footer)}</div>` : ""}
     </div></div>`;
 
+  const styleCls = o.leaders === false ? "plain" : "leaders";
   return `<!doctype html><html><head><meta charset="utf-8"><title>Program · ${esc(ctx.fmtDate(ctx.date))}</title>
 <style>
   @page { size: 8.5in 11in; margin: 0; }
@@ -242,7 +249,10 @@ export function buildProgramHtml(ctx, opts = {}) {
   .date { font-size: 10.5pt; color: #333; margin-top: .04in; }
   .theme { font-style: italic; font-size: 10.5pt; margin-top: .06in; }
   .grp { margin-top: .16in; }            /* air between blocks */
-  .officers.grp { margin-top: .2in; }
+  .rule { height: 1px; background: #222; margin: .12in .2in .06in; }
+  .officers + .rule { margin: .06in .2in .02in; }
+  .officers { padding: 0 .05in; }
+  .plain .r .dots { border-bottom: none; }   /* "Plain" style: no dot leaders */
   .r { display: flex; align-items: baseline; font-size: 10.5pt; line-height: 1.35; padding: .012in 0; }
   .r .l { flex: 0 0 auto; text-align: left; }
   .r .dots { flex: 1; border-bottom: 1.5px dotted #444; margin: 0 .05in; transform: translateY(-.04in); min-width: .3in; }
@@ -264,7 +274,7 @@ export function buildProgramHtml(ctx, opts = {}) {
   @media print { .bar { display: none; } html, body { background: #fff; } .sheet { margin: 0; box-shadow: none; } }
 </style></head><body>
 <div class="bar"><button onclick="window.print()">🖨 Print</button><span>Letter, portrait, 100% scale — no margins. Cut along the dashed line.</span></div>
-<div class="sheet">${program}${program}</div>
+<div class="sheet ${styleCls}">${program}${program}</div>
 <script>
   // long Sundays: shrink the whole program a step at a time until it fits the 11in column
   function fit() {
