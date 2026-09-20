@@ -5,17 +5,16 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1789940722";
+import { db } from "./firebase-init.js?v=1789941139";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789940722";
-import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1789940722";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789941139";
+import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1789941139";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
-  ["stake", "Submitted to Stake"], // callings that need stake approval before the call is extended (2026-09-20)
   ["issue", "Calls to Issue"],
   ["sustain", "Calls to Sustain"],
   ["apart", "Set Apart & MLS"],
@@ -32,11 +31,12 @@ let items = [];
 let groups = [];   // Calling-to-Fill groupings: callingGroups/{id} { label, order }
 let showDone = false;
 let stakeOpen = false; // the Stake pop-up is showing (re-rendered on data changes)
+let dragName = "";     // a person's name being dragged (needs-calling row) — for the Stake pill drop
 let started = false;
 
 // legacy docs from the earlier pipeline get mapped into the new flow
 function norm(d) {
-  if (d.kind === "member" || d.kind === "release") return d;
+  if (d.kind === "member" || d.kind === "release" || d.kind === "stake") return d; // stake callings have their own flow (2026-09-20)
   if (d.stage) {
     // older stage names fold into the current flow
     let stage = d.stage;
@@ -72,7 +72,7 @@ export function initCallings() {
         <p class="panel-sub">Callings and releases, from consideration to the clerk's records.</p>
       </div>
       <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
-        <button class="chip stake-chip" id="chip-stake" title="Callings submitted to the stake — click to show them">Stake <span class="pill pill-inprogress" id="stake-count">0</span></button>
+        <button class="chip stake-chip" id="chip-stake" title="Stake callings — click to open; drop a name here to recommend them">Stake Callings <span class="pill pill-inprogress" id="stake-count">0</span></button>
         <button class="btn" id="btn-new-member">+ Needs a calling</button>
         <button class="btn" id="btn-new-release">+ New release</button>
         <button class="btn btn-primary" id="btn-new-calling">+ New calling</button>
@@ -90,7 +90,12 @@ export function initCallings() {
   panel.querySelector("#btn-new-calling").addEventListener("click", () => editCalling(null));
   panel.querySelector("#btn-new-release").addEventListener("click", () => editRelease(null));
   panel.querySelector("#btn-new-member").addEventListener("click", () => editMember(null));
-  panel.querySelector("#chip-stake").addEventListener("click", openStake); // pop-up list (2026-09-20)
+  panel.querySelector("#chip-stake").addEventListener("click", () => openStake()); // pop-up list (2026-09-20)
+  // drop a name on the pill → the pop-up opens with that name ready to recommend
+  const chipStake = panel.querySelector("#chip-stake");
+  chipStake.addEventListener("dragover", (e) => { if (!dragName) return; e.preventDefault(); chipStake.classList.add("drop-over"); });
+  chipStake.addEventListener("dragleave", () => chipStake.classList.remove("drop-over"));
+  chipStake.addEventListener("drop", (e) => { if (!dragName) return; e.preventDefault(); chipStake.classList.remove("drop-over"); const n = dragName; dragName = null; openStake(n); });
   panel.querySelector("#chip-done").addEventListener("click", (e) => {
     showDone = !showDone;
     e.target.classList.toggle("active", showDone);
@@ -135,7 +140,7 @@ async function reorderWithin(stage, draggedId, beforeId) {
 // Keep the Sacrament tab's Ward Business in step with the calling flow (2026-09-13):
 //  • reaching "Calls to Sustain" adds the sustaining to the next Sunday with a ward meeting
 //  • falling back to Fill / Issue (or deleting the calling) takes it off every upcoming Sunday
-const BACK_STAGES = ["fill", "stake", "issue"];
+const BACK_STAGES = ["fill", "issue"];
 const ON_BUSINESS = ["sustain", "apart"];
 const isCallingRec = (x) => x && (x.kind || "calling") === "calling";
 async function wardBusinessSync(prev, upd) {
@@ -238,48 +243,60 @@ const issueRow = (c) => `
     ${stampAction("Decided", c.stamps?.issue, `<button class="btn btn-sm" data-adv="sustain" type="button" title="${esc(c.decided || "")} accepted the call">Accepted</button>`)}
   </div>`;
 
-// Stake section (2026-09-20): a decided name that needs stake approval waits
-// here as "Submitted to Stake"; Approved moves it on to Calls to Issue.
-const stakeRow = (c) => `
-  <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
-    <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}${delBtn(c)}</div>
-    <div class="row-title">${esc(c.decided || "—")}</div>
-    ${stampAction("Submitted", c.stamps?.stake, `<button class="btn btn-sm" data-adv="issue" type="button" title="The stake approved ${esc(c.decided || "")} — move to Calls to Issue">Approved →</button>`)}
-  </div>`;
-
-// Stake pop-up (2026-09-20): who's submitted to the stake, Approved → Calls
-// to Issue, plus a picker to submit another decided calling.
-function openStake() {
-  const callings = items.filter((i) => (i.kind || "calling") === "calling");
-  const inStake = callings.filter((c) => c.stage === "stake");
-  const eligible = callings.filter((c) => (c.stage === "fill" || c.stage === "issue") && (c.decided || (c.candidates || [])[0]));
+// Stake pop-up (2026-09-20): stake callings have their own two-step flow
+// here — Recommended to Stake → Called — and archive once called. They
+// never appear on the ward board.
+function openStake(prefillName = "") {
+  const stakes = items.filter((i) => i.kind === "stake" && i.stage !== "done");
+  const rec = stakes.filter((c) => c.stage === "recommend"), called = stakes.filter((c) => c.stage === "called");
+  const card = (c, action) => `
+    <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
+      <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}${c.organization ? ` <span class="call-card-org">· ${esc(c.organization)}</span>` : ""}<span class="call-del" data-sdel="${c.id}" title="Delete" role="button">✕</span></div>
+      <div class="row-title">${esc(c.name || "—")}</div>
+      ${action}
+    </div>`;
   const el = openModal(`
-    <h3 style="display:flex;align-items:center;gap:.5rem">Submitted to Stake <span class="pill ${inStake.length ? "pill-inprogress" : "pill-role-member"}">${inStake.length}</span></h3>
-    <p class="row-sub" style="margin:0 0 .6rem">Callings waiting for stake approval. Approved moves them on to Calls to Issue.</p>
-    <div class="stake-list">
-      ${inStake.length ? inStake.map((c) => `
-        <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
-          <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}${c.organization ? ` <span class="call-card-org">· ${esc(c.organization)}</span>` : ""}</div>
-          <div class="row-title">${esc(c.decided || "—")}</div>
-          ${stampAction("Submitted", c.stamps?.stake, `<span style="display:flex;gap:.35rem"><button class="btn btn-sm btn-ghost" data-sback="${c.id}" type="button" title="Not approved — back to Calling to Fill">Back</button><button class="btn btn-sm btn-primary" data-sok="${c.id}" type="button" title="Approved — move to Calls to Issue">Approved →</button></span>`)}
-        </div>`).join("") : `<div class="empty-note">Nothing submitted to the stake.</div>`}
+    <h3 style="display:flex;align-items:center;gap:.5rem">Stake Callings <span class="pill ${stakes.length ? "pill-inprogress" : "pill-role-member"}">${stakes.length}</span></h3>
+    <p class="row-sub" style="margin:0 0 .8rem">Recommend a name to the stake; mark it Called once the stake extends the call; archive when done.</p>
+    <div class="mtg-sec-title">Recommended to Stake <span class="pill pill-role-member">${rec.length}</span></div>
+    <div class="stake-list">${rec.length ? rec.map((c) => card(c, stampAction("Recommended", c.stamps?.recommend, `<span style="display:flex;gap:.35rem"><button class="btn btn-sm btn-ghost" data-sstage="done" data-outcome="notcalled" data-sid="${c.id}" type="button" title="The stake didn't extend the call — archive it">Not called</button><button class="btn btn-sm btn-primary" data-sstage="called" data-sid="${c.id}" type="button">Called →</button></span>`))).join("") : `<div class="empty-note">Nothing recommended yet.</div>`}</div>
+    <div class="mtg-sec-title" style="margin-top:.9rem">Called <span class="pill pill-role-member">${called.length}</span></div>
+    <div class="stake-list">${called.length ? called.map((c) => card(c, stampAction("Called", c.stamps?.called, `<span style="display:flex;gap:.35rem"><button class="btn btn-sm btn-ghost" data-sstage="recommend" data-sid="${c.id}" type="button" title="Back to Recommended">Back</button><button class="btn btn-sm" data-sstage="done" data-outcome="called" data-sid="${c.id}" type="button" title="Done — move to the archive">Archive</button></span>`))).join("") : `<div class="empty-note">No one called yet.</div>`}</div>
+    <div class="mtg-sec-title" style="margin-top:.9rem">Recommend to the stake</div>
+    <div class="form-grid">
+      <label class="field"><span>Calling</span><input id="st-calling" placeholder="e.g. Stake Young Women Presidency" autocomplete="off"></label>
+      <label class="field"><span>Organization <span class="row-sub">(optional)</span></span><input id="st-org" placeholder="e.g. Stake" autocomplete="off"></label>
+      <label class="field full"><span>Name</span><input id="st-name" placeholder="Who you're recommending" autocomplete="off" list="dl-needy-st" value="${esc(prefillName)}"></label>
     </div>
-    ${eligible.length ? `
-    <div class="field" style="margin-top:.9rem"><span>Submit a calling to the stake</span>
-      <div style="display:flex;gap:.4rem"><select id="st-pick" style="flex:1"><option value="">Choose a calling…</option>${eligible.map((c) => `<option value="${c.id}">${esc(c.calling)} — ${esc(c.decided || (c.candidates || [])[0])}</option>`).join("")}</select><button class="btn" id="st-submit" type="button">Submit</button></div>
-    </div>` : ""}
-    <div class="modal-actions"><span></span><button class="btn" id="st-close">Close</button></div>`);
+    <datalist id="dl-needy-st">${items.filter((i) => i.kind === "member").map((p) => `<option value="${esc(p.name)}"></option>`).join("")}</datalist>
+    <div class="modal-actions"><button class="btn btn-primary" id="st-add" type="button">Recommend</button><button class="btn" id="st-close" type="button">Close</button></div>`);
   stakeOpen = true;
+  if (prefillName) setTimeout(() => el.querySelector("#st-calling")?.focus(), 30);
   const done = () => { stakeOpen = false; closeModal(); };
   el.querySelector("#st-close").addEventListener("click", done);
-  el.querySelectorAll("[data-sok]").forEach((b) => b.addEventListener("click", () => save(b.dataset.sok, { stage: "issue" })));
-  el.querySelectorAll("[data-sback]").forEach((b) => b.addEventListener("click", () => save(b.dataset.sback, { stage: "fill" })));
-  el.querySelector("#st-submit")?.addEventListener("click", () => {
-    const id = el.querySelector("#st-pick").value;
-    const c = items.find((x) => x.id === id);
-    if (!c) return;
-    save(id, { stage: "stake", decided: c.decided || (c.candidates || [])[0] });
-  });
+  el.querySelectorAll("[data-sstage]").forEach((b) => b.addEventListener("click", () => {
+    const upd = { stage: b.dataset.sstage };
+    if (b.dataset.outcome) upd.outcome = b.dataset.outcome; // "called" | "notcalled" — shown in the archive
+    save(b.dataset.sid, upd);
+    toast(b.dataset.outcome === "notcalled" ? "Archived as not called" : b.dataset.sstage === "done" ? "Archived" : b.dataset.sstage === "called" ? "Marked called" : "Moved back");
+  }));
+  el.querySelectorAll("[data-sdel]").forEach((b) => b.addEventListener("click", async () => {
+    const c = items.find((x) => x.id === b.dataset.sdel);
+    if (!c || !confirm(`Delete “${c.calling}”${c.name ? ` (${c.name})` : ""}?`)) return;
+    await deleteDoc(doc(db, "callings", c.id)); toast("Deleted");
+  }));
+  const add = async () => {
+    const calling = el.querySelector("#st-calling").value.trim();
+    const name = el.querySelector("#st-name").value.trim();
+    const organization = el.querySelector("#st-org").value.trim();
+    if (!calling || !name) { toast("Enter the calling and the name"); return; }
+    await addDoc(collection(db, "callings"), { kind: "stake", calling, organization, name, stage: "recommend", stamps: { recommend: new Date().toISOString() }, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+    toast(`${name} recommended for ${calling}`);
+    ["st-calling", "st-org", "st-name"].forEach((id) => { const i = el.querySelector("#" + id); if (i) i.value = ""; });
+    openStake(); // fresh list with the new recommendation
+  };
+  el.querySelector("#st-add").addEventListener("click", add);
+  el.querySelectorAll("#st-calling, #st-org, #st-name").forEach((i) => i.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }));
 }
 
 const sustainRow = (c) => `
@@ -326,17 +343,21 @@ const memberRow = (p) => `
 
 // Archived (complete) callings + releases, with a "move back to…" so a
 // mistake — or a calling that fell through — can rejoin the flow.
-const CALL_BACK = [["fill", "Calling to Fill"], ["stake", "Submitted to Stake"], ["issue", "Calls to Issue"], ["sustain", "Calls to Sustain"], ["apart", "Set Apart & MLS"]];
+const CALL_BACK = [["fill", "Calling to Fill"], ["issue", "Calls to Issue"], ["sustain", "Calls to Sustain"], ["apart", "Set Apart & MLS"]];
+// Stake callings (kind "stake") live only inside the Stake pop-up (2026-09-20):
+//   recommend (Recommended to Stake) → called (Called) → done (archived)
+const STAKE_STAGES = [["recommend", "Recommended to Stake"], ["called", "Called"]];
+const STAKE_BACK = STAKE_STAGES;
 const REL_BACK = [["decided", "Decided"], ["notified", "Notified"], ["released", "Released"]];
 const doneRow = (it) => `
   <div class="list-row done-row" data-id="${it.id}">
     <div class="row-main">
-      <div class="row-title">${it.kind === "release" ? `${esc(it.name)} — released` : `${esc(it.decided || "")} — ${esc(it.calling)}`}</div>
+      <div class="row-title">${it.kind === "release" ? `${esc(it.name)} — released` : it.kind === "stake" ? `${esc(it.name || "")} — ${esc(it.calling)} <span class="row-sub">(stake · ${it.outcome === "notcalled" ? "not called" : "called"})</span>` : `${esc(it.decided || "")} — ${esc(it.calling)}`}</div>
       ${stampLine("Completed", it.stamps?.done)}
     </div>
     <select class="done-back" data-id="${it.id}" title="Move this back into the flow">
       <option value="">Move back to…</option>
-      ${(it.kind === "release" ? REL_BACK : CALL_BACK).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}
+      ${(it.kind === "release" ? REL_BACK : it.kind === "stake" ? STAKE_BACK : CALL_BACK).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}
     </select>
     <span class="pill pill-done">Archived</span>
   </div>`;
@@ -404,13 +425,20 @@ function render() {
       members.map(memberRow), "No one on the list.", null, "member") +
     `</div>`;
 
-  const doneItems = [...callings.filter((c) => c.stage === "done"), ...releases.filter((r) => r.stage === "done")]
+  const doneItems = [...callings.filter((c) => c.stage === "done"), ...releases.filter((r) => r.stage === "done"), ...items.filter((i) => i.kind === "stake" && i.stage === "done")]
     .sort((a, b) => tsMs(b.stamps?.done) - tsMs(a.stamps?.done));
   const doneList = document.getElementById("calling-done");
   if (doneList) doneList.innerHTML = doneItems.length ? doneItems.map(doneRow).join("") : `<div class="empty-note">Nothing archived yet.</div>`;
-  if (stakeOpen && document.getElementById("st-close")) openStake(); else stakeOpen = false; // keep the pop-up current (Esc/backdrop may have closed it)
+  if (stakeOpen && document.getElementById("st-close")) {
+    const typing = ["st-calling", "st-org", "st-name"].some((id) => document.getElementById(id)?.value);
+    if (!typing) openStake(); // keep the pop-up current (unless a recommendation is half-typed)
+  } else stakeOpen = false;
   const stakeCount = document.getElementById("stake-count");
-  if (stakeCount) { const n = by("stake").length; stakeCount.textContent = n; stakeCount.className = "pill " + (n ? "pill-inprogress" : "pill-role-member"); }
+  if (stakeCount) {
+    const n = items.filter((i) => i.kind === "stake" && i.stage !== "done").length;
+    stakeCount.textContent = n; stakeCount.className = "pill " + (n ? "pill-inprogress" : "pill-role-member");
+    document.getElementById("chip-stake")?.classList.toggle("has-active", n > 0); // black while anyone is in the flow
+  }
   const chipDone = document.getElementById("chip-done");
   if (chipDone) chipDone.textContent = (showDone ? "Hide archived" : "Show archived") + (doneItems.length ? ` (${doneItems.length})` : "");
   // "Move back to…" on an archived row: rejoin the flow at the chosen stage.
@@ -421,7 +449,7 @@ function render() {
     const st = sel.value; if (!st) return;
     const it = items.find((x) => x.id === sel.dataset.id); if (!it) return;
     const upd = { stage: st };
-    if (it.kind !== "release") {
+    if (it.kind !== "release" && it.kind !== "stake") {
       upd.mlsDone = false;
       if (st !== "apart") upd.setApart = false;
     }
@@ -552,12 +580,13 @@ function render() {
   document.querySelectorAll("#panel-callings .member-row").forEach((row) => {
     row.addEventListener("dragstart", (e) => {
       dragMember = items.find((x) => x.id === row.dataset.member) || null;
+      dragName = dragMember?.name || "";
       e.dataTransfer.effectAllowed = "copy";
       try { e.dataTransfer.setData("text/plain", dragMember?.name || ""); } catch { /* older browsers */ }
     });
     row.addEventListener("dragend", () => {
-      dragMember = null;
-      document.querySelectorAll("#panel-callings .cand-target").forEach((r) => r.classList.remove("cand-target"));
+      dragMember = null; dragName = "";
+      document.querySelectorAll("#panel-callings .cand-target, #chip-stake.drop-over").forEach((r) => r.classList.remove("cand-target", "drop-over"));
     });
   });
   document.querySelectorAll('#panel-callings .bb-drop[data-stage="fill"] .list-row').forEach((card) => {

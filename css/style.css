@@ -1264,10 +1264,11 @@ th.us-sort:hover, th.us-sort.on { color: var(--brand); }
 .stake-wrap .call-card-actions .btn { margin-left: auto; }
 
 /* Callings header: Stake pill (count) that expands the submitted list (2026-09-20) */
-.stake-chip { display: inline-flex; align-items: center; gap: .55rem; font-weight: 800; font-size: 1.05rem; padding: .45rem 1rem; border-radius: 99px; letter-spacing: .01em; }
-.stake-chip .pill { font-size: .9rem; font-weight: 800; padding: .1rem .6rem; }
-.stake-chip.active { background: var(--brand); color: #fff; border-color: var(--brand); }
-.stake-chip.active .pill { background: rgba(255,255,255,.22); color: #fff; }
+.stake-chip { display: inline-flex; align-items: center; gap: .6rem; font-weight: 800; font-size: 1.15rem; padding: .55rem 1.2rem; border-radius: 99px; letter-spacing: .01em; }
+.stake-chip .pill { font-size: .95rem; font-weight: 800; padding: .12rem .65rem; }
+.stake-chip.has-active { background: #1f2733; color: #fff; border-color: #1f2733; }   /* black while anyone is in the flow */
+.stake-chip.has-active .pill { background: rgba(255,255,255,.22); color: #fff; }
+.stake-chip.drop-over { outline: 3px dashed var(--brand); outline-offset: 3px; }
 .stake-wrap { margin-top: .8rem; }
 
 /* calling cards: date + action on one line (2026-09-20) */
