@@ -6,9 +6,9 @@
 // meeting content comes straight from that Sunday's plan.
 //
 //   settings/program  { wardName, stakeName, logo (data URL | "" = built-in), opts: {...} }
-import { db } from "./firebase-init.js?v=1789883326";
+import { db } from "./firebase-init.js?v=1789883361";
 import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789883326";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789883361";
 
 export const DEFAULT_LOGO = "assets/program-logo.jpg"; // Christus arch, built in
 // Fixed by Jordan (2026-09-19): Presiding + Conducting always shown, speaker
@@ -182,7 +182,7 @@ export function buildProgramHtml(ctx, opts = {}) {
     if (HYMN_KINDS.includes(k)) { push(k, hymnLines(L(k), it)); return; }
     if (SPEAKER_KINDS.includes(k)) {
       if (it.none || !it.name) return;
-      push(k === "speaker" ? "speakers" : "youth", leader(L(k), esc(it.name))); // topics never printed
+      push("speakers", leader(L(k), esc(it.name))); // youth + adult speakers share one block; topics never printed
       return;
     }
     if (PRAYER_KINDS.includes(k)) { push(k, leader(L(k), esc(it.name || "TBA"))); return; }
