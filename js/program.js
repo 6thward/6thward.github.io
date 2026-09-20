@@ -6,9 +6,9 @@
 // meeting content comes straight from that Sunday's plan.
 //
 //   settings/program  { wardName, stakeName, logo (data URL | "" = built-in), opts: {...} }
-import { db } from "./firebase-init.js?v=1789910588";
+import { db } from "./firebase-init.js?v=1789911867";
 import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789910588";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789911867";
 
 export const DEFAULT_LOGO = "assets/program-logo.jpg"; // Christus arch, built in
 // Fixed by Jordan (2026-09-19): Presiding + Conducting always shown, speaker
@@ -218,6 +218,7 @@ export function buildProgramHtml(ctx, opts = {}) {
     if (k === "sacramentHymn") { if (babies.length) push("baby", babyLines()); push("sac", hymnLines(L(k), it)); return; } // blessings = their own block, just before the sacrament
     if (k === "sacrament" || k === "blessing") { push("sac", `<div class="band">Administration of the Sacrament</div>`); return; }
     if (k === "testimonies") { push("testimonies", `<div class="band">${esc(L("testimonies"))}</div>`); return; }
+    if (k === "intermediateHymn" && !it.num && !it.title) return; // no rest hymn chosen → nothing to print (2026-09-20)
     if (HYMN_KINDS.includes(k)) { push(k, hymnLines(L(k), it)); return; }
     if (SPEAKER_KINDS.includes(k)) {
       if (it.none || !it.name) return;
@@ -240,12 +241,11 @@ export function buildProgramHtml(ctx, opts = {}) {
   const presiding = m.presiding || ctx.presidingDefault || "—";
   const conducting = m.conducting || "—";
   const same = presiding !== "—" && presiding.trim().toLowerCase() === conducting.trim().toLowerCase();
-  const officers = [
-    ...(same ? [["Presiding & Conducting", presiding]]      // one line when it's the same person (2026-09-20)
-             : [["Presiding", presiding], ["Conducting", conducting]]), // always shown; blank presiding = the bishop
-    m.chorister ? ["Music Conductor", m.chorister] : null,
-    m.organist ? ["Organist", m.organist] : null,
-  ].filter(Boolean).map(([l, v]) => leader(l, esc(v))).join("");
+  const officers = (same
+      ? `<div class="c officer-c"><div class="c1">Presiding &amp; Conducting</div><div class="c2">${esc(presiding)}</div></div>` // same person: one centred line (2026-09-20)
+      : leader("Presiding", esc(presiding)) + leader("Conducting", esc(conducting)))                                            // always shown; blank presiding = the bishop
+    + [m.chorister ? ["Music Conductor", m.chorister] : null, m.organist ? ["Organist", m.organist] : null]
+        .filter(Boolean).map(([l, v]) => leader(l, esc(v))).join("");
 
   const program = `
     <div class="prog"><div class="inner">
@@ -289,6 +289,8 @@ export function buildProgramHtml(ctx, opts = {}) {
   .rule { height: 1px; background: #d4d4d4; margin: calc(.12in * var(--head)) .25in .06in; }
   .officers + .rule { margin: .06in .25in .02in; }
   .officers { padding: 0 .4in; }   /* names sit clearly inside the rules */
+  .officers .officer-c { padding-bottom: .04in; }
+  .officers .officer-c .c2 { font-weight: 600; }
   .r { display: flex; align-items: baseline; font-size: 10.5pt; line-height: 1.35; padding: .012in 0; }
   .r .l { flex: 0 0 auto; text-align: left; }
   .r .dots { flex: 1; min-width: .3in; overflow: hidden; white-space: nowrap; text-align: left; margin: 0 .02in; }
