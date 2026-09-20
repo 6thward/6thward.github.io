@@ -5,13 +5,13 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1789930277";
+import { db } from "./firebase-init.js?v=1789940325";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789930277";
-import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1789930277";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789940325";
+import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1789940325";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
@@ -31,6 +31,7 @@ const REL_STAGES = [
 let items = [];
 let groups = [];   // Calling-to-Fill groupings: callingGroups/{id} { label, order }
 let showDone = false;
+let showStake = localStorage.getItem("sw-stake-open") === "1"; // Stake pill in the header expands the list (2026-09-20)
 let started = false;
 
 // legacy docs from the earlier pipeline get mapped into the new flow
@@ -70,7 +71,8 @@ export function initCallings() {
         <h2>Callings</h2>
         <p class="panel-sub">Callings and releases, from consideration to the clerk's records.</p>
       </div>
-      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+        <button class="chip stake-chip${showStake ? " active" : ""}" id="chip-stake" title="Callings submitted to the stake — click to show them">Stake <span class="pill pill-inprogress" id="stake-count">0</span></button>
         <button class="btn" id="btn-new-member">+ Needs a calling</button>
         <button class="btn" id="btn-new-release">+ New release</button>
         <button class="btn btn-primary" id="btn-new-calling">+ New calling</button>
@@ -88,6 +90,12 @@ export function initCallings() {
   panel.querySelector("#btn-new-calling").addEventListener("click", () => editCalling(null));
   panel.querySelector("#btn-new-release").addEventListener("click", () => editRelease(null));
   panel.querySelector("#btn-new-member").addEventListener("click", () => editMember(null));
+  panel.querySelector("#chip-stake").addEventListener("click", () => {
+    showStake = !showStake;
+    localStorage.setItem("sw-stake-open", showStake ? "1" : "0");
+    panel.querySelector("#chip-stake").classList.toggle("active", showStake);
+    render();
+  });
   panel.querySelector("#chip-done").addEventListener("click", (e) => {
     showDone = !showDone;
     e.target.classList.toggle("active", showDone);
@@ -179,6 +187,11 @@ const stampLine = (label, ts) => {
   const f = fmtStamp(ts);
   return f ? `<div class="row-sub">${label} ${f}</div>` : "";
 };
+// date on the left, action button on the right, one line (2026-09-20)
+const stampAction = (label, ts, actionHtml) => {
+  const f = fmtStamp(ts);
+  return `<div class="call-card-line"><span class="row-sub">${f ? `${label} ${f}` : ""}</span>${actionHtml}</div>`;
+};
 
 // ---- rows ----
 // each calling gets a consistently colored pill so it's easy to single out;
@@ -227,8 +240,7 @@ const issueRow = (c) => `
   <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
     <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}${delBtn(c)}</div>
     <div class="row-title">${esc(c.decided || "—")}</div>
-    ${stampLine("Decided", c.stamps?.issue)}
-    <div class="call-card-actions"><button class="btn btn-sm btn-ghost" data-adv="stake" type="button" title="This calling needs stake approval first">Stake</button><button class="btn btn-sm" data-adv="sustain" type="button" title="${esc(c.decided || "")} accepted the call">Accepted</button></div>
+    ${stampAction("Decided", c.stamps?.issue, `<button class="btn btn-sm" data-adv="sustain" type="button" title="${esc(c.decided || "")} accepted the call">Accepted</button>`)}
   </div>`;
 
 // Stake section (2026-09-20): a decided name that needs stake approval waits
@@ -237,16 +249,14 @@ const stakeRow = (c) => `
   <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
     <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}${delBtn(c)}</div>
     <div class="row-title">${esc(c.decided || "—")}</div>
-    ${stampLine("Submitted", c.stamps?.stake)}
-    <div class="call-card-actions"><span class="pill pill-inprogress">Submitted to Stake</span><button class="btn btn-sm" data-adv="issue" type="button" title="The stake approved ${esc(c.decided || "")} — move to Calls to Issue">Approved →</button></div>
+    ${stampAction("Submitted", c.stamps?.stake, `<button class="btn btn-sm" data-adv="issue" type="button" title="The stake approved ${esc(c.decided || "")} — move to Calls to Issue">Approved →</button>`)}
   </div>`;
 
 const sustainRow = (c) => `
   <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
     <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}${delBtn(c)}</div>
     <div class="row-title">${esc(c.decided || "—")}</div>
-    ${stampLine("Accepted", c.stamps?.sustain)}
-    <div class="call-card-actions"><button class="btn btn-sm" data-adv="apart" type="button">Sustained →</button></div>
+    ${stampAction("Accepted", c.stamps?.sustain, `<button class="btn btn-sm" data-adv="apart" type="button">Sustained →</button>`)}
   </div>`;
 
 const apartRow = (c) => `
@@ -348,10 +358,10 @@ function render() {
     bucket("Set Apart & MLS", "Tick Set apart and MLS as each happens — when both are ticked the calling is complete and archives.",
       by("apart").map(apartRow), "No one waiting to be set apart.", "apart") +
     `</div>` +
-    `<div class="stake-wrap">` +
-    bucket("Stake", "Callings that need stake approval — drag a card here (or use “Stake” on a Calls to Issue card). Approved moves it to Calls to Issue.",
+    (showStake ? `<div class="stake-wrap">` +
+    bucket("Submitted to Stake", "Waiting for stake approval — drag a card here. Approved moves it on to Calls to Issue.",
       by("stake").map(stakeRow), "Nothing submitted to the stake.", "stake") +
-    `</div>` +
+    `</div>` : "") +
     `<h3 style="margin:1.4rem 0 0;display:flex;align-items:center;gap:.5rem">Releases <span class="pill pill-role-member">${releases.filter((r) => r.stage !== "done").length}</span></h3>` +
     `<div class="bishopric-board releases-board">` +
     bucket("Decided", "Release decided — let them know.",
@@ -370,6 +380,8 @@ function render() {
     .sort((a, b) => tsMs(b.stamps?.done) - tsMs(a.stamps?.done));
   const doneList = document.getElementById("calling-done");
   if (doneList) doneList.innerHTML = doneItems.length ? doneItems.map(doneRow).join("") : `<div class="empty-note">Nothing archived yet.</div>`;
+  const stakeCount = document.getElementById("stake-count");
+  if (stakeCount) { const n = by("stake").length; stakeCount.textContent = n; stakeCount.className = "pill " + (n ? "pill-inprogress" : "pill-role-member"); }
   const chipDone = document.getElementById("chip-done");
   if (chipDone) chipDone.textContent = (showDone ? "Hide archived" : "Show archived") + (doneItems.length ? ` (${doneItems.length})` : "");
   // "Move back to…" on an archived row: rejoin the flow at the chosen stage.
