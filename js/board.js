@@ -3,12 +3,12 @@
 // added, renamed, reordered and removed. Data:
 //   boardColumns/{id}  { label, order }
 //   board/{id}         { name, notes, column, order, createdAt, updatedAt }
-import { db } from "./firebase-init.js?v=1789914996";
-import { ctx, can } from "./app.js?v=1789914996";
+import { db } from "./firebase-init.js?v=1789930277";
+import { ctx, can } from "./app.js?v=1789930277";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789914996";
+import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789930277";
 
 // Next ordinance a person is working toward — shown as a pill beside the name.
 const ORDINANCES = ["Sacrament", "Aaronic Priesthood", "Melchizedek Priesthood", "Endowment", "Sealing"];
@@ -548,7 +548,7 @@ function editCard(k, presetCol) {
     <div class="form-grid">
       <label class="field"><span>Name</span><input id="bc-name" value="${esc(k?.name || "")}" ${editor ? "" : "disabled"} autocomplete="off"></label>
       <label class="field"><span>Section</span>
-        <select id="bc-col" ${editor ? "" : "disabled"}>${cols.map((c) => `<option value="${c.id}" ${c.id === colId ? "selected" : ""}>${esc(c.label)}</option>`).join("")}</select>
+        <div style="display:flex;gap:.4rem;align-items:stretch"><select id="bc-col" style="flex:1" ${editor ? "" : "disabled"}>${cols.map((c) => `<option value="${c.id}" ${c.id === colId ? "selected" : ""}>${esc(c.label)}</option>`).join("")}</select>${editor ? `<button class="btn" type="button" id="bc-newcol" title="Create a new section and pick it">+ New section</button>` : ""}</div>
       </label>
       <label class="field"><span>Next ordinance</span><select id="bc-ord" ${editor ? "" : "disabled"}><option value="">— none —</option>${ORDINANCES.map((o) => `<option value="${esc(o)}"${(k?.nextOrdinance || "") === o ? " selected" : ""}>${esc(o)}</option>`).join("")}</select></label>
       <label class="field full"><span>Notes</span><textarea id="bc-notes" ${editor ? "" : "disabled"} placeholder="Anything worth remembering — optional">${esc(k?.notes || "")}</textarea></label>
@@ -564,6 +564,30 @@ function editCard(k, presetCol) {
     </div>`);
   el.querySelector("#bc-cancel").addEventListener("click", closeModal);
   el.querySelector("#bc-meetings")?.addEventListener("click", () => openMeetings(k));
+  // "+ New section" right here (2026-09-20): type a name, Enter → section is created and selected
+  el.querySelector("#bc-newcol")?.addEventListener("click", () => {
+    const btn = el.querySelector("#bc-newcol");
+    const inp = document.createElement("input");
+    inp.placeholder = "Section name"; inp.style.flex = "1"; inp.autocomplete = "off";
+    btn.replaceWith(inp); inp.focus();
+    let done = false;
+    const finish = async (save) => {
+      if (done) return; done = true;
+      const label = inp.value.trim();
+      if (save && label) {
+        try {
+          const ref = await addDoc(collection(db, "boardColumns"), { label, order: cols.length, createdAt: serverTimestamp() });
+          const sel = el.querySelector("#bc-col");
+          const opt = document.createElement("option"); opt.value = ref.id; opt.textContent = label;
+          sel.appendChild(opt); sel.value = ref.id;
+          toast(`Section “${label}” added`);
+        } catch (err) { toast("Couldn't add: " + (err.code || err.message)); }
+      }
+      inp.replaceWith(btn); done = false;
+    };
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); finish(true); } if (e.key === "Escape") { e.preventDefault(); finish(false); } });
+    inp.addEventListener("blur", () => setTimeout(() => finish(!!inp.value.trim()), 120));
+  });
   if (!editor) { el.querySelectorAll(".todo-open").forEach((sp) => sp.addEventListener("click", () => { const t = (k.todos || []).find((x) => x.id === sp.dataset.todo); if (t) editTodo(k, t, true); })); return; }
   if (!isNew) wireTodoList(el, k);
   if (isNew) setTimeout(() => el.querySelector("#bc-name").focus(), 30);
