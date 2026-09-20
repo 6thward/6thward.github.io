@@ -6,9 +6,9 @@
 // meeting content comes straight from that Sunday's plan.
 //
 //   settings/program  { wardName, stakeName, logo (data URL | "" = built-in), opts: {...} }
-import { db } from "./firebase-init.js?v=1789910443";
+import { db } from "./firebase-init.js?v=1789910588";
 import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789910443";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789910588";
 
 export const DEFAULT_LOGO = "assets/program-logo.jpg"; // Christus arch, built in
 // Fixed by Jordan (2026-09-19): Presiding + Conducting always shown, speaker
@@ -237,9 +237,12 @@ export function buildProgramHtml(ctx, opts = {}) {
   }
   const rows = blocks.map((b) => `<div class="grp grp-${b.cat}">${b.html.join("")}</div>`);
 
+  const presiding = m.presiding || ctx.presidingDefault || "—";
+  const conducting = m.conducting || "—";
+  const same = presiding !== "—" && presiding.trim().toLowerCase() === conducting.trim().toLowerCase();
   const officers = [
-    ["Presiding", m.presiding || ctx.presidingDefault || "—"],   // always; blank = the bishop
-    ["Conducting", m.conducting || "—"], // always
+    ...(same ? [["Presiding & Conducting", presiding]]      // one line when it's the same person (2026-09-20)
+             : [["Presiding", presiding], ["Conducting", conducting]]), // always shown; blank presiding = the bishop
     m.chorister ? ["Music Conductor", m.chorister] : null,
     m.organist ? ["Organist", m.organist] : null,
   ].filter(Boolean).map(([l, v]) => leader(l, esc(v))).join("");
