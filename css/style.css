@@ -1257,3 +1257,8 @@ th.us-sort:hover, th.us-sort.on { color: var(--brand); }
 .pill-female { background: #fbe4ee; color: #a8336b; }
 .pill-gender { cursor: pointer; }
 .pill-gender:hover { filter: brightness(.95); }
+
+/* Callings: Stake section under the four columns (2026-09-20) */
+.stake-wrap { max-width: 34rem; }
+.stake-wrap .call-card-actions { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+.stake-wrap .call-card-actions .btn { margin-left: auto; }

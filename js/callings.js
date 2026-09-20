@@ -5,16 +5,17 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1789914855";
+import { db } from "./firebase-init.js?v=1789914996";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789914855";
-import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1789914855";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789914996";
+import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1789914996";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
+  ["stake", "Submitted to Stake"], // callings that need stake approval before the call is extended (2026-09-20)
   ["issue", "Calls to Issue"],
   ["sustain", "Calls to Sustain"],
   ["apart", "Set Apart & MLS"],
@@ -131,7 +132,7 @@ async function reorderWithin(stage, draggedId, beforeId) {
 // Keep the Sacrament tab's Ward Business in step with the calling flow (2026-09-13):
 //  • reaching "Calls to Sustain" adds the sustaining to the next Sunday with a ward meeting
 //  • falling back to Fill / Issue (or deleting the calling) takes it off every upcoming Sunday
-const BACK_STAGES = ["fill", "issue"];
+const BACK_STAGES = ["fill", "stake", "issue"];
 const ON_BUSINESS = ["sustain", "apart"];
 const isCallingRec = (x) => x && (x.kind || "calling") === "calling";
 async function wardBusinessSync(prev, upd) {
@@ -227,7 +228,17 @@ const issueRow = (c) => `
     <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}${delBtn(c)}</div>
     <div class="row-title">${esc(c.decided || "—")}</div>
     ${stampLine("Decided", c.stamps?.issue)}
-    <div class="call-card-actions"><button class="btn btn-sm" data-adv="sustain" type="button" title="${esc(c.decided || "")} accepted the call">Accepted</button></div>
+    <div class="call-card-actions"><button class="btn btn-sm btn-ghost" data-adv="stake" type="button" title="This calling needs stake approval first">Stake</button><button class="btn btn-sm" data-adv="sustain" type="button" title="${esc(c.decided || "")} accepted the call">Accepted</button></div>
+  </div>`;
+
+// Stake section (2026-09-20): a decided name that needs stake approval waits
+// here as "Submitted to Stake"; Approved moves it on to Calls to Issue.
+const stakeRow = (c) => `
+  <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
+    <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}${delBtn(c)}</div>
+    <div class="row-title">${esc(c.decided || "—")}</div>
+    ${stampLine("Submitted", c.stamps?.stake)}
+    <div class="call-card-actions"><span class="pill pill-inprogress">Submitted to Stake</span><button class="btn btn-sm" data-adv="issue" type="button" title="The stake approved ${esc(c.decided || "")} — move to Calls to Issue">Approved →</button></div>
   </div>`;
 
 const sustainRow = (c) => `
@@ -274,7 +285,7 @@ const memberRow = (p) => `
 
 // Archived (complete) callings + releases, with a "move back to…" so a
 // mistake — or a calling that fell through — can rejoin the flow.
-const CALL_BACK = [["fill", "Calling to Fill"], ["issue", "Calls to Issue"], ["sustain", "Calls to Sustain"], ["apart", "Set Apart & MLS"]];
+const CALL_BACK = [["fill", "Calling to Fill"], ["stake", "Submitted to Stake"], ["issue", "Calls to Issue"], ["sustain", "Calls to Sustain"], ["apart", "Set Apart & MLS"]];
 const REL_BACK = [["decided", "Decided"], ["notified", "Notified"], ["released", "Released"]];
 const doneRow = (it) => `
   <div class="list-row done-row" data-id="${it.id}">
@@ -336,6 +347,10 @@ function render() {
       by("sustain").map(sustainRow), "No one waiting to be sustained.", "sustain") +
     bucket("Set Apart & MLS", "Tick Set apart and MLS as each happens — when both are ticked the calling is complete and archives.",
       by("apart").map(apartRow), "No one waiting to be set apart.", "apart") +
+    `</div>` +
+    `<div class="stake-wrap">` +
+    bucket("Stake", "Callings that need stake approval — drag a card here (or use “Stake” on a Calls to Issue card). Approved moves it to Calls to Issue.",
+      by("stake").map(stakeRow), "Nothing submitted to the stake.", "stake") +
     `</div>` +
     `<h3 style="margin:1.4rem 0 0;display:flex;align-items:center;gap:.5rem">Releases <span class="pill pill-role-member">${releases.filter((r) => r.stage !== "done").length}</span></h3>` +
     `<div class="bishopric-board releases-board">` +

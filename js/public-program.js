@@ -1,8 +1,8 @@
 // Public program page (2026-09-20): program.html?p=TOKEN — reads the
 // published snapshot (no sign-in) and renders one program column, phone-sized.
-import { db } from "./firebase-init.js?v=1789914855";
+import { db } from "./firebase-init.js?v=1789914996";
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { buildProgramHtml } from "./program.js?v=1789914855";
+import { buildProgramHtml } from "./program.js?v=1789914996";
 
 const fmtDate = (d) => new Date(d + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 
