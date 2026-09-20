@@ -1168,12 +1168,13 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .todo-pill .todo-pill-text { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
 /* Hymns column: organist + conductor as two separate pills matching the hymn lines (2026-09-13) */
-.st-subhead.st-music { display:flex; flex-direction:column; gap:.2rem; align-self:stretch; background:transparent !important; border:none !important; box-shadow:none !important; padding:0; margin:.1rem 0 .15rem; overflow:visible; white-space:normal; }
-.st-subhead.st-music .st-music-pill { display:flex; align-items:center; gap:.3rem; background:rgba(255,255,255,.82); border:1px solid rgba(31,39,51,.1); border-radius:99px; padding:.14rem .6rem .14rem .55rem; box-shadow:0 1px 1px rgba(20,30,45,.05); text-align:left; font-size:.8rem; font-weight:600; }
-.st-subhead.st-music .st-music-pill .st-li-tag { flex:0 0 5.6rem; font-weight:600; color:var(--ink); }
+.st-subhead.st-music { display:flex; flex-direction:row; gap:.3rem; align-self:stretch; background:transparent !important; border:none !important; box-shadow:none !important; padding:0; margin:.1rem 0 .15rem; overflow:visible; white-space:normal; } /* 2026-09-19: side by side, 50/50 */
+.st-subhead.st-music .st-music-pill { flex:1 1 0; min-width:0; display:flex; align-items:center; gap:.3rem; background:rgba(255,255,255,.82); border:1px solid rgba(31,39,51,.1); border-radius:99px; padding:.14rem .6rem .14rem .55rem; box-shadow:0 1px 1px rgba(20,30,45,.05); text-align:left; font-size:.8rem; font-weight:600; }
+.st-subhead.st-music .st-music-pill .st-li-tag { flex:0 0 auto; font-weight:600; color:var(--ink); }
 .st-subhead.st-music .st-music-pill .st-li-name { font-weight:600; color:var(--ink); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .st-subhead.st-music[data-musiced]:hover .st-music-pill { border-color:rgba(31,78,121,.45); }
-.st-subhead.st-music.st-sh-editing { gap:.2rem; }
+.st-subhead.st-music.st-sh-editing { gap:.3rem; }
+.st-subhead.st-music.st-sh-editing .st-music-row { flex:1 1 0; min-width:0; }
 .st-subhead.st-music.st-sh-editing .st-music-row { background:rgba(255,255,255,.82); border:1px solid rgba(31,39,51,.1); border-radius:99px; padding:.1rem .55rem; font-size:.8rem; font-weight:600; }
 .st-subhead.st-music.st-sh-editing .st-music-row input { font-size:.8rem; border-radius:99px; }
 
@@ -1211,3 +1212,6 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .us-page { display: flex; gap: .5rem; align-items: flex-start; padding: .4rem .5rem; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
 .us-page:has(input:checked) { border-color: var(--brand); background: var(--brand-soft); }
 .us-page input { margin-top: .2rem; }
+
+/* baby blessing pill: who gives the blessing, lighter (2026-09-19) */
+.pill-baby-by { font-weight: 500; opacity: .8; margin-left: .3em; }

@@ -6,9 +6,9 @@
 // meeting content comes straight from that Sunday's plan.
 //
 //   settings/program  { wardName, stakeName, logo (data URL | "" = built-in), opts: {...} }
-import { db } from "./firebase-init.js?v=1789881317";
+import { db } from "./firebase-init.js?v=1789881438";
 import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789881317";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789881438";
 
 export const DEFAULT_LOGO = "assets/program-logo.jpg"; // Christus arch, built in
 // Fixed by Jordan (2026-09-19): Presiding + Conducting always shown, speaker
@@ -153,6 +153,9 @@ export function buildProgramHtml(ctx, opts = {}) {
   const hymn = (it) => [it.num ? "#" + it.num : "", it.title].filter(Boolean).join("  ");
 
   const rows = [];
+  // baby blessings print right before the sacrament, whatever their slot in the plan
+  const babies = (m.items || []).filter((it) => it.kind === "babyBlessing" && (it.name || it.by));
+  const babyLines = () => babies.map((b) => `<div class="baby">Blessing of ${esc(b.name || "—")}${b.by ? ` <span class="by">by ${esc(b.by)}</span>` : ""}</div>`).join("");
   const row = (label, val, sub) => rows.push(`<div class="r"><span class="l">${esc(label)}</span><span class="v">${val}</span></div>${sub ? `<div class="sub">${sub}</div>` : ""}`);
   const band = (text, sub) => rows.push(`<div class="band">${esc(text)}${sub ? `<div class="band-sub">${esc(sub)}</div>` : ""}</div>`);
   let announcements = "";
@@ -164,7 +167,7 @@ export function buildProgramHtml(ctx, opts = {}) {
       if (lines.length) announcements = lines.map((l) => `<div>• ${esc(l)}</div>`).join("");
       return;
     }
-    if (k === "sacrament" || k === "blessing") { band("Administration of the Sacrament"); return; }
+    if (k === "sacrament" || k === "blessing") { if (babies.length) rows.push(babyLines()); band("Administration of the Sacrament"); return; }
     if (k === "testimonies") { band(L("testimonies")); return; }
     if (HYMN_KINDS.includes(k)) { row(L(k), hymn(it) ? esc(hymn(it)) : "—"); return; }
     if (SPEAKER_KINDS.includes(k)) {
@@ -175,7 +178,7 @@ export function buildProgramHtml(ctx, opts = {}) {
     if (PRAYER_KINDS.includes(k)) { row(L(k), esc(it.name || "—")); return; }
     if (k === "musical") { row(L(k), esc(it.who || "—"), [it.hymn, it.accompanist ? "Accompanist: " + it.accompanist : ""].filter(Boolean).map(esc).join(" · ")); return; }
     if (k === "choir") { row(L(k), esc(it.hymn || "—"), it.accompanist ? "Accompanist: " + esc(it.accompanist) : ""); return; }
-    if (k === "babyBlessing") { if (it.name) row(L(k), esc(it.name)); return; }
+    if (k === "babyBlessing") return; // printed just before the sacrament (above)
     if (k === "wardBusiness") return; // never printed
     if (k === "custom") { row(it.label || "Item", esc(it.text || "")); return; }
   });
@@ -232,6 +235,8 @@ export function buildProgramHtml(ctx, opts = {}) {
   .rows .sub div { text-align: right; }
   .band { font-variant: small-caps; letter-spacing: .05em; font-size: 11pt; padding: .07in 0; margin: .04in 0; border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; }
   .band-sub { font-variant: normal; letter-spacing: 0; font-size: 9pt; color: #444; }
+  .baby { text-align: center; font-size: 10.5pt; font-weight: 600; padding: .05in 0 .06in; }
+  .baby .by { font-weight: 400; font-style: italic; color: #333; }
   .ann { margin-top: auto; padding-top: .12in; text-align: left; font-size: 9pt; line-height: 1.35; }
   .ann-h { font-variant: small-caps; letter-spacing: .05em; font-size: 10pt; border-bottom: 1px solid #222; margin-bottom: .05in; }
   .ann div { padding-left: .05in; }

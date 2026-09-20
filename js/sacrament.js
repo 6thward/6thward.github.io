@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789881317";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789881317";
+import { db } from "./firebase-init.js?v=1789881438";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789881438";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789881317";
-import { HYMNS } from "./hymns.js?v=1789881317";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog } from "./program.js?v=1789881317";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789881438";
+import { HYMNS } from "./hymns.js?v=1789881438";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog } from "./program.js?v=1789881438";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -276,7 +276,7 @@ function blankItem(kind, time = 5) {
   else if (kind === "musical") Object.assign(it, { who: "", hymn: "", accompanist: "", confirmed: false, confirmedBy: "" });
   else if (kind === "choir") Object.assign(it, { hymn: "", accompanist: "", confirmed: false, confirmedBy: "" });
   else if (kind === "blessing") Object.assign(it, { priest1: "", priest2: "" });
-  else if (kind === "babyBlessing") Object.assign(it, { name: "" });
+  else if (kind === "babyBlessing") Object.assign(it, { name: "", by: "" }); // by = who gives the blessing (2026-09-19)
   else if (kind === "wardBusiness") Object.assign(it, { sustainings: [], releasings: [], other: "" });
   else if (kind === "custom") Object.assign(it, { label: "", text: "" });
   else Object.assign(it, { text: "" });
@@ -973,7 +973,7 @@ function renderCards(wrap) {
             ${m?.theme
               ? `<span class="theme-tag${canEdit ? " st-click" : ""}"${canEdit ? ` data-qe='{"t":"theme"}' title="Click to edit the theme"` : ""}>“${esc(m.theme)}”</span>`
               : (canEdit && !isConf ? `<span class="theme-tag theme-add" data-qe='{"t":"theme"}' title="Add a theme for this Sunday">+ theme</span>` : "")}
-            ${megaphone}${wbIcon}${hbIcon}${type !== "sacrament" ? `<span class="pill head-pill ${isConf ? "pill-conf" : type === "fast" ? "pill-fast" : "pill-approved"}">${esc(typeLabel(m, date))}</span>` : ""}${nth === 5 ? `<span class="nth-pill nth-5 head-pill">5th Sunday</span>` : ""}${babies.map((b) => `<span class="pill-baby-bold head-pill">Blessing${b.name ? ": " + esc(b.name) : ""}</span>`).join("")}
+            ${megaphone}${wbIcon}${hbIcon}${type !== "sacrament" ? `<span class="pill head-pill ${isConf ? "pill-conf" : type === "fast" ? "pill-fast" : "pill-approved"}">${esc(typeLabel(m, date))}</span>` : ""}${nth === 5 ? `<span class="nth-pill nth-5 head-pill">5th Sunday</span>` : ""}${babies.map((b, bi) => `<span class="pill-baby-bold head-pill${canEdit ? " st-click" : ""}" ${canEdit ? `data-baby="${bi}" title="Click to edit"` : ""}>Blessing${b.name ? ": " + esc(b.name) : ""}${b.by ? ` <span class="pill-baby-by">by ${esc(b.by)}</span>` : ""}</span>`).join("")}
           </h3>
           <div class="row-sub" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">${condChip}${isConf ? "<span>no sacrament meeting</span>" : ""}</div>
         </div>
@@ -1023,6 +1023,8 @@ function renderCards(wrap) {
     }));
   wrap.querySelectorAll("[data-addbaby]").forEach((b) =>
     b.addEventListener("click", (e) => { e.stopPropagation(); quickAddBaby(b.dataset.addbaby); }));
+  wrap.querySelectorAll("[data-baby]").forEach((p) =>
+    p.addEventListener("click", (e) => { e.stopPropagation(); quickAddBaby(p.closest("[data-date]").dataset.date, Number(p.dataset.baby)); }));
   wrap.querySelectorAll("[data-hbicon]").forEach((b) =>
     b.addEventListener("click", (e) => { e.stopPropagation(); hbModal(b.dataset.hbicon); }));
   wrap.querySelectorAll("[data-qe]").forEach((el) =>
@@ -1166,25 +1168,44 @@ function renderCards(wrap) {
     }));
 }
 
-// quick "+ Baby" button: always adds a NEW baby blessing item (a Sunday can have more than one)
-function quickAddBaby(date) {
+// quick "+ baby" button adds a NEW baby blessing (a Sunday can have more than
+// one); clicking an existing Blessing pill edits it (idx = which one). The
+// program prints "Blessing of <baby> by <who>" right before the sacrament.
+function quickAddBaby(date, idx = null) {
+  const m0 = meetings[date];
+  const cur = idx != null ? nthItem(m0?.items || [], "babyBlessing", idx) : null;
   const el = openModal(`
-    <h3>Add Baby Blessing <span class="row-sub">· ${fmtDay(date, { year: true })}</span></h3>
-    <label class="field">Baby's name <input id="qe-baby-name" placeholder="Baby's name"></label>
+    <h3>${cur ? "Baby Blessing" : "Add Baby Blessing"} <span class="row-sub">· ${fmtDay(date, { year: true })}</span></h3>
+    <div class="form-grid">
+      <label class="field"><span>Baby's name</span><input id="qe-baby-name" placeholder="First and last name" value="${esc(cur?.name || "")}" autocomplete="off"></label>
+      <label class="field"><span>Blessing given by</span><input id="qe-baby-by" placeholder="e.g. Brother Jones" value="${esc(cur?.by || "")}" autocomplete="off"></label>
+    </div>
     <div class="modal-actions">
+      ${cur ? `<button class="btn btn-ghost btn-danger" id="qe-del">Remove</button>` : "<span></span>"}
       <div class="right">
         <button class="btn" id="qe-cancel">Cancel</button>
-        <button class="btn btn-primary" id="qe-save">Add</button>
+        <button class="btn btn-primary" id="qe-save">${cur ? "Save" : "Add"}</button>
       </div>
     </div>`);
   el.querySelector("#qe-cancel").addEventListener("click", closeModal);
   el.querySelector("#qe-save").addEventListener("click", async () => {
     const name = el.querySelector("#qe-baby-name").value.trim();
+    const by = el.querySelector("#qe-baby-by").value.trim();
     await patchMeeting(date, (m) => {
-      insertCanonical(m.items, { kind: "babyBlessing", time: 3, name });
+      const it = cur ? nthItem(m.items, "babyBlessing", idx) : null;
+      if (it) { it.name = name; it.by = by; }
+      else insertCanonical(m.items, { kind: "babyBlessing", time: 3, name, by });
     });
     closeModal();
   });
+  el.querySelector("#qe-del")?.addEventListener("click", async () => {
+    await patchMeeting(date, (m) => {
+      const it = nthItem(m.items, "babyBlessing", idx);
+      if (it) m.items.splice(m.items.indexOf(it), 1);
+    });
+    closeModal();
+  });
+  el.querySelectorAll("input").forEach((i) => i.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); el.querySelector("#qe-save").click(); } }));
   el.querySelector("input").focus();
 }
 
@@ -2094,7 +2115,7 @@ function renderAgendaView(m, canEdit = false) {
     } else if (it.kind === "blessing") {
       val = esc([it.priest1, it.priest2].filter(Boolean).join(" & "));
     } else if (it.kind === "babyBlessing") {
-      val = esc(it.name || "");
+      val = esc(it.name || "") + (it.by ? ` <span class="row-sub">by ${esc(it.by)}</span>` : "");
     } else if (it.kind === "wardBusiness") {
       const parts = [];
       (it.sustainings || []).forEach((s) => parts.push(`Sustain: ${esc(s.name)}${s.calling ? " — " + esc(s.calling) : ""}`));
@@ -2585,7 +2606,7 @@ function itemCard(it, i) {
     body = priestSel("f-p1", it.priest1 || "") + priestSel("f-p2", it.priest2 || "")
       + (priests.length ? "" : `<div class="row-sub" style="width:100%">Add priests under ⚙ Settings to fill these dropdowns.</div>`);
   } else if (it.kind === "babyBlessing") {
-    body = `<input class="f-name" placeholder="Baby's name" style="flex:1" value="${esc(it.name || "")}">`;
+    body = `<input class="f-name" placeholder="Baby's name" style="flex:1" value="${esc(it.name || "")}"><input class="f-by" placeholder="Blessing given by" style="flex:1" value="${esc(it.by || "")}">`;
   } else if (it.kind === "custom") {
     body = `<input class="f-label" placeholder="Item name" style="flex:1" value="${esc(it.label || "")}">
             <input class="f-text" placeholder="Details" style="flex:2" value="${esc(it.text || "")}">`;
@@ -2643,7 +2664,7 @@ function syncDraft(el) {
     else if (it.kind === "musical") { it.who = v("f-who"); it.hymn = v("f-hymn"); it.accompanist = v("f-acc"); }
     else if (it.kind === "choir") { it.hymn = v("f-hymn"); it.accompanist = v("f-acc"); }
     else if (it.kind === "blessing") { it.priest1 = card.querySelector(".f-p1")?.value || ""; it.priest2 = card.querySelector(".f-p2")?.value || ""; }
-    else if (it.kind === "babyBlessing") { it.name = v("f-name"); }
+    else if (it.kind === "babyBlessing") { it.name = v("f-name"); it.by = v("f-by"); }
     else if (it.kind === "custom") { it.label = v("f-label"); it.text = v("f-text"); }
     else if (it.kind === "wardBusiness") {
       it.sustainings = [...card.querySelectorAll(".f-sus-name")].map((inp, r) => ({
