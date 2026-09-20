@@ -5,13 +5,13 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1789913068";
+import { db } from "./firebase-init.js?v=1789913614";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789913068";
-import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1789913068";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789913614";
+import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1789913614";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
@@ -343,8 +343,10 @@ function render() {
     bucket("Released", "Released — tick MLS once the clerk has recorded it.",
       releases.filter((r) => r.stage === "released").map(releaseRow), "No one waiting on MLS.", "released") +
     `</div>` +
+    `<div class="needy-wrap">` + // 2026-09-20 — a short list doesn't need the whole page width
     bucket("Members who need callings", "The pool to draw from as positions open up.",
-      members.map(memberRow), "No one on the list.", null, "member");
+      members.map(memberRow), "No one on the list.", null, "member") +
+    `</div>`;
 
   const doneItems = [...callings.filter((c) => c.stage === "done"), ...releases.filter((r) => r.stage === "done")]
     .sort((a, b) => tsMs(b.stamps?.done) - tsMs(a.stamps?.done));

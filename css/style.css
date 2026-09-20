@@ -1248,3 +1248,6 @@ th.us-sort:hover, th.us-sort.on { color: var(--brand); }
 .call-card .call-card-title { display: flex !important; align-items: center; gap: .4rem; }
 .call-card .call-card-title .call-del { margin-left: auto; opacity: .45; font-weight: 400; font-size: .85rem; line-height: 1; padding: .1rem .3rem; border-radius: 6px; cursor: pointer; color: #fff; }
 .call-card .call-card-title .call-del:hover { opacity: 1; background: rgba(0,0,0,.18); }
+
+/* Callings: "Members who need callings" stays a compact card (2026-09-20) */
+.needy-wrap { max-width: 34rem; }
