@@ -1251,3 +1251,9 @@ th.us-sort:hover, th.us-sort.on { color: var(--brand); }
 
 /* Callings: "Members who need callings" stays a compact card (2026-09-20) */
 .needy-wrap { max-width: 34rem; }
+
+/* needs-calling pill: blue = brother, pink = sister (2026-09-20) */
+.pill-male { background: #e3eefb; color: #1f4e79; }
+.pill-female { background: #fbe4ee; color: #a8336b; }
+.pill-gender { cursor: pointer; }
+.pill-gender:hover { filter: brightness(.95); }

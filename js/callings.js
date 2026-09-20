@@ -5,13 +5,13 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1789913614";
+import { db } from "./firebase-init.js?v=1789914855";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789913614";
-import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1789913614";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789914855";
+import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1789914855";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
@@ -260,13 +260,16 @@ const releaseRow = (r) => `
     ${r.stage === "released" ? `<div class="step-pills"><button class="step-pill" data-adv="done" type="button" title="Recorded in MLS — completes and archives this release">○ Updated in MLS</button></div>` : ""}
   </div>`;
 
+// gender colours the "Needs calling" pill — blue for brothers, pink for
+// sisters, amber when not set; click the pill to cycle it (2026-09-20)
+const GENDER_PILL = { m: "pill-male", f: "pill-female" };
 const memberRow = (p) => `
   <div class="list-row" data-id="${p.id}">
     <div class="row-main">
       <div class="row-title">${esc(p.name)}</div>
       ${p.notes ? `<div class="row-sub">${esc(p.notes.slice(0, 90))}</div>` : ""}
     </div>
-    <span class="pill pill-inprogress">Needs calling</span>
+    <span class="pill ${GENDER_PILL[p.gender] || "pill-inprogress"} pill-gender" data-gender="${p.id}" title="${p.gender === "m" ? "Brother" : p.gender === "f" ? "Sister" : "Not set"} — click to change">Needs calling</span>
   </div>`;
 
 // Archived (complete) callings + releases, with a "move back to…" so a
@@ -377,6 +380,12 @@ function render() {
       const item = it();
       if (!item) return;
       if (t.classList.contains("cand-add")) { e.stopPropagation(); return; } // typing a name, not opening the editor
+      if (t.dataset.gender) { // pill on a needs-calling row: cycle brother → sister → not set
+        e.stopPropagation();
+        const next = item.gender === "m" ? "f" : item.gender === "f" ? "" : "m";
+        updateDoc(doc(db, "callings", item.id), { gender: next }).catch((err) => toast("Couldn't save: " + (err.code || err.message)));
+        return;
+      }
       if (t.dataset.del) { // ✕ in the title band: delete the calling (2026-09-20)
         e.stopPropagation();
         const who = item.decided ? ` (${item.decided})` : "";
@@ -738,6 +747,13 @@ function editMember(p) {
     <label class="field">Name
       <input id="nm-name" value="${esc(p?.name || "")}">
     </label>
+    <div class="field" style="margin-top:.6rem"><span>Brother or sister <span class="row-sub">(colours the pill)</span></span>
+      <div class="chips" style="margin-top:.3rem">
+        <button type="button" class="chip nm-gender${(p?.gender || "") === "m" ? " active" : ""}" data-g="m">Brother</button>
+        <button type="button" class="chip nm-gender${(p?.gender || "") === "f" ? " active" : ""}" data-g="f">Sister</button>
+        <button type="button" class="chip nm-gender${!p?.gender ? " active" : ""}" data-g="">Not set</button>
+      </div>
+    </div>
     <label class="field" style="margin-top:.6rem">Notes <span style="font-weight:400">(interests, availability, ideas…)</span>
       <textarea id="nm-notes">${esc(p?.notes || "")}</textarea>
     </label>
@@ -749,6 +765,7 @@ function editMember(p) {
       </div>
     </div>`);
   el.querySelector("#nm-cancel").addEventListener("click", closeModal);
+  el.querySelectorAll(".nm-gender").forEach((b) => b.addEventListener("click", () => el.querySelectorAll(".nm-gender").forEach((x) => x.classList.toggle("active", x === b))));
   el.querySelector("#nm-delete")?.addEventListener("click", async () => {
     await deleteDoc(doc(db, "callings", p.id));
     closeModal(); toast("Removed");
@@ -759,6 +776,7 @@ function editMember(p) {
     const data = {
       kind: "member",
       name,
+      gender: el.querySelector(".nm-gender.active")?.dataset.g || "",
       notes: el.querySelector("#nm-notes").value.trim(),
       updatedAt: serverTimestamp(),
     };
