@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789883712";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789883712";
+import { db } from "./firebase-init.js?v=1789883873";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789883873";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789883712";
-import { HYMNS } from "./hymns.js?v=1789883712";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog } from "./program.js?v=1789883712";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789883873";
+import { HYMNS } from "./hymns.js?v=1789883873";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog } from "./program.js?v=1789883873";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -458,7 +458,84 @@ export function initSacrament() {
     meetings = {};
     qs.docs.forEach((d) => (meetings[d.id] = d.data()));
     render();
+    if (pendingLink) { const d = pendingLink; pendingLink = null; if (meetings[d]) viewMeeting(d); else toast("That Sunday isn't planned yet"); }
   });
+}
+// A shared link (#sacrament/2026-09-20) opens that Sunday's readout after
+// sign-in — as soon as the plans have arrived. (2026-09-19)
+let pendingLink = null;
+export function openMeetingLink(date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || "")) return;
+  if (Object.keys(meetings).length) { if (meetings[date]) viewMeeting(date); else toast("That Sunday isn't planned yet"); }
+  else pendingLink = date;
+}
+export const meetingLink = (date) => `${location.origin}${location.pathname}#sacrament/${date}`;
+
+// Plain-text agenda for texting (2026-09-19): one line per item, in order.
+function agendaText(m, date) {
+  const L = [];
+  L.push(`${fmtDay(date, { year: true })} · ${typeLabel(m, date)}${m.theme ? ` · “${m.theme}”` : ""}`);
+  if (NO_MEETING(m.type)) { L.push("No ward sacrament meeting."); return L.join("\n"); }
+  if (m.presiding) L.push(`Presiding: ${m.presiding}`);
+  if (m.conducting) L.push(`Conducting: ${m.conducting}`);
+  if (m.chorister) L.push(`Music conductor: ${m.chorister}`);
+  if (m.organist) L.push(`Organist: ${m.organist}`);
+  L.push("");
+  (m.items || []).forEach((it) => {
+    const k = it.kind;
+    const label = k === "custom" ? (it.label || "Item") : k === "choir" && it.youth ? "Youth Choir" : (KINDS[k]?.label || k);
+    if (k === "announcements") { const t = (it.text || "").trim(); if (t) L.push("Announcements:", ...t.split("\n").filter(Boolean).map((x) => "  • " + x.trim())); return; }
+    if (k === "sacrament" || k === "blessing") { L.push("— Administration of the Sacrament —"); return; }
+    if (k === "testimonies") { L.push("— Bearing of Testimonies —"); return; }
+    if (HYMN_KINDS.includes(k)) { L.push(`${label}: ${[it.num ? "#" + it.num : "", it.title].filter(Boolean).join(" ") || "—"}`); return; }
+    if (SPEAKER_KINDS.includes(k)) { if (it.none || !it.name) return; L.push(`${label}: ${it.name}${it.topic ? " — " + it.topic : ""}`); return; }
+    if (PRAYER_KINDS.includes(k)) { L.push(`${label}: ${it.name || "—"}${it.org && !it.name ? ` (${it.org})` : ""}`); return; }
+    if (k === "musical") { L.push(`${label}: ${it.who || "—"}${it.hymn ? " — " + it.hymn : ""}${it.accompanist ? " (acc. " + it.accompanist + ")" : ""}`); return; }
+    if (k === "choir") { L.push(`${label}: ${it.hymn || "—"}`); return; }
+    if (k === "babyBlessing") { if (it.name) L.push(`Baby Blessing: ${it.name}${it.by ? " by " + it.by : ""}`); return; }
+    if (k === "wardBusiness") {
+      const parts = [...(it.sustainings || []).map((x) => `sustain ${x.name}${x.calling ? " — " + x.calling : ""}`), ...(it.releasings || []).map((x) => `release ${x.name}${x.calling ? " — " + x.calling : ""}`)];
+      if (it.other) parts.push(it.other);
+      if (parts.length) L.push("Ward Business:", ...parts.map((x) => "  • " + x));
+      return;
+    }
+    if (k === "custom") L.push(`${label}: ${it.text || ""}`);
+  });
+  if (m.notes) L.push("", `Notes: ${m.notes}`);
+  return L.join("\n");
+}
+
+// "Link" on the readout: copy a link to this Sunday, share it from a phone,
+// or text the agenda itself. PDF = Print → Save as PDF.
+function shareMeeting(date) {
+  const m = meetings[date];
+  if (!m) return;
+  const url = meetingLink(date);
+  const text = agendaText(m, date);
+  const canShare = typeof navigator.share === "function";
+  const el = openModal(`
+    <h3>Share ${fmtDay(date, { year: true })}</h3>
+    <label class="field"><span>Link to this Sunday <span class="row-sub">(opens the readout after sign-in)</span></span>
+      <div style="display:flex;gap:.4rem"><input id="sh-url" value="${esc(url)}" readonly style="flex:1"><button class="btn" id="sh-copy-url">Copy</button></div></label>
+    <label class="field" style="margin-top:.6rem"><span>Agenda as text</span>
+      <textarea id="sh-text" readonly style="width:100%;min-height:9rem;font:inherit;font-size:.9rem;padding:.5rem;border:1px solid var(--line);border-radius:8px">${esc(text)}</textarea></label>
+    <div class="modal-actions" style="flex-wrap:wrap;gap:.4rem">
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+        ${canShare ? `<button class="btn" id="sh-share">📤 Share…</button>` : ""}
+        <a class="btn" id="sh-sms" href="sms:?&body=${encodeURIComponent(url + "\n\n" + text)}">💬 Text it</a>
+        <button class="btn" id="sh-copy-text">Copy text</button>
+        <button class="btn" id="sh-pdf" title="Opens the print dialog — choose Save as PDF">PDF</button>
+      </div>
+      <div class="right"><button class="btn" id="sh-close">Close</button></div>
+    </div>`);
+  const copy = async (v, msg) => { try { await navigator.clipboard.writeText(v); toast(msg); } catch { toast("Select and copy the text"); } };
+  el.querySelector("#sh-copy-url").addEventListener("click", () => copy(url, "Link copied"));
+  el.querySelector("#sh-copy-text").addEventListener("click", () => copy(url + "\n\n" + text, "Agenda copied"));
+  el.querySelector("#sh-share")?.addEventListener("click", async () => {
+    try { await navigator.share({ title: `Sacrament meeting · ${fmtDay(date, { year: true })}`, text, url }); } catch { /* cancelled */ }
+  });
+  el.querySelector("#sh-pdf").addEventListener("click", () => { closeModal(); viewMeeting(date); setTimeout(() => document.getElementById("vw-print")?.click(), 150); });
+  el.querySelector("#sh-close").addEventListener("click", () => { closeModal(); viewMeeting(date); });
 }
 
 async function loadBishopric() {
@@ -2057,7 +2134,7 @@ function viewMeeting(date) {
       ${m.theme ? `<div class="theme-tag" style="margin-top:.2rem">“${esc(m.theme)}”</div>` : ""}</h3>
     <div id="ag-wrap">${renderAgendaView(m, canEdit)}</div>
     <div class="modal-actions">
-      <div style="display:flex;gap:.4rem"><button class="btn" id="vw-print" title="Print or save as PDF">🖨 Print</button><button class="btn" id="vw-program" title="Two-up printed program">Program</button></div>
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap"><button class="btn" id="vw-print" title="Print or save as PDF">🖨 Print</button><button class="btn" id="vw-program" title="Two-up printed program">Program</button><button class="btn" id="vw-link" title="Copy a link, share, or text this agenda">🔗 Link</button></div>
       <div class="right">
         <button class="btn" id="vw-close">Close</button>
         ${canEdit ? `<button class="btn btn-primary" id="vw-edit">Edit</button>` : ""}
@@ -2066,6 +2143,7 @@ function viewMeeting(date) {
   el.querySelector("#vw-close").addEventListener("click", closeModal);
   el.querySelector("#vw-edit")?.addEventListener("click", () => { closeModal(); editMeeting(date); });
   el.querySelector("#vw-program").addEventListener("click", () => { closeModal(); openProgram(date); });
+  el.querySelector("#vw-link").addEventListener("click", () => { closeModal(); shareMeeting(date); });
   // Print: swap in a clean print-only copy of the agenda and open the system
   // print dialog (which includes Save as PDF)
   el.querySelector("#vw-print").addEventListener("click", () => {

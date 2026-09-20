@@ -1,20 +1,20 @@
 // App shell: auth flow (Google + PIN), permission gating, tab routing.
-import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1789883712";
+import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1789883873";
 import {
   signInWithPopup, signInWithEmailAndPassword, signOut, onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
   doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { initTasks } from "./tasks.js?v=1789883712";
-import { initSacrament } from "./sacrament.js?v=1789883712";
-import { initCalendar } from "./calendar.js?v=1789883712";
-import { initCallings } from "./callings.js?v=1789883712";
-import { initConfidential } from "./confidential.js?v=1789883712";
-import { initAdmin } from "./admin.js?v=1789883712";
-import { initBoard } from "./board.js?v=1789883712";
-import { initHomeSacrament } from "./home-sacrament.js?v=1789883712";
-import { initCouncil } from "./council.js?v=1789883712";
+import { initTasks } from "./tasks.js?v=1789883873";
+import { initSacrament, openMeetingLink } from "./sacrament.js?v=1789883873";
+import { initCalendar } from "./calendar.js?v=1789883873";
+import { initCallings } from "./callings.js?v=1789883873";
+import { initConfidential } from "./confidential.js?v=1789883873";
+import { initAdmin } from "./admin.js?v=1789883873";
+import { initBoard } from "./board.js?v=1789883873";
+import { initHomeSacrament } from "./home-sacrament.js?v=1789883873";
+import { initCouncil } from "./council.js?v=1789883873";
 
 const ROLE_RANK = { pending: 0, member: 1, bishopric: 2, bishop: 3 };
 
@@ -296,6 +296,9 @@ onAuthStateChanged(auth, async (user) => {
   if (can("users")) initAdmin();
 
   selectTab(localStorage.getItem("sw-tab") || "sacrament");
+  // shared link: #sacrament/YYYY-MM-DD opens that Sunday's readout (2026-09-19)
+  const link = /^#sacrament\/(\d{4}-\d{2}-\d{2})$/.exec(location.hash || "");
+  if (link && can("sacrament")) { selectTab("sacrament"); openMeetingLink(link[1]); history.replaceState(null, "", location.pathname); }
 });
 
 // ---- Tabs ----
