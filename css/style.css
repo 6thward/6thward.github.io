@@ -1191,3 +1191,23 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 .pg-opts { display:flex; flex-direction:column; gap:.35rem; }
 .pg-opt { display:flex; align-items:center; gap:.5rem; font-size:.92rem; }
 .pg-opt input { width:1rem; height:1rem; }
+
+/* Users tab (2026-09-19) */
+.us-wrap { overflow-x: auto; }
+.us-table td { vertical-align: top; }
+.us-sub { margin-top: .2rem; display: flex; gap: .35rem; align-items: center; flex-wrap: wrap; }
+.us-access { max-width: 26rem; }
+.us-access .pill { margin: .1rem .1rem .1rem 0; }
+.us-pill { background: var(--brand-soft); color: var(--brand); }
+.pill-pending { background: var(--pending-soft); color: var(--pending); }
+.pill-danger { background: #fbe7e3; color: var(--danger); }
+.us-actions { text-align: right; white-space: nowrap; }
+.us-actions .btn { margin-left: .2rem; }
+.us-revoked td { opacity: .55; }
+.us-waiting td:first-child b { color: var(--pending); }
+.us-method { display: flex; flex-direction: column; gap: .3rem; }
+.us-method label { display: flex; gap: .4rem; align-items: baseline; }
+.us-pages { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .35rem .8rem; }
+.us-page { display: flex; gap: .5rem; align-items: flex-start; padding: .4rem .5rem; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+.us-page:has(input:checked) { border-color: var(--brand); background: var(--brand-soft); }
+.us-page input { margin-top: .2rem; }

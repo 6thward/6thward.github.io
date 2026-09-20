@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789880695";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789880695";
+import { db } from "./firebase-init.js?v=1789881317";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789881317";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789880695";
-import { HYMNS } from "./hymns.js?v=1789880695";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog } from "./program.js?v=1789880695";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789881317";
+import { HYMNS } from "./hymns.js?v=1789881317";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog } from "./program.js?v=1789881317";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -1925,7 +1925,8 @@ function hbModal(date) {
 // Printed two-up program for one Sunday (2026-09-19) — see program.js
 export function programCtx(date) {
   const labels = Object.fromEntries(Object.entries(KINDS).map(([k, v]) => [k, v.label]));
-  return { m: meetings[date], date, labels, fmtDate: (d) => new Date(d + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) };
+  // presiding defaults to the first name on the bishopric list (Bishop Christensen) when the plan leaves it blank
+  return { m: meetings[date], date, labels, presidingDefault: bishopric[0] || "Bishop Christensen", fmtDate: (d) => new Date(d + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) };
 }
 function openProgram(date) {
   if (!meetings[date]) return toast("Plan this Sunday first");
@@ -2377,7 +2378,7 @@ function editMeeting(date) {
       <label class="field full">Theme
         <input id="mt-theme" placeholder='e.g. "Repentance", "The Restoration"' value="${esc(m.theme || "")}">
       </label>
-      <label class="field">Presiding ${personSelect("mt-presiding", m.presiding || "")}</label>
+      <label class="field">Presiding ${personSelect("mt-presiding", m.presiding || (m.items ? "" : bishopric[0] || ""))}</label>
       <label class="field">Conducting ${personSelect("mt-conducting", m.conducting || "")}</label>
       <label class="field">Music conductor <input id="mt-chorister" list="dl-conductors" value="${esc(m.chorister || "")}"></label>
       <label class="field">Organist <input id="mt-organist" list="dl-organists" value="${esc(m.organist || "")}"></label>

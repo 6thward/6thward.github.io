@@ -9,12 +9,12 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1789880695";
-import { ctx, can } from "./app.js?v=1789880695";
+import { db } from "./firebase-init.js?v=1789881317";
+import { ctx, can } from "./app.js?v=1789881317";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, fmtDate } from "./ui.js?v=1789880695";
+import { toast, esc, fmtDate } from "./ui.js?v=1789881317";
 
 let cards = [];
 let councils = {};    // date -> doc
@@ -98,7 +98,7 @@ function render() {
   const body = document.getElementById("wc-body");
   const dateEl = document.getElementById("wc-date");
   if (!body) return;
-  const editor = can("board", "edit");
+  const editor = can("council", "edit");
   const items = itemsFor(date);
   const open = items.filter((i) => !i.discussed);
   const done = items.filter((i) => i.discussed);

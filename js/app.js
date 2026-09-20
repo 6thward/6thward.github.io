@@ -1,35 +1,50 @@
 // App shell: auth flow (Google + PIN), permission gating, tab routing.
-import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1789880695";
+import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1789881317";
 import {
   signInWithPopup, signInWithEmailAndPassword, signOut, onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
-  doc, getDoc, setDoc, serverTimestamp,
+  doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { initTasks } from "./tasks.js?v=1789880695";
-import { initSacrament } from "./sacrament.js?v=1789880695";
-import { initCalendar } from "./calendar.js?v=1789880695";
-import { initCallings } from "./callings.js?v=1789880695";
-import { initConfidential } from "./confidential.js?v=1789880695";
-import { initAdmin } from "./admin.js?v=1789880695";
-import { initBoard } from "./board.js?v=1789880695";
-import { initHomeSacrament } from "./home-sacrament.js?v=1789880695";
-import { initCouncil } from "./council.js?v=1789880695";
+import { initTasks } from "./tasks.js?v=1789881317";
+import { initSacrament } from "./sacrament.js?v=1789881317";
+import { initCalendar } from "./calendar.js?v=1789881317";
+import { initCallings } from "./callings.js?v=1789881317";
+import { initConfidential } from "./confidential.js?v=1789881317";
+import { initAdmin } from "./admin.js?v=1789881317";
+import { initBoard } from "./board.js?v=1789881317";
+import { initHomeSacrament } from "./home-sacrament.js?v=1789881317";
+import { initCouncil } from "./council.js?v=1789881317";
 
 const ROLE_RANK = { pending: 0, member: 1, bishopric: 2, bishop: 3 };
 
-// The areas a person can be granted. Order = order on the People tab.
-// Google roles map onto these too (see permsForRole) so every module asks
-// one question — can(area, level) — regardless of how the person signed in.
+// The pages a person can be granted — one per tab (2026-09-19). Access to a
+// page means read AND write on it; a page not granted is invisible. Google
+// roles map onto these too (see permsForRole) so every module asks one
+// question — can(area, level) — regardless of how the person signed in.
 export const AREAS = [
-  { key: "sacrament",    label: "Sacrament Mtg", hint: "Sunday agendas, speakers, hymns, ward business" },
-  { key: "calendar",     label: "Calendar",      hint: "Ward events" },
-  { key: "tasks",        label: "Tasks",         hint: "Assignments and follow-ups" },
-  { key: "callings",     label: "Callings",      hint: "Callings and releases pipeline — sensitive" },
-  { key: "board",        label: "Member Board",  hint: "Person cards sorted into sections you name" },
-  { key: "confidential", label: "Confidential",  hint: "Bishop's private notes — grant with care" },
-  { key: "people",       label: "People",        hint: "Create PINs and set permissions (bishop only)" },
+  { key: "sacrament",    label: "Sacrament Mtg",  hint: "Sunday agendas, speakers, hymns, ward business" },
+  { key: "homesac",      label: "Home Sacrament", hint: "Homebound roster and who was at church" },
+  { key: "calendar",     label: "Calendar",       hint: "Ward events" },
+  { key: "callings",     label: "Callings",       hint: "Callings and releases pipeline — sensitive" },
+  { key: "board",        label: "Member Board",   hint: "Person cards sorted into sections you name" },
+  { key: "council",      label: "Ward Council",   hint: "Weekly council agendas" },
+  { key: "confidential", label: "Confidential",   hint: "Bishop's private notes — grant with care" },
+  { key: "tasks",        label: "Tasks",          hint: "Assignments and follow-ups" },
+  { key: "users",        label: "Users",          hint: "Add people, set their access, revoke" },
 ];
+// Older profiles were granted the old, coarser keys; read them as the pages they covered.
+const LEGACY_KEY = { homesac: "sacrament", council: "board", users: "people" };
+export function normalizePerms(p) {
+  const src = p || {};
+  const out = {};
+  AREAS.forEach((a) => {
+    let v = src[a.key];
+    if (v === undefined && LEGACY_KEY[a.key]) v = src[LEGACY_KEY[a.key]];
+    out[a.key] = v === "edit" || v === "view" || v === true ? "edit" : ""; // access = read + write
+  });
+  return out;
+}
 
 // current signed-in user's context, shared with all tab modules
 export const ctx = { uid: null, name: null, email: null, role: null, perms: {}, isPin: false };
@@ -42,7 +57,7 @@ export function hasRole(minRole) {
 function permsForRole(role) {
   const all = (lvl) => Object.fromEntries(AREAS.map((a) => [a.key, lvl]));
   if (role === "bishop") return all("edit");
-  if (role === "bishopric") return { ...all("edit"), confidential: "", people: "" };
+  if (role === "bishopric") return { ...all("edit"), confidential: "", users: "" };
   if (role === "member") return { ...all(""), sacrament: "view", calendar: "view", tasks: "view" };
   return all("");
 }
@@ -180,6 +195,29 @@ onAuthStateChanged(auth, async (user) => {
   } catch {
     snap = null;
   }
+  // Invited by email from the Users tab? First Google sign-in claims the
+  // invite: the profile is created with the access the bishop chose. (2026-09-19)
+  if ((!snap || !snap.exists()) && !isPinEmail(user.email) && user.email) {
+    try {
+      const inv = await getDoc(doc(db, "invites", user.email.toLowerCase()));
+      if (inv.exists()) {
+        const d = inv.data();
+        await setDoc(uref, {
+          name: d.name || ctx.name, email: user.email, photo: user.photoURL || "",
+          organization: d.organization || "", calling: d.calling || "",
+          role: "user", perms: d.perms || {}, invitedBy: d.invitedBy || "",
+          createdAt: serverTimestamp(),
+        });
+        try { await deleteDoc(doc(db, "invites", user.email.toLowerCase())); } catch {}
+        snap = await getDoc(uref);
+      }
+    } catch (e) { console.warn("[auth] invite", e); }
+  }
+  if (snap && snap.exists() && snap.data().revoked) {
+    await signOut(auth);
+    loginError("Your access has been turned off — ask the bishop.");
+    return;
+  }
 
   if (ctx.isPin) {
     // PIN accounts are created by the bishop together with their profile.
@@ -192,7 +230,7 @@ onAuthStateChanged(auth, async (user) => {
     const d = snap.data();
     ctx.role = "pin";
     ctx.name = d.name || "PIN user";
-    ctx.perms = { ...permsForRole(""), ...(d.perms || {}) };
+    ctx.perms = normalizePerms(d.perms);
     if (!AREAS.some((a) => can(a.key))) {
       await signOut(auth);
       loginError("Your PIN doesn't have access to anything yet — ask the bishop.");
@@ -218,8 +256,13 @@ onAuthStateChanged(auth, async (user) => {
       ctx.role = snap.data().role || "pending";
       // the bishop's email is always bishop, even if the doc says otherwise
       if (user.email === BISHOP_EMAIL) ctx.role = "bishop";
+      if (snap.data().name) ctx.name = snap.data().name;
     }
-    ctx.perms = permsForRole(ctx.role);
+    // explicit per-page access (Users tab) wins; legacy roles fill in for older profiles
+    const explicit = snap && snap.exists() ? snap.data().perms : null;
+    ctx.perms = ctx.role === "bishop" ? permsForRole("bishop")
+      : (explicit && Object.keys(explicit).length ? normalizePerms(explicit) : permsForRole(ctx.role));
+    if (ctx.role === "user" && !AREAS.some((a) => can(a.key))) ctx.role = "pending";
 
     if (ctx.role === "pending") {
       hide("login-screen"); hide("app"); show("pending-screen");
@@ -228,6 +271,8 @@ onAuthStateChanged(auth, async (user) => {
   }
 
   // ---- Enter the app ----
+  // last-usage stamp for the Users tab (own doc only; rules allow just this field)
+  try { await updateDoc(uref, { lastSeen: serverTimestamp() }); } catch {}
   hide("login-screen"); hide("pending-screen"); show("app");
   $("user-name").textContent = ctx.name;
   const photo = $("user-photo");
@@ -242,13 +287,13 @@ onAuthStateChanged(auth, async (user) => {
 
   if (can("tasks")) initTasks();
   if (can("sacrament")) initSacrament();
-  if (can("sacrament")) initHomeSacrament();
+  if (can("homesac")) initHomeSacrament();
   if (can("calendar")) initCalendar();
   if (can("callings")) initCallings();
   if (can("board")) initBoard();
-  if (can("board")) initCouncil();
+  if (can("council")) initCouncil();
   if (can("confidential")) initConfidential();
-  if (can("people")) initAdmin();
+  if (can("users")) initAdmin();
 
   selectTab(localStorage.getItem("sw-tab") || "sacrament");
 });

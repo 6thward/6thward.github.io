@@ -6,12 +6,15 @@
 // meeting content comes straight from that Sunday's plan.
 //
 //   settings/program  { wardName, stakeName, logo (data URL | "" = built-in), opts: {...} }
-import { db } from "./firebase-init.js?v=1789880695";
+import { db } from "./firebase-init.js?v=1789881317";
 import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789880695";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789881317";
 
 export const DEFAULT_LOGO = "assets/program-logo.jpg"; // Christus arch, built in
-const DEFAULT_OPTS = { topics: false, business: false, announcements: true, officers: true, footer: "" };
+// Fixed by Jordan (2026-09-19): Presiding + Conducting always shown, speaker
+// topics and ward-business names never, announcements always at the bottom.
+// The only choice left is the optional line at the very bottom.
+const DEFAULT_OPTS = { footer: "" };
 
 export let programSettings = { wardName: "6th Ward", stakeName: "St. George East Stake", logo: "", opts: { ...DEFAULT_OPTS } };
 
@@ -112,11 +115,7 @@ export function openProgramDialog(ctx) {
     <h3 style="margin-bottom:.2rem">Program · ${esc(ctx.fmtDate(ctx.date))}</h3>
     <p class="row-sub" style="margin:0 0 .8rem">Two programs per letter sheet, side by side — cut down the middle. Uses the logo and names from ⚙ Settings.</p>
     <div class="pg-opts">
-      <label class="pg-opt"><input type="checkbox" id="pg-o-officers" ${o.officers ? "checked" : ""}> Presiding / conducting / music lines</label>
-      <label class="pg-opt"><input type="checkbox" id="pg-o-topics" ${o.topics ? "checked" : ""}> Speaker topics</label>
-      <label class="pg-opt"><input type="checkbox" id="pg-o-business" ${o.business ? "checked" : ""}> Ward business names (sustainings & releases)</label>
-      <label class="pg-opt"><input type="checkbox" id="pg-o-ann" ${o.announcements ? "checked" : ""}> Announcements block</label>
-      <label class="field" style="margin-top:.4rem"><span>Line at the bottom (optional)</span><input id="pg-o-footer" value="${esc(o.footer || "")}" placeholder="e.g. Please silence phones · Nursery is in room 12"></label>
+      <label class="field"><span>Line at the bottom (optional)</span><input id="pg-o-footer" value="${esc(o.footer || "")}" placeholder="e.g. Please silence phones · Nursery is in room 12"></label>
     </div>
     <div class="modal-actions">
       <span class="row-sub">Choices are remembered for next time.</span>
@@ -127,13 +126,7 @@ export function openProgramDialog(ctx) {
     </div>`);
   el.querySelector("#pg-cancel").addEventListener("click", closeModal);
   el.querySelector("#pg-go").addEventListener("click", async () => {
-    const opts = {
-      officers: el.querySelector("#pg-o-officers").checked,
-      topics: el.querySelector("#pg-o-topics").checked,
-      business: el.querySelector("#pg-o-business").checked,
-      announcements: el.querySelector("#pg-o-ann").checked,
-      footer: el.querySelector("#pg-o-footer").value.trim(),
-    };
+    const opts = { footer: el.querySelector("#pg-o-footer").value.trim() };
     try { await persist({ opts }); } catch { /* still print */ }
     openProgramWindow(buildProgramHtml(ctx, opts));
   });
@@ -163,13 +156,12 @@ export function buildProgramHtml(ctx, opts = {}) {
   const row = (label, val, sub) => rows.push(`<div class="r"><span class="l">${esc(label)}</span><span class="v">${val}</span></div>${sub ? `<div class="sub">${sub}</div>` : ""}`);
   const band = (text, sub) => rows.push(`<div class="band">${esc(text)}${sub ? `<div class="band-sub">${esc(sub)}</div>` : ""}</div>`);
   let announcements = "";
-  let business = "";
 
   (m.items || []).forEach((it) => {
     const k = it.kind;
     if (k === "announcements") {
       const lines = (it.text || "").split("\n").map((x) => x.trim()).filter(Boolean);
-      if (lines.length && o.announcements) announcements = lines.map((l) => `<div>• ${esc(l)}</div>`).join("");
+      if (lines.length) announcements = lines.map((l) => `<div>• ${esc(l)}</div>`).join("");
       return;
     }
     if (k === "sacrament" || k === "blessing") { band("Administration of the Sacrament"); return; }
@@ -177,36 +169,23 @@ export function buildProgramHtml(ctx, opts = {}) {
     if (HYMN_KINDS.includes(k)) { row(L(k), hymn(it) ? esc(hymn(it)) : "—"); return; }
     if (SPEAKER_KINDS.includes(k)) {
       if (it.none || !it.name) return;
-      row(L(k), esc(it.name), o.topics && it.topic ? esc(it.topic) : "");
+      row(L(k), esc(it.name)); // topics never printed
       return;
     }
     if (PRAYER_KINDS.includes(k)) { row(L(k), esc(it.name || "—")); return; }
     if (k === "musical") { row(L(k), esc(it.who || "—"), [it.hymn, it.accompanist ? "Accompanist: " + it.accompanist : ""].filter(Boolean).map(esc).join(" · ")); return; }
     if (k === "choir") { row(L(k), esc(it.hymn || "—"), it.accompanist ? "Accompanist: " + esc(it.accompanist) : ""); return; }
     if (k === "babyBlessing") { if (it.name) row(L(k), esc(it.name)); return; }
-    if (k === "wardBusiness") {
-      const sus = (it.sustainings || []).filter((x) => x.name);
-      const rel = (it.releasings || []).filter((x) => x.name);
-      if (!sus.length && !rel.length && !it.other) return;
-      row(L(k), "");
-      if (o.business) {
-        business = [
-          ...sus.map((x) => `<div><i>Sustain</i> — ${esc(x.name)}${x.calling ? ", " + esc(x.calling) : ""}</div>`),
-          ...rel.map((x) => `<div><i>Release</i> — ${esc(x.name)}${x.calling ? ", " + esc(x.calling) : ""}</div>`),
-        ].join("");
-        if (business) rows.push(`<div class="sub">${business}</div>`);
-      }
-      return;
-    }
+    if (k === "wardBusiness") return; // never printed
     if (k === "custom") { row(it.label || "Item", esc(it.text || "")); return; }
   });
 
-  const officers = o.officers ? [
-    m.presiding ? ["Presiding", m.presiding] : null,
-    m.conducting ? ["Conducting", m.conducting] : null,
+  const officers = [
+    ["Presiding", m.presiding || ctx.presidingDefault || "—"],   // always; blank = the bishop
+    ["Conducting", m.conducting || "—"], // always
     m.chorister ? ["Music Conductor", m.chorister] : null,
     m.organist ? ["Organist", m.organist] : null,
-  ].filter(Boolean).map(([l, v]) => `<div class="r"><span class="l">${esc(l)}</span><span class="v">${esc(v)}</span></div>`).join("") : "";
+  ].filter(Boolean).map(([l, v]) => `<div class="r"><span class="l">${esc(l)}</span><span class="v">${esc(v)}</span></div>`).join("");
 
   const program = `
     <div class="prog"><div class="inner">
@@ -218,7 +197,7 @@ export function buildProgramHtml(ctx, opts = {}) {
       <div class="title">Sacrament Meeting</div>
       <div class="date">${esc(ctx.fmtDate(ctx.date))}</div>
       ${m.theme ? `<div class="theme">“${esc(m.theme)}”</div>` : ""}
-      ${officers ? `<div class="rule"></div><div class="officers">${officers}</div>` : ""}
+      <div class="rule"></div><div class="officers">${officers}</div>
       <div class="rule"></div>
       <div class="rows">${rows.join("")}</div>
       ${announcements ? `<div class="ann"><div class="ann-h">Announcements</div>${announcements}</div>` : ""}

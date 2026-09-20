@@ -6,12 +6,12 @@
 //   meetings/{date}.hbSkip[]      ids marked "at church" that Sunday
 //   meetings/{date}.hbOn          true once attendance is being tracked
 // The 🏠 button on each Sunday's card still assigns who takes it.
-import { db } from "./firebase-init.js?v=1789880695";
-import { ctx, can } from "./app.js?v=1789880695";
+import { db } from "./firebase-init.js?v=1789881317";
+import { ctx, can } from "./app.js?v=1789881317";
 import {
   doc, getDoc, setDoc, updateDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789880695";
+import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789881317";
 
 let people = [];
 let date = "";          // selected Sunday, YYYY-MM-DD
@@ -40,7 +40,7 @@ export function initHomeSacrament() {
         <h2>Home Sacrament</h2>
         <p class="panel-sub">Who receives the sacrament at home. Mark who made it to church each Sunday — everyone else needs a visit.</p>
       </div>
-      ${can("sacrament", "edit") ? `<button class="btn btn-primary" id="hs-add">+ Add person</button>` : ""}
+      ${can("homesac", "edit") ? `<button class="btn btn-primary" id="hs-add">+ Add person</button>` : ""}
     </div>
     <div class="hs-nav">
       <button class="btn btn-sm" id="hs-prev" title="Previous Sunday">‹</button>
@@ -72,7 +72,7 @@ function render() {
   const body = document.getElementById("hs-body");
   const dateEl = document.getElementById("hs-date");
   if (!body) return;
-  const editor = can("sacrament", "edit");
+  const editor = can("homesac", "edit");
   const today = upcomingSunday();
   dateEl.textContent = fmtDate(date, { year: true }) + (date === today ? " · this Sunday" : "");
   const skip = new Set(meeting?.hbSkip || []);

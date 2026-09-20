@@ -44,10 +44,28 @@ service cloud.firestore {
     function isPin() {
       return hasProfile() && role() == 'pin';
     }
-    // permission level a PIN person holds for an area ('' when absent)
+    // Users-tab people (2026-09-19): Google sign-ins invited by email get
+    // role 'user' + a perms map, exactly like PIN people.
+    function isUser() {
+      return hasProfile() && role() == 'user';
+    }
+    function revoked() {
+      return hasProfile() && ('revoked' in profile()) && profile().revoked == true;
+    }
+    function hasPerms() {
+      return (isPin() || isUser()) && !revoked() && ('perms' in profile());
+    }
+    function rawLevel(area) {
+      return hasPerms() && (area in profile().perms) ? profile().perms[area] : '';
+    }
+    // per-page level ('' | 'view' | 'edit'); newer pages fall back to the
+    // older, coarser key they were split from (homesac<-sacrament,
+    // council<-board, users<-people) so existing grants keep working
     function pinLevel(area) {
-      return isPin() && ('perms' in profile()) && (area in profile().perms)
-        ? profile().perms[area] : '';
+      return area == 'homesac' && !(hasPerms() && ('homesac' in profile().perms)) ? rawLevel('sacrament')
+        : area == 'council' && !(hasPerms() && ('council' in profile().perms)) ? rawLevel('board')
+        : area == 'users' && !(hasPerms() && ('users' in profile().perms)) ? rawLevel('people')
+        : rawLevel(area);
     }
     // Members (Google role) see the three everyday areas, nothing sensitive.
     function memberSees(area) {
@@ -62,27 +80,53 @@ service cloud.firestore {
     }
     // anyone who has been let in at all (for name pickers / rosters)
     function hasAccess() {
-      return isBishopric() || isMember() || isPin();
+      return isBishopric() || isMember() || ((isPin() || isUser()) && !revoked());
+    }
+    // may manage other users (Users tab) — the bishop, or anyone given that page
+    function manages() {
+      return isBishop() || pinLevel('users') == 'edit';
     }
 
     // ---- Profiles / roles / permissions ----
+    function inviteFor(email) {
+      return get(/databases/$(database)/documents/invites/$(email)).data;
+    }
+    function claimsInvite() {
+      // first Google sign-in of an invited address: the profile must carry
+      // exactly the access the inviter chose
+      return signedIn() && request.auth.token.email != null
+        && exists(/databases/$(database)/documents/invites/$(request.auth.token.email.lower()))
+        && request.resource.data.role == 'user'
+        && request.resource.data.perms == inviteFor(request.auth.token.email.lower()).perms;
+    }
     match /users/{uid} {
       // your own profile (to learn your role + perms); the roster for anyone let in
       allow read: if signedIn() && (request.auth.uid == uid || hasAccess());
       // a new Google sign-in may only create their own profile, as 'pending'
-      // (the bishop's email may bootstrap itself as bishop);
-      // the bishop creates PIN people's profiles
-      allow create: if isBishop() || (signedIn() && request.auth.uid == uid && (
+      // (or by claiming an invite; the bishop's email may bootstrap itself as
+      // bishop); whoever manages users creates PIN people's profiles
+      allow create: if manages() || (signedIn() && request.auth.uid == uid && (
         request.resource.data.role == 'pending' ||
+        claimsInvite() ||
         (request.resource.data.role == 'bishop' && isBishopEmail())
       ));
-      // only the bishop assigns roles / permissions
-      allow update, delete: if isBishop();
+      // managers assign access; anyone may stamp their own last-used time
+      allow update: if manages()
+        || (signedIn() && request.auth.uid == uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSeen']));
+      allow delete: if manages();
     }
 
-    // ---- PINs (plain, so the bishop can look one up and re-tell it) — bishop ONLY ----
+    // ---- Invitations by email (Users tab); the invitee may read + clear their own ----
+    match /invites/{email} {
+      allow read: if manages() || (signedIn() && request.auth.token.email != null && request.auth.token.email.lower() == email);
+      allow create, update: if manages();
+      allow delete: if manages() || (signedIn() && request.auth.token.email != null && request.auth.token.email.lower() == email);
+    }
+
+    // ---- PINs (plain, so a manager can look one up and re-tell it) ----
     match /pins/{uid} {
-      allow read, write: if isBishop();
+      allow read, write: if manages();
     }
 
     // ---- Tasks ----
@@ -95,9 +139,14 @@ service cloud.firestore {
     }
 
     // ---- Sacrament meeting plans ----
+    // Home Sacrament people may read plans and change only the attendance fields
     match /meetings/{id} {
-      allow read: if canView('sacrament');
+      allow read: if canView('sacrament') || canView('homesac');
       allow write: if canEdit('sacrament');
+      allow create: if canEdit('homesac')
+        && request.resource.data.keys().hasOnly(['date', 'hbSkip', 'hbOn', 'updatedAt']);
+      allow update: if canEdit('homesac')
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hbSkip', 'hbOn', 'updatedAt']);
     }
 
     // ---- Calendar events ----
@@ -107,10 +156,10 @@ service cloud.firestore {
         || (canView('calendar') && resource.data.createdBy == request.auth.uid);
     }
 
-    // ---- Shared settings (rosters, hymns, homebound list) ----
+    // ---- Shared settings (rosters, hymns, homebound list, program) ----
     match /settings/{id} {
       allow read: if hasAccess();
-      allow write: if canEdit('sacrament');
+      allow write: if canEdit('sacrament') || (id == 'homebound' && canEdit('homesac'));
     }
 
     // ---- Member Board (cards per person in custom sections) ----
@@ -123,8 +172,8 @@ service cloud.firestore {
       allow write: if canEdit('board');
     }
     match /councils/{id} {
-      allow read: if canView('board');
-      allow write: if canEdit('board');
+      allow read: if canView('council');
+      allow write: if canEdit('council');
     }
 
     // ---- Callings pipeline (sensitive) ----
