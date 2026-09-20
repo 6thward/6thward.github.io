@@ -1273,3 +1273,7 @@ th.us-sort:hover, th.us-sort.on { color: var(--brand); }
 /* calling cards: date + action on one line (2026-09-20) */
 .call-card-line { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-top: .15rem; }
 .call-card-line .btn { padding: .22rem .6rem; font-size: .78rem; }
+
+/* Stake pop-up (2026-09-20) */
+.stake-list { display: flex; flex-direction: column; gap: .6rem; }
+.stake-list .call-card { cursor: default; }

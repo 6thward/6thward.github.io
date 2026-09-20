@@ -5,13 +5,13 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1789940413";
+import { db } from "./firebase-init.js?v=1789940623";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789940413";
-import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1789940413";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789940623";
+import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1789940623";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
@@ -31,7 +31,7 @@ const REL_STAGES = [
 let items = [];
 let groups = [];   // Calling-to-Fill groupings: callingGroups/{id} { label, order }
 let showDone = false;
-let showStake = localStorage.getItem("sw-stake-open") === "1"; // Stake pill in the header expands the list (2026-09-20)
+let stakeOpen = false; // the Stake pop-up is showing (re-rendered on data changes)
 let started = false;
 
 // legacy docs from the earlier pipeline get mapped into the new flow
@@ -72,7 +72,7 @@ export function initCallings() {
         <p class="panel-sub">Callings and releases, from consideration to the clerk's records.</p>
       </div>
       <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
-        <button class="chip stake-chip${showStake ? " active" : ""}" id="chip-stake" title="Callings submitted to the stake — click to show them">Stake <span class="pill pill-inprogress" id="stake-count">0</span></button>
+        <button class="chip stake-chip" id="chip-stake" title="Callings submitted to the stake — click to show them">Stake <span class="pill pill-inprogress" id="stake-count">0</span></button>
         <button class="btn" id="btn-new-member">+ Needs a calling</button>
         <button class="btn" id="btn-new-release">+ New release</button>
         <button class="btn btn-primary" id="btn-new-calling">+ New calling</button>
@@ -90,12 +90,7 @@ export function initCallings() {
   panel.querySelector("#btn-new-calling").addEventListener("click", () => editCalling(null));
   panel.querySelector("#btn-new-release").addEventListener("click", () => editRelease(null));
   panel.querySelector("#btn-new-member").addEventListener("click", () => editMember(null));
-  panel.querySelector("#chip-stake").addEventListener("click", () => {
-    showStake = !showStake;
-    localStorage.setItem("sw-stake-open", showStake ? "1" : "0");
-    panel.querySelector("#chip-stake").classList.toggle("active", showStake);
-    render();
-  });
+  panel.querySelector("#chip-stake").addEventListener("click", openStake); // pop-up list (2026-09-20)
   panel.querySelector("#chip-done").addEventListener("click", (e) => {
     showDone = !showDone;
     e.target.classList.toggle("active", showDone);
@@ -252,6 +247,41 @@ const stakeRow = (c) => `
     ${stampAction("Submitted", c.stamps?.stake, `<button class="btn btn-sm" data-adv="issue" type="button" title="The stake approved ${esc(c.decided || "")} — move to Calls to Issue">Approved →</button>`)}
   </div>`;
 
+// Stake pop-up (2026-09-20): who's submitted to the stake, Approved → Calls
+// to Issue, plus a picker to submit another decided calling.
+function openStake() {
+  const callings = items.filter((i) => (i.kind || "calling") === "calling");
+  const inStake = callings.filter((c) => c.stage === "stake");
+  const eligible = callings.filter((c) => (c.stage === "fill" || c.stage === "issue") && (c.decided || (c.candidates || [])[0]));
+  const el = openModal(`
+    <h3 style="display:flex;align-items:center;gap:.5rem">Submitted to Stake <span class="pill ${inStake.length ? "pill-inprogress" : "pill-role-member"}">${inStake.length}</span></h3>
+    <p class="row-sub" style="margin:0 0 .6rem">Callings waiting for stake approval. Approved moves them on to Calls to Issue.</p>
+    <div class="stake-list">
+      ${inStake.length ? inStake.map((c) => `
+        <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
+          <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}${c.organization ? ` <span class="call-card-org">· ${esc(c.organization)}</span>` : ""}</div>
+          <div class="row-title">${esc(c.decided || "—")}</div>
+          ${stampAction("Submitted", c.stamps?.stake, `<span style="display:flex;gap:.35rem"><button class="btn btn-sm btn-ghost" data-sback="${c.id}" type="button" title="Not approved — back to Calling to Fill">Back</button><button class="btn btn-sm btn-primary" data-sok="${c.id}" type="button" title="Approved — move to Calls to Issue">Approved →</button></span>`)}
+        </div>`).join("") : `<div class="empty-note">Nothing submitted to the stake.</div>`}
+    </div>
+    ${eligible.length ? `
+    <div class="field" style="margin-top:.9rem"><span>Submit a calling to the stake</span>
+      <div style="display:flex;gap:.4rem"><select id="st-pick" style="flex:1"><option value="">Choose a calling…</option>${eligible.map((c) => `<option value="${c.id}">${esc(c.calling)} — ${esc(c.decided || (c.candidates || [])[0])}</option>`).join("")}</select><button class="btn" id="st-submit" type="button">Submit</button></div>
+    </div>` : ""}
+    <div class="modal-actions"><span></span><button class="btn" id="st-close">Close</button></div>`);
+  stakeOpen = true;
+  const done = () => { stakeOpen = false; closeModal(); };
+  el.querySelector("#st-close").addEventListener("click", done);
+  el.querySelectorAll("[data-sok]").forEach((b) => b.addEventListener("click", () => save(b.dataset.sok, { stage: "issue" })));
+  el.querySelectorAll("[data-sback]").forEach((b) => b.addEventListener("click", () => save(b.dataset.sback, { stage: "fill" })));
+  el.querySelector("#st-submit")?.addEventListener("click", () => {
+    const id = el.querySelector("#st-pick").value;
+    const c = items.find((x) => x.id === id);
+    if (!c) return;
+    save(id, { stage: "stake", decided: c.decided || (c.candidates || [])[0] });
+  });
+}
+
 const sustainRow = (c) => `
   <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
     <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}${delBtn(c)}</div>
@@ -358,10 +388,7 @@ function render() {
     bucket("Set Apart & MLS", "Tick Set apart and MLS as each happens — when both are ticked the calling is complete and archives.",
       by("apart").map(apartRow), "No one waiting to be set apart.", "apart") +
     `</div>` +
-    (showStake ? `<div class="stake-wrap">` +
-    bucket("Submitted to Stake", "Waiting for stake approval — drag a card here. Approved moves it on to Calls to Issue.",
-      by("stake").map(stakeRow), "Nothing submitted to the stake.", "stake") +
-    `</div>` : "") +
+
     `<h3 style="margin:1.4rem 0 0;display:flex;align-items:center;gap:.5rem">Releases <span class="pill pill-role-member">${releases.filter((r) => r.stage !== "done").length}</span></h3>` +
     `<div class="bishopric-board releases-board">` +
     bucket("Decided", "Release decided — let them know.",
@@ -380,6 +407,7 @@ function render() {
     .sort((a, b) => tsMs(b.stamps?.done) - tsMs(a.stamps?.done));
   const doneList = document.getElementById("calling-done");
   if (doneList) doneList.innerHTML = doneItems.length ? doneItems.map(doneRow).join("") : `<div class="empty-note">Nothing archived yet.</div>`;
+  if (stakeOpen && document.getElementById("st-close")) openStake(); else stakeOpen = false; // keep the pop-up current (Esc/backdrop may have closed it)
   const stakeCount = document.getElementById("stake-count");
   if (stakeCount) { const n = by("stake").length; stakeCount.textContent = n; stakeCount.className = "pill " + (n ? "pill-inprogress" : "pill-role-member"); }
   const chipDone = document.getElementById("chip-done");
