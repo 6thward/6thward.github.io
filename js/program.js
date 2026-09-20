@@ -6,9 +6,9 @@
 // meeting content comes straight from that Sunday's plan.
 //
 //   settings/program  { wardName, stakeName, logo (data URL | "" = built-in), opts: {...} }
-import { db } from "./firebase-init.js?v=1789882924";
+import { db } from "./firebase-init.js?v=1789883154";
 import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789882924";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789883154";
 
 export const DEFAULT_LOGO = "assets/program-logo.jpg"; // Christus arch, built in
 // Fixed by Jordan (2026-09-19): Presiding + Conducting always shown, speaker
@@ -152,12 +152,21 @@ export function buildProgramHtml(ctx, opts = {}) {
   const logoSrc = s.logo || new URL(DEFAULT_LOGO, ctx.baseHref || document.baseURI).href;
   const hymn = (it) => [it.num ? "#" + it.num : "", it.title].filter(Boolean).join("  ");
 
-  const rows = [];
-  // baby blessings print right before the sacrament, whatever their slot in the plan
+  // Blocks, in program order, with air between them (2026-09-19 layout):
+  //   officers · opening hymn · opening prayer · [baby blessings + sacrament
+  //   hymn + Administration of the Sacrament] · youth speakers · speakers (with
+  //   the music number where it falls) · closing hymn · closing prayer.
+  // Hymns are centred with the title quoted beneath; name lines use dot leaders.
+  const blocks = []; // [{cat, html[]}] — consecutive items of one category share a block
+  const push = (cat, html) => {
+    const last = blocks[blocks.length - 1];
+    if (last && last.cat === cat) last.html.push(html); else blocks.push({ cat, html: [html] });
+  };
+  const leader = (label, val) => `<div class="r"><span class="l">${esc(label)}</span><span class="dots"></span><span class="v">${val}</span></div>`;
+  const centred = (label, line2, line3) => `<div class="c"><div class="c1">${esc(label)}</div>${line2 ? `<div class="c2">${line2}</div>` : ""}${line3 ? `<div class="c3">${line3}</div>` : ""}</div>`;
+  const hymnLines = (label, it) => centred(label + (it.num ? ` #${esc(it.num)}` : ""), it.title ? `“${esc(it.title)}”` : (it.num ? "" : "—"));
   const babies = (m.items || []).filter((it) => it.kind === "babyBlessing" && (it.name || it.by));
   const babyLines = () => babies.map((b) => `<div class="baby">Blessing of ${esc(b.name || "—")}${b.by ? ` <span class="by">by ${esc(b.by)}</span>` : ""}</div>`).join("");
-  const row = (label, val, sub) => rows.push(`<div class="r"><span class="l">${esc(label)}</span><span class="v">${val}</span></div>${sub ? `<div class="sub">${sub}</div>` : ""}`);
-  const band = (text, sub) => rows.push(`<div class="band">${esc(text)}${sub ? `<div class="band-sub">${esc(sub)}</div>` : ""}</div>`);
   let announcements = "";
 
   (m.items || []).forEach((it) => {
@@ -167,28 +176,34 @@ export function buildProgramHtml(ctx, opts = {}) {
       if (lines.length) announcements = lines.map((l) => `<div>• ${esc(l)}</div>`).join("");
       return;
     }
-    if (k === "sacrament" || k === "blessing") { if (babies.length) rows.push(babyLines()); band("Administration of the Sacrament"); return; }
-    if (k === "testimonies") { band(L("testimonies")); return; }
-    if (HYMN_KINDS.includes(k)) { row(L(k), hymn(it) ? esc(hymn(it)) : "—"); return; }
+    if (k === "sacramentHymn") { push("sac", (babies.length ? babyLines() : "") + hymnLines(L(k), it)); return; }
+    if (k === "sacrament" || k === "blessing") { push("sac", `<div class="band">Administration of the Sacrament</div>`); return; }
+    if (k === "testimonies") { push("testimonies", `<div class="band">${esc(L("testimonies"))}</div>`); return; }
+    if (HYMN_KINDS.includes(k)) { push(k, hymnLines(L(k), it)); return; }
     if (SPEAKER_KINDS.includes(k)) {
       if (it.none || !it.name) return;
-      row(L(k), esc(it.name)); // topics never printed
+      push(k === "speaker" ? "speakers" : "youth", leader(L(k), esc(it.name))); // topics never printed
       return;
     }
-    if (PRAYER_KINDS.includes(k)) { row(L(k), esc(it.name || "—")); return; }
-    if (k === "musical") { row(L(k), esc(it.who || "—"), [it.hymn, it.accompanist ? "Accompanist: " + it.accompanist : ""].filter(Boolean).map(esc).join(" · ")); return; }
-    if (k === "choir") { row(it.youth ? "Youth Choir" : L(k), esc(it.hymn || "—"), it.accompanist ? "Accompanist: " + esc(it.accompanist) : ""); return; }
-    if (k === "babyBlessing") return; // printed just before the sacrament (above)
+    if (PRAYER_KINDS.includes(k)) { push(k, leader(L(k), esc(it.name || "TBA"))); return; }
+    if (k === "musical") { push("music", centred(L(k), esc(it.who || "—"), [it.hymn ? `“${esc(it.hymn)}”` : "", it.accompanist ? "Accompanist: " + esc(it.accompanist) : ""].filter(Boolean).join(" · "))); return; }
+    if (k === "choir") { push("music", centred(it.youth ? "Youth Choir" : L(k), it.hymn ? `“${esc(it.hymn)}”` : "—", it.accompanist ? "Accompanist: " + esc(it.accompanist) : "")); return; }
+    if (k === "babyBlessing") return; // printed with the sacrament block (above)
     if (k === "wardBusiness") return; // never printed
-    if (k === "custom") { row(it.label || "Item", esc(it.text || "")); return; }
+    if (k === "custom") { push("custom", leader(it.label || "Item", esc(it.text || ""))); return; }
   });
+  // a plan with no sacrament item still gets the band after the sacrament hymn
+  if (!blocks.some((b) => b.cat === "sac" && b.html.some((h) => h.includes("class=\"band\""))) && blocks.some((b) => b.cat === "sac")) {
+    blocks.find((b) => b.cat === "sac").html.push(`<div class="band">Administration of the Sacrament</div>`);
+  }
+  const rows = blocks.map((b) => `<div class="grp grp-${b.cat}">${b.html.join("")}</div>`);
 
   const officers = [
     ["Presiding", m.presiding || ctx.presidingDefault || "—"],   // always; blank = the bishop
     ["Conducting", m.conducting || "—"], // always
     m.chorister ? ["Music Conductor", m.chorister] : null,
     m.organist ? ["Organist", m.organist] : null,
-  ].filter(Boolean).map(([l, v]) => `<div class="r"><span class="l">${esc(l)}</span><span class="v">${esc(v)}</span></div>`).join("");
+  ].filter(Boolean).map(([l, v]) => leader(l, esc(v))).join("");
 
   const program = `
     <div class="prog"><div class="inner">
@@ -200,8 +215,7 @@ export function buildProgramHtml(ctx, opts = {}) {
       <div class="title">Sacrament Meeting</div>
       <div class="date">${esc(ctx.fmtDate(ctx.date))}</div>
       ${m.theme ? `<div class="theme">“${esc(m.theme)}”</div>` : ""}
-      <div class="rule"></div><div class="officers">${officers}</div>
-      <div class="rule"></div>
+      <div class="officers grp">${officers}</div>
       <div class="rows">${rows.join("")}</div>
       ${announcements ? `<div class="ann"><div class="ann-h">Announcements</div>${announcements}</div>` : ""}
       ${o.footer ? `<div class="foot">${esc(o.footer)}</div>` : ""}
@@ -217,25 +231,30 @@ export function buildProgramHtml(ctx, opts = {}) {
   .bar button { font: inherit; padding: .4rem .9rem; border: 0; border-radius: 6px; background: #fff; color: #1f2733; cursor: pointer; }
   .bar span { opacity: .8; font-weight: 400; }
   .sheet { width: 8.5in; height: 11in; margin: .5in auto; background: #fff; display: grid; grid-template-columns: 4.25in 4.25in; box-shadow: 0 6px 24px rgba(0,0,0,.18); overflow: hidden; }
-  .prog { height: 11in; padding: .45in .38in .4in; text-align: center; overflow: hidden; }
+  .prog { height: 11in; padding: .42in .4in .4in; text-align: center; overflow: hidden; }
   .inner { height: 100%; display: flex; flex-direction: column; }
   .prog:first-child { border-right: 1px dashed #b8bec7; }
   .top { display: flex; flex-direction: column; align-items: center; }
-  .logo { max-height: 2in; max-width: 2in; object-fit: contain; margin-bottom: .12in; }
+  .logo { max-height: 2.6in; max-width: 2.4in; object-fit: contain; margin-bottom: .14in; }
   .ward { font-size: 15pt; font-weight: 700; letter-spacing: .04em; }
   .stake { font-size: 10.5pt; letter-spacing: .06em; text-transform: uppercase; color: #333; margin-top: .03in; }
   .title { font-size: 17pt; font-variant: small-caps; letter-spacing: .06em; margin-top: .2in; }
   .date { font-size: 10.5pt; color: #333; margin-top: .04in; }
   .theme { font-style: italic; font-size: 10.5pt; margin-top: .06in; }
-  .rule { height: 1px; background: #222; margin: .1in .2in; }
-  .officers .r, .rows .r { display: flex; justify-content: space-between; align-items: baseline; gap: .15in; font-size: 10pt; line-height: 1.3; padding: .018in 0; }
-  .officers .r .l, .rows .r .l { text-align: left; font-style: italic; color: #333; flex: 0 0 auto; }
-  .officers .r .v, .rows .r .v { text-align: right; font-weight: 600; }
-  .rows .sub { text-align: right; font-size: 8.5pt; color: #444; margin: -.02in 0 .035in; line-height: 1.3; }
-  .rows .sub div { text-align: right; }
-  .band { font-variant: small-caps; letter-spacing: .05em; font-size: 11pt; padding: .07in 0; margin: .04in 0; border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; }
-  .band-sub { font-variant: normal; letter-spacing: 0; font-size: 9pt; color: #444; }
-  .baby { text-align: center; font-size: 10.5pt; font-weight: 600; padding: .05in 0 .06in; }
+  .grp { margin-top: .16in; }            /* air between blocks */
+  .officers.grp { margin-top: .2in; }
+  .r { display: flex; align-items: baseline; font-size: 10.5pt; line-height: 1.35; padding: .012in 0; }
+  .r .l { flex: 0 0 auto; text-align: left; }
+  .r .dots { flex: 1; border-bottom: 1.5px dotted #444; margin: 0 .05in; transform: translateY(-.04in); min-width: .3in; }
+  .r .v { flex: 0 0 auto; text-align: right; }
+  .c { text-align: center; font-size: 10.5pt; line-height: 1.35; padding: .012in 0; }
+  .c .c2 { font-style: normal; }
+  .c .c3 { font-size: 9pt; color: #333; }
+  .band { text-align: center; font-weight: 700; font-size: 11pt; padding: .02in 0; }
+  .grp-sac { padding: .16in 0; margin: .18in 0; border-top: 1px solid #ddd; border-bottom: 1px solid #ddd; } /* the sacrament: hymn + administration, set apart */
+  .grp-sac .c, .grp-sac .band { padding: .03in 0; }
+  .grp-testimonies .band { padding: .1in 0; }
+  .baby { text-align: center; font-size: 10.5pt; font-weight: 600; padding: .02in 0 .08in; }
   .baby .by { font-weight: 400; font-style: italic; color: #333; }
   .ann { margin-top: auto; padding-top: .12in; text-align: left; font-size: 9pt; line-height: 1.35; }
   .ann-h { font-variant: small-caps; letter-spacing: .05em; font-size: 10pt; border-bottom: 1px solid #222; margin-bottom: .05in; }
