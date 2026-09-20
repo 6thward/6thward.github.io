@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789884347";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789884347";
+import { db } from "./firebase-init.js?v=1789910443";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789910443";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789884347";
-import { HYMNS } from "./hymns.js?v=1789884347";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1789884347";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789910443";
+import { HYMNS } from "./hymns.js?v=1789910443";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1789910443";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -536,7 +536,6 @@ async function shareMeeting(date) {
         <a class="btn btn-primary" id="sh-sms" href="sms:?&body=${encodeURIComponent(msg)}">💬 Text it</a>
         ${canShare ? `<button class="btn" id="sh-share">📤 Share…</button>` : ""}
         <a class="btn" id="sh-open" href="${esc(url)}" target="_blank" rel="noopener">Open</a>
-        <button class="btn btn-ghost btn-danger" id="sh-revoke" title="Old link stops working; a new one is made next time">New link</button>
       </div>
       <div class="right"><button class="btn" id="sh-close">Close</button></div>
     </div>`);
@@ -544,12 +543,6 @@ async function shareMeeting(date) {
   el.querySelector("#sh-copy-url").addEventListener("click", () => copy(url, "Link copied"));
   el.querySelector("#sh-share")?.addEventListener("click", async () => {
     try { await navigator.share({ title, text: title, url }); } catch { /* cancelled */ }
-  });
-  el.querySelector("#sh-revoke").addEventListener("click", async () => {
-    if (!confirm("Make a new link? The old one stops working.")) return;
-    try { await deleteDoc(doc(db, "public", token)); } catch {}
-    await patchMeeting(date, (mm) => { delete mm.shareToken; });
-    closeModal(); shareMeeting(date);
   });
   el.querySelector("#sh-close").addEventListener("click", () => { closeModal(); viewMeeting(date); });
 }
