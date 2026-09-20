@@ -6,9 +6,9 @@
 // meeting content comes straight from that Sunday's plan.
 //
 //   settings/program  { wardName, stakeName, logo (data URL | "" = built-in), opts: {...} }
-import { db } from "./firebase-init.js?v=1789911867";
+import { db } from "./firebase-init.js?v=1789913068";
 import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789911867";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789913068";
 
 export const DEFAULT_LOGO = "assets/program-logo.jpg"; // Christus arch, built in
 // Fixed by Jordan (2026-09-19): Presiding + Conducting always shown, speaker

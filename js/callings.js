@@ -5,13 +5,13 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1789911867";
+import { db } from "./firebase-init.js?v=1789913068";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789911867";
-import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1789911867";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789913068";
+import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1789913068";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
@@ -215,14 +215,16 @@ const fillRow = (c) => {
   const addBox = `<input class="cand-add" data-addcand="${c.id}" placeholder="${cands.length ? "+ Add another name" : "+ Add a name to consider"}" autocomplete="off" aria-label="Add a name to consider for ${esc(c.calling)}">`;
   return `
   <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
-    <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}${c.organization ? ` <span class="call-card-org">· ${esc(c.organization)}</span>` : ""}</div>
+    <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}${c.organization ? ` <span class="call-card-org">· ${esc(c.organization)}</span>` : ""}${delBtn(c)}</div>
     <div class="row-sub">${sub}${addBox}</div>
   </div>`;
 };
 
+// small ✕ in the title band deletes the calling (with a confirm) — 2026-09-20
+const delBtn = (c) => `<span class="call-del" data-del="${c.id}" title="Delete this calling" role="button">✕</span>`;
 const issueRow = (c) => `
   <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
-    <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}</div>
+    <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}${delBtn(c)}</div>
     <div class="row-title">${esc(c.decided || "—")}</div>
     ${stampLine("Decided", c.stamps?.issue)}
     <div class="call-card-actions"><button class="btn btn-sm" data-adv="sustain" type="button" title="${esc(c.decided || "")} accepted the call">Accepted</button></div>
@@ -230,7 +232,7 @@ const issueRow = (c) => `
 
 const sustainRow = (c) => `
   <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
-    <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}</div>
+    <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}${delBtn(c)}</div>
     <div class="row-title">${esc(c.decided || "—")}</div>
     ${stampLine("Accepted", c.stamps?.sustain)}
     <div class="call-card-actions"><button class="btn btn-sm" data-adv="apart" type="button">Sustained →</button></div>
@@ -238,7 +240,7 @@ const sustainRow = (c) => `
 
 const apartRow = (c) => `
   <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
-    <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}</div>
+    <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}${delBtn(c)}</div>
     <div class="row-title">${esc(c.decided || "—")}</div>
     ${stampLine("Sustained", c.stamps?.apart)}
     <div class="step-pills">
@@ -373,6 +375,14 @@ function render() {
       const item = it();
       if (!item) return;
       if (t.classList.contains("cand-add")) { e.stopPropagation(); return; } // typing a name, not opening the editor
+      if (t.dataset.del) { // ✕ in the title band: delete the calling (2026-09-20)
+        e.stopPropagation();
+        const who = item.decided ? ` (${item.decided})` : "";
+        if (!confirm(`Delete “${item.calling}”${who}? This can't be undone.`)) return;
+        deleteDoc(doc(db, "callings", item.id)).then(() => wardBusinessForget(item)).then(() => toast("Deleted"))
+          .catch((err) => toast("Couldn't delete: " + (err.code || err.message)));
+        return;
+      }
       if (t.dataset.star != null && t.classList.contains("cand-pick")) { // ☆ on the card: settle on this name → Calls to Issue
         e.stopPropagation();
         const name = (item.candidates || [])[Number(t.dataset.star)];
