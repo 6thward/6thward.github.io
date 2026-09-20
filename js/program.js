@@ -6,9 +6,9 @@
 // meeting content comes straight from that Sunday's plan.
 //
 //   settings/program  { wardName, stakeName, logo (data URL | "" = built-in), opts: {...} }
-import { db } from "./firebase-init.js?v=1789883873";
+import { db } from "./firebase-init.js?v=1789883956";
 import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789883873";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789883956";
 
 export const DEFAULT_LOGO = "assets/program-logo.jpg"; // Christus arch, built in
 // Fixed by Jordan (2026-09-19): Presiding + Conducting always shown, speaker
@@ -244,9 +244,9 @@ export function buildProgramHtml(ctx, opts = {}) {
   .theme { font-style: italic; font-size: 10.5pt; margin-top: .06in; }
   .grp { margin-top: var(--gap); }            /* air between blocks */
   /* officers block: narrower than the rest, subtle rules exactly as wide as the names */
-  .rule { height: 1px; background: #d4d4d4; margin: calc(.12in * var(--head)) .3in .06in; }
-  .officers + .rule { margin: .06in .3in .02in; }
-  .officers { padding: 0 .3in; }
+  .rule { height: 1px; background: #d4d4d4; margin: calc(.12in * var(--head)) .25in .06in; }
+  .officers + .rule { margin: .06in .25in .02in; }
+  .officers { padding: 0 .4in; }   /* names sit clearly inside the rules */
   .r { display: flex; align-items: baseline; font-size: 10.5pt; line-height: 1.35; padding: .012in 0; }
   .r .l { flex: 0 0 auto; text-align: left; }
   .r .dots { flex: 1; min-width: .3in; overflow: hidden; white-space: nowrap; text-align: left; margin: 0 .02in; }
