@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789881438";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789881438";
+import { db } from "./firebase-init.js?v=1789881895";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789881895";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789881438";
-import { HYMNS } from "./hymns.js?v=1789881438";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog } from "./program.js?v=1789881438";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789881895";
+import { HYMNS } from "./hymns.js?v=1789881895";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog } from "./program.js?v=1789881895";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -847,10 +847,36 @@ function statusChips(m, date) {
   })();
   // 2026-09-13 — placement ("after speaker 3") is its own pill; click to move the slot
   const placePill = slotPos && planned ? `<span class="st-place${can ? " st-click" : ""}"${can ? ` data-place="1" title="Click to change where it falls in the program"` : ""}>${esc(slotPos)}</span>` : "";
-  if (slotMusical) {
+  if (can && type !== "fast") {
+    // 2026-09-19 — editors get the type + detail right on the pill (no popup):
+    // a type select, one field for the detail, and the placement pill.
+    // Clicking the "Music Number" headline still opens the full editor.
+    const mode = interModeOf(items);
+    const slotIt = slotChoir || slotMusical || slotInterHymn || null;
+    const detail = mode === "musical" ? (slotMusical.who || "")
+      : mode === "hymn" ? hymnCombo(slotInterHymn.num, slotInterHymn.title)
+      : mode === "choir" || mode === "youthChoir" ? (slotChoir.hymn || "") : "";
+    const filled = mode === "hymn" ? !!(slotInterHymn.num || slotInterHymn.title) : !!detail;
+    const cls = mode === "none" ? "st-off" : !filled ? (planned ? "st-miss" : "st-off") : (slotIt && slotIt.kind !== "intermediateHymn" && !isConf(slotIt)) ? "st-pending" : "st-ok";
+    const dragK = mode === "musical" ? "musical" : (mode === "choir" || mode === "youthChoir") ? "choir" : "";
+    const dragAttr = dragK && filled ? ` draggable="true" data-drag='${JSON.stringify({ k: dragK, o: 0 })}'` : "";
+    const field = mode === "none" ? ""
+      : mode === "hymn"
+      ? `<input class="st-in-title st-music-in hymn-combo" data-mfield="hymn" list="dl-hymn-all" placeholder="Number or title…" autocomplete="off" value="${esc(detail)}">`
+      : `<input class="st-in-title st-music-in" data-mfield="${mode}" placeholder="${mode === "musical" ? "Who / what" : "Piece"}" autocomplete="off" value="${esc(detail)}">`;
+    const conf = slotIt && slotIt.kind !== "intermediateHymn" && filled
+      ? `<span class="st-li-ic st-confirm-dot${isConf(slotIt) ? "" : " st-unconf"}" data-confirm='${JSON.stringify({ k: slotIt.kind, o: 0 })}' title="${isConf(slotIt) ? "Confirmed — click if this still needs confirming" : "Not confirmed yet — click once it's confirmed"}">${isConf(slotIt) ? "✓" : "!"}</span>`
+      : "";
+    chips.push(`<span class="st st-inter ${cls}${dragAttr ? " st-drag" : ""}"${dragAttr}>
+      <span class="st-head st-click" data-qe='{"t":"inter"}' title="Click for the full editor">Music Number</span>
+      <select class="st-mtype" data-mtype title="Type"><option value="none"${mode === "none" ? " selected" : ""}>— none —</option>${INTER_MODES.map(([k, l]) => `<option value="${k}"${mode === k ? " selected" : ""}>${l}</option>`).join("")}</select>
+      ${field ? `<span class="st-music-field">${field}${conf}</span>` : ""}
+      ${placePill}
+    </span>`);
+  } else if (slotMusical) {
     chips.push(chip("Music Number", slotMusical.who, { t: "inter" }, isConf(slotMusical), slotMusical.confirmedBy, null, slotMusical.hymn || "", { k: "musical", o: 0 }, placePill));
   } else if (slotChoir) {
-    chips.push(chip("Music Number", "Choir", { t: "inter" }, isConf(slotChoir), slotChoir.confirmedBy, null, slotChoir.hymn || "", { k: "choir", o: 0 }, placePill));
+    chips.push(chip("Music Number", slotChoir.youth ? "Youth Choir" : "Choir", { t: "inter" }, isConf(slotChoir), slotChoir.confirmedBy, null, slotChoir.hymn || "", { k: "choir", o: 0 }, placePill));
   } else if (slotInterHymn) {
     const hymnVal = [slotInterHymn.num ? "#" + slotInterHymn.num : "", slotInterHymn.title].filter(Boolean).join(" | ");
     chips.push(chip("Music Number", hymnVal, { t: "inter" }, true, null, null, "", null, placePill));
@@ -1054,6 +1080,35 @@ function renderCards(wrap) {
       sel.addEventListener("keydown", (ev) => { if (ev.key === "Escape") { done = true; render(); } });
       sel.addEventListener("blur", () => setTimeout(() => { if (!done) render(); }, 120));
     }));
+  // Music Number pill inline controls (2026-09-19): type select swaps the slot
+  // kind on change; the detail field saves on Enter / blur, Esc reverts
+  wrap.querySelectorAll("[data-mtype]").forEach((sel) => {
+    ["click", "mousedown", "dragstart"].forEach((ev) => sel.addEventListener(ev, (e) => e.stopPropagation()));
+    sel.addEventListener("change", () => {
+      const date = sel.closest("[data-date]").dataset.date;
+      patchMeeting(date, (mm) => setInterSlot(mm, sel.value, {}, ""));
+    });
+  });
+  wrap.querySelectorAll("[data-mfield]").forEach((inp) => {
+    ["click", "mousedown", "dragstart"].forEach((ev) => inp.addEventListener(ev, (e) => e.stopPropagation()));
+    const date = inp.closest("[data-date]").dataset.date;
+    const mode = inp.dataset.mfield;
+    const initial = inp.value;
+    let done = false;
+    const commit = () => {
+      if (done) return; done = true;
+      if (inp.value === initial) return;
+      const val = mode === "hymn" ? parseHymnCombo(inp.value)
+        : mode === "musical" ? { who: inp.value.trim() } : { hymn: inp.value.trim() };
+      patchMeeting(date, (mm) => setInterSlot(mm, mode, val, ""));
+    };
+    inp.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") { ev.preventDefault(); commit(); inp.blur(); }
+      if (ev.key === "Escape") { ev.preventDefault(); done = true; inp.value = initial; inp.blur(); }
+    });
+    inp.addEventListener("blur", () => setTimeout(commit, 80));
+    inp.addEventListener("change", () => { if (mode === "hymn" && hymnCatalog().some((h) => hymnCombo(h.num, h.title) === inp.value)) { commit(); inp.blur(); } }); // datalist pick
+  });
   // speaker "topic" button (2026-09-13): read-only users get the tooltip; editors get a tiny editor
   wrap.querySelectorAll("[data-topic]").forEach((el) =>
     el.addEventListener("click", (e) => {
@@ -1209,6 +1264,51 @@ function quickAddBaby(date, idx = null) {
   el.querySelector("input").focus();
 }
 
+// The intermediate slot: swap it to a hymn / special musical number / choir /
+// youth choir (choir + youth flag) / none, merge the given fields, and
+// optionally reposition it relative to the adult speakers. Shared by the
+// popup editor and the inline controls on the Music Number pill (2026-09-19).
+const SLOT_KINDS = ["intermediateHymn", "musical", "choir"];
+function setInterSlot(m, mode, interVal, posVal) {
+  if (mode === "none") { m.items = m.items.filter((i) => !SLOT_KINDS.includes(i.kind)); return; }
+  const targetKind = mode === "hymn" ? "intermediateHymn" : mode === "youthChoir" ? "choir" : mode;
+  const firstSlot = m.items.find((i) => SLOT_KINDS.includes(i.kind));
+  const time = firstSlot ? firstSlot.time : 3;
+  // drop any slot items of a different kind so the swap never leaves duplicates
+  m.items = m.items.filter((i) => !SLOT_KINDS.includes(i.kind) || i.kind === targetKind);
+  const existing = m.items.find((i) => i.kind === targetKind);
+  const vals = { ...(interVal || {}) };
+  if (targetKind === "choir") vals.youth = mode === "youthChoir";
+  if (existing) {
+    Object.assign(existing, vals);
+  } else {
+    const base = targetKind === "intermediateHymn" ? {} : { confirmed: false, confirmedBy: "" };
+    insertCanonical(m.items, { kind: targetKind, time, ...base, ...vals });
+  }
+  // reposition relative to the adult speakers per the Position select
+  if (posVal) {
+    const slot = m.items.find((i) => i.kind === targetKind);
+    m.items = m.items.filter((i) => i !== slot);
+    const spks = m.items.filter((i) => i.kind === "speaker");
+    let at = -1;
+    if (posVal === "start" && spks[0]) at = m.items.indexOf(spks[0]);
+    else if (posVal.startsWith("spk:")) {
+      const anchor = spks[Math.min(Number(posVal.slice(4)), spks.length - 1)];
+      if (anchor) at = m.items.indexOf(anchor) + 1;
+    }
+    if (at < 0) insertCanonical(m.items, slot);
+    else m.items.splice(at, 0, slot);
+  }
+}
+const interModeOf = (items) => {
+  const c = items.find((i) => i.kind === "choir");
+  if (c) return c.youth ? "youthChoir" : "choir";
+  if (items.find((i) => i.kind === "musical")) return "musical";
+  if (items.find((i) => i.kind === "intermediateHymn")) return "hymn";
+  return "none";
+};
+const INTER_MODES = [["musical", "Special Musical Number"], ["hymn", "Rest Hymn"], ["choir", "Choir"], ["youthChoir", "Youth Choir"]];
+
 // find the o-th item of a kind
 function nthItem(items, kind, o) {
   let c = 0;
@@ -1306,7 +1406,7 @@ function quickEdit(date, q) {
     const interHymn = items.find((i) => i.kind === "intermediateHymn");
     const interMusical = items.find((i) => i.kind === "musical");
     const interChoir = items.find((i) => i.kind === "choir");
-    const interMode = interChoir ? "choir" : interMusical ? "musical" : "hymn";
+    const interMode = interChoir ? (interChoir.youth ? "youthChoir" : "choir") : interMusical ? "musical" : "hymn";
     const modeBtn = (mode, label) =>
       `<button class="chip ${interMode === mode ? "active" : ""}" data-inter-mode="${mode}" type="button">${label}</button>`;
     // where the number lands in the meeting, relative to the adult speakers
@@ -1328,7 +1428,7 @@ function quickEdit(date, q) {
       </label>` : "";
     html = `<h3>Intermediate ${dateLabel}</h3>
       <div class="chips" style="margin:.3rem 0 .6rem">
-        ${modeBtn("hymn", "Hymn")}${modeBtn("musical", "Special Musical #")}${modeBtn("choir", "Choir")}
+        ${modeBtn("hymn", "Rest Hymn")}${modeBtn("musical", "Special Musical #")}${modeBtn("choir", "Choir")}${modeBtn("youthChoir", "Youth Choir")}
       </div>
       <div id="qe-inter-hymn-fields" style="display:${interMode === "hymn" ? "flex" : "none"};gap:.4rem">
         <input id="qe-inter-hymn" class="hymn-combo" list="dl-hymn-all" placeholder="Type a number or a title…" autocomplete="off" style="flex:1" value="${esc(hymnCombo(interHymn?.num, interHymn?.title))}">
@@ -1344,7 +1444,7 @@ function quickEdit(date, q) {
           <input id="qe-inter-acc" autocomplete="off" value="${esc(interMusical?.accompanist || "")}">
         </label>
       </div>
-      <div id="qe-inter-choir-fields" style="display:${interMode === "choir" ? "block" : "none"}">
+      <div id="qe-inter-choir-fields" style="display:${interMode === "choir" || interMode === "youthChoir" ? "block" : "none"}">
         <label class="field">Hymn name
           <input id="qe-inter-choir-piece" autocomplete="off" value="${esc(interChoir?.hymn || "")}">
         </label>
@@ -1356,39 +1456,10 @@ function quickEdit(date, q) {
       const posVal = el.querySelector("#qe-inter-pos")?.value || "";
       const interVal = nowMode === "musical"
         ? { who: el.querySelector("#qe-inter-who").value.trim(), hymn: el.querySelector("#qe-inter-piece").value.trim(), accompanist: el.querySelector("#qe-inter-acc").value.trim() }
-        : nowMode === "choir"
+        : nowMode === "choir" || nowMode === "youthChoir"
         ? { hymn: el.querySelector("#qe-inter-choir-piece").value.trim() }
         : parseHymnCombo(el.querySelector("#qe-inter-hymn").value);
-      return (m) => {
-        // swap the intermediate slot between an intermediateHymn / musical / choir item
-        const SLOT_KINDS = ["intermediateHymn", "musical", "choir"];
-        const targetKind = nowMode === "hymn" ? "intermediateHymn" : nowMode;
-        const firstSlot = m.items.find((i) => SLOT_KINDS.includes(i.kind));
-        const time = firstSlot ? firstSlot.time : 3;
-        // drop any slot items of a different kind so the swap never leaves duplicates
-        m.items = m.items.filter((i) => !SLOT_KINDS.includes(i.kind) || i.kind === targetKind);
-        const existing = m.items.find((i) => i.kind === targetKind);
-        if (existing) {
-          Object.assign(existing, interVal);
-        } else {
-          const base = targetKind === "intermediateHymn" ? {} : { confirmed: false, confirmedBy: "" };
-          insertCanonical(m.items, { kind: targetKind, time, ...base, ...interVal });
-        }
-        // reposition relative to the adult speakers per the Position select
-        if (posVal) {
-          const slot = m.items.find((i) => i.kind === targetKind);
-          m.items = m.items.filter((i) => i !== slot);
-          const spks = m.items.filter((i) => i.kind === "speaker");
-          let at = -1;
-          if (posVal === "start" && spks[0]) at = m.items.indexOf(spks[0]);
-          else if (posVal.startsWith("spk:")) {
-            const anchor = spks[Math.min(Number(posVal.slice(4)), spks.length - 1)];
-            if (anchor) at = m.items.indexOf(anchor) + 1;
-          }
-          if (at < 0) insertCanonical(m.items, slot);
-          else m.items.splice(at, 0, slot);
-        }
-      };
+      return (m) => setInterSlot(m, nowMode, interVal, posVal);
     };
   } else if (q.t === "prayers") {
     // combined editor for the opening + closing prayers
@@ -1748,7 +1819,7 @@ function quickEdit(date, q) {
       const mode = btn.dataset.interMode;
       el.querySelector("#qe-inter-hymn-fields").style.display = mode === "hymn" ? "flex" : "none";
       el.querySelector("#qe-inter-musical-fields").style.display = mode === "musical" ? "block" : "none";
-      el.querySelector("#qe-inter-choir-fields").style.display = mode === "choir" ? "block" : "none";
+      el.querySelector("#qe-inter-choir-fields").style.display = mode === "choir" || mode === "youthChoir" ? "block" : "none";
       el.querySelectorAll("[data-inter-mode]").forEach((b) => b.classList.toggle("active", b === btn));
     }));
 
@@ -2084,7 +2155,7 @@ function renderAgendaView(m, canEdit = false) {
     `<div class="ag-head-break"></div>`,
   ].join("");
   const items = (m.items || []).map((it, itemIdx) => {
-    const label = it.kind === "custom" ? (it.label || "Item") : (KINDS[it.kind]?.label || it.kind);
+    const label = it.kind === "custom" ? (it.label || "Item") : it.kind === "choir" && it.youth ? "Youth Choir" : (KINDS[it.kind]?.label || it.kind);
     // sacrament administration is the meeting's center of gravity — set it
     // apart (older docs use kind "sacrament", newer defaults "blessing")
     if (it.kind === "sacrament" || it.kind === "blessing") {

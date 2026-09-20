@@ -1215,3 +1215,13 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 
 /* baby blessing pill: who gives the blessing, lighter (2026-09-19) */
 .pill-baby-by { font-weight: 500; opacity: .8; margin-left: .3em; }
+
+/* Music Number pill: inline type select + detail field (2026-09-19) */
+.st.st-inter { gap: .3rem; }
+.st-inter .st-head.st-click { cursor: pointer; }
+.st-inter .st-mtype { align-self: stretch; font: inherit; font-size: .78rem; font-weight: 600; color: var(--ink); background: rgba(255,255,255,.82); border: 1px solid rgba(31,39,51,.1); border-radius: 99px; padding: .16rem .6rem; margin-top: .3rem !important; text-align: center; text-align-last: center; cursor: pointer; }
+.st-inter .st-music-field { align-self: stretch; display: flex; align-items: center; gap: .3rem; background: rgba(255,255,255,.82); border: 1px solid rgba(31,39,51,.1); border-radius: 99px; padding: .1rem .55rem; box-shadow: 0 1px 1px rgba(20,30,45,.05); }
+.st-inter .st-music-in { flex: 1; min-width: 0; font: inherit; font-size: .8rem; font-weight: 600; color: var(--ink); border: none; background: transparent; padding: .1rem .2rem; outline: none; }
+.st-inter .st-music-in::placeholder { font-weight: 500; color: #9aa4b1; }
+.st-inter .st-music-field:focus-within { border-color: var(--brand); }
+.st-inter .st-place { margin-top: .1rem; }

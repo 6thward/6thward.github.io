@@ -6,9 +6,9 @@
 // meeting content comes straight from that Sunday's plan.
 //
 //   settings/program  { wardName, stakeName, logo (data URL | "" = built-in), opts: {...} }
-import { db } from "./firebase-init.js?v=1789881438";
+import { db } from "./firebase-init.js?v=1789881895";
 import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789881438";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1789881895";
 
 export const DEFAULT_LOGO = "assets/program-logo.jpg"; // Christus arch, built in
 // Fixed by Jordan (2026-09-19): Presiding + Conducting always shown, speaker
@@ -177,7 +177,7 @@ export function buildProgramHtml(ctx, opts = {}) {
     }
     if (PRAYER_KINDS.includes(k)) { row(L(k), esc(it.name || "—")); return; }
     if (k === "musical") { row(L(k), esc(it.who || "—"), [it.hymn, it.accompanist ? "Accompanist: " + it.accompanist : ""].filter(Boolean).map(esc).join(" · ")); return; }
-    if (k === "choir") { row(L(k), esc(it.hymn || "—"), it.accompanist ? "Accompanist: " + esc(it.accompanist) : ""); return; }
+    if (k === "choir") { row(it.youth ? "Youth Choir" : L(k), esc(it.hymn || "—"), it.accompanist ? "Accompanist: " + esc(it.accompanist) : ""); return; }
     if (k === "babyBlessing") return; // printed just before the sacrament (above)
     if (k === "wardBusiness") return; // never printed
     if (k === "custom") { row(it.label || "Item", esc(it.text || "")); return; }
