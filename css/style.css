@@ -1284,3 +1284,8 @@ th.us-sort:hover, th.us-sort.on { color: var(--brand); }
 .member-row .member-x { opacity: .35; cursor: pointer; font-size: .85rem; padding: .1rem .25rem; }
 .member-row .member-x:hover { opacity: 1; color: var(--danger); }
 .call-card.cand-target { outline: 2px dashed var(--brand); outline-offset: 2px; background: var(--brand-soft) !important; }
+
+/* Music Number detail: wraps onto a second line instead of clipping (2026-09-20) */
+.st-inter .st-music-field { border-radius: 14px; align-items: flex-start; padding: .18rem .55rem; }
+.st-inter .st-music-ta { resize: none; overflow: hidden; white-space: normal; line-height: 1.25; min-height: 1.25em; display: block; }
+.st-inter .st-music-field .st-li-ic { margin-top: .1rem; }

@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789943053";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789943053";
+import { db } from "./firebase-init.js?v=1789959728";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789959728";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789943053";
-import { HYMNS } from "./hymns.js?v=1789943053";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1789943053";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789959728";
+import { HYMNS } from "./hymns.js?v=1789959728";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1789959728";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -966,7 +966,7 @@ function statusChips(m, date) {
     const field = mode === "none" ? ""
       : mode === "hymn"
       ? `<input class="st-in-title st-music-in hymn-combo" data-mfield="hymn" list="dl-hymn-all" placeholder="Number or title…" autocomplete="off" value="${esc(detail)}">`
-      : `<input class="st-in-title st-music-in" data-mfield="${mode}" placeholder="${mode === "musical" ? "Who / what" : "Piece"}" autocomplete="off" value="${esc(detail)}">`;
+      : `<textarea class="st-in-title st-music-in st-music-ta" data-mfield="${mode}" placeholder="${mode === "musical" ? "Who / what" : "Piece"}" rows="1" autocomplete="off">${esc(detail)}</textarea>`; // wraps onto a 2nd line (2026-09-20)
     const conf = slotIt && slotIt.kind !== "intermediateHymn" && filled
       ? `<span class="st-li-ic st-confirm-dot${isConf(slotIt) ? "" : " st-unconf"}" data-confirm='${JSON.stringify({ k: slotIt.kind, o: 0 })}' title="${isConf(slotIt) ? "Confirmed — click if this still needs confirming" : "Not confirmed yet — click once it's confirmed"}">${isConf(slotIt) ? "✓" : "!"}</span>`
       : "";
@@ -1199,6 +1199,10 @@ function renderCards(wrap) {
   });
   wrap.querySelectorAll("[data-mfield]").forEach((inp) => {
     ["click", "mousedown", "dragstart"].forEach((ev) => inp.addEventListener(ev, (e) => e.stopPropagation()));
+    if (inp.tagName === "TEXTAREA") { // grow to fit the text, no scrollbar
+      const grow = () => { inp.style.height = "auto"; inp.style.height = inp.scrollHeight + "px"; };
+      inp.addEventListener("input", grow); grow(); requestAnimationFrame(grow);
+    }
     const date = inp.closest("[data-date]").dataset.date;
     const mode = inp.dataset.mfield;
     const initial = inp.value;
