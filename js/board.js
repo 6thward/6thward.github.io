@@ -3,15 +3,18 @@
 // added, renamed, reordered and removed. Data:
 //   boardColumns/{id}  { label, order }
 //   board/{id}         { name, notes, column, order, createdAt, updatedAt }
-import { db } from "./firebase-init.js?v=1789965984";
-import { ctx, can } from "./app.js?v=1789965984";
+import { db } from "./firebase-init.js?v=1789967355";
+import { ctx, can } from "./app.js?v=1789967355";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789965984";
+import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789967355";
 
 // Next ordinance a person is working toward — shown as a pill beside the name.
 const ORDINANCES = ["Sacrament", "Aaronic Priesthood", "Melchizedek Priesthood", "Endowment", "Sealing"];
+// regular-meeting cadence per person (2026-09-20): board/{id}.cadence
+const CADENCES = [["monthly", "Monthly", 30], ["twice", "2× a month", 15], ["quarterly", "Quarterly", 91]];
+const cadenceLabel = (c) => CADENCES.find(([k]) => k === c)?.[1] || "";
 const PALETTE = ["#1f4e79", "#5b4b9e", "#2e7d4f", "#a8720d", "#b3402f", "#0e7490", "#7a5a14", "#5b6675"];
 const DEFAULT_COLUMNS = ["Ideas", "Talking to", "Settled"];
 
@@ -23,7 +26,7 @@ let seeding = false;
 
 // Board (cards by section) or Meetings (every recap, newest first, with filters) — 2026-09-20
 let view = localStorage.getItem("sw-board-view") === "meetings" ? "meetings" : "board";
-const mtgFilter = { section: "", person: "", ordinance: "", q: "", from: "", to: "", open: false, order: "desc" };
+const mtgFilter = { section: "", person: "", ordinance: "", cadence: "", q: "", from: "", to: "", open: false, order: "desc" };
 
 export function initBoard() {
   if (started) return;
@@ -41,6 +44,7 @@ export function initBoard() {
           <button class="chip${view === "board" ? " active" : ""}" data-view="board" type="button">Board</button>
           <button class="chip${view === "meetings" ? " active" : ""}" data-view="meetings" type="button">Meetings</button>
         </div>
+        <button class="btn" id="btn-print-meetings" title="Printable list of everyone with a regular meeting, with last met and due dates">🖨 Meeting list</button>
         ${editor ? `
         <button class="btn" id="btn-new-section">+ New section</button>
         <button class="btn btn-primary" id="btn-new-card">+ Add person</button>` : ""}
@@ -51,6 +55,7 @@ export function initBoard() {
     panel.querySelector("#btn-new-section").addEventListener("click", () => editSection(null));
     panel.querySelector("#btn-new-card").addEventListener("click", () => editCard(null));
   }
+  panel.querySelector("#btn-print-meetings").addEventListener("click", printMeetingList);
   panel.querySelectorAll("#board-view [data-view]").forEach((b) => b.addEventListener("click", () => {
     view = b.dataset.view; localStorage.setItem("sw-board-view", view);
     panel.querySelectorAll("#board-view .chip").forEach((x) => x.classList.toggle("active", x === b));
@@ -99,7 +104,7 @@ function render() {
     const open = activeTodos(k);
     return `
     <div class="list-row call-card call-card-v board-card" data-id="${k.id}" style="--cc:${colColor(cols.findIndex((c) => c.id === k.column))};background:#fff;border:1px solid var(--line);border-left:5px solid var(--cc)">
-      <div class="board-head"><div class="row-title">${esc(k.name || "—")}</div>${k.nextOrdinance || editor ? `<span class="ord-pill${k.nextOrdinance ? "" : " ord-empty"}${editor ? " ord-edit" : ""}" data-ord="1" title="${editor ? "Click to change" : ""}">${k.nextOrdinance ? "Next: " + esc(k.nextOrdinance) : "+ next ordinance"}</span>` : ""}</div>
+      <div class="board-head"><div class="row-title">${esc(k.name || "—")}</div>${k.nextOrdinance || editor ? `<span class="ord-pill${k.nextOrdinance ? "" : " ord-empty"}${editor ? " ord-edit" : ""}" data-ord="1" title="${editor ? "Click to change" : ""}">${k.nextOrdinance ? "Next: " + esc(k.nextOrdinance) : "+ next ordinance"}</span>` : ""}${k.cadence || editor ? `<span class="ord-pill cad-pill${k.cadence ? "" : " ord-empty"}${editor ? " ord-edit" : ""}" data-cad="1" title="${editor ? "How often you meet — click to change" : ""}">${k.cadence ? "Meets: " + esc(cadenceLabel(k.cadence)) : "+ regular meeting"}</span>` : ""}</div>
       ${k.notes || editor ? `<div class="row-sub board-note${k.notes ? "" : " board-note-empty"}${editor ? " board-note-edit" : ""}${k.notes && !expandedNotes.has(k.id) ? " board-note-clamp" : ""}" data-notes="1" title="${editor ? "Click to edit" : ""}">${k.notes ? esc(k.notes) : "+ notes"}</div><div class="board-note-more" data-more="${k.id}" hidden>${expandedNotes.has(k.id) ? "less ▴" : "more ▾"}</div>` : ""}
       <div class="todo-pills">${open.map((t) => todoPill(k, t)).join("")}${editor ? `<span class="todo-pill todo-add-pill" data-addtodo="1" title="Add a to-do — type and press Enter">+</span>` : ""}</div>
       <div class="mtg-row">${meetingsPill(k, editor)}</div>
@@ -145,6 +150,8 @@ function render() {
       if (more) { e.stopPropagation(); if (expandedNotes.has(k.id)) expandedNotes.delete(k.id); else expandedNotes.add(k.id); render(); return; }
       const note = e.target.closest(".board-note");
       if (note && editor) { e.stopPropagation(); inlineNotes(row, k, note); return; }
+      const cad = e.target.closest(".cad-pill");
+      if (cad && editor) { e.stopPropagation(); inlineCadence(row, k, cad); return; }
       const ord = e.target.closest(".ord-pill");
       if (ord && editor) { e.stopPropagation(); inlineOrdinance(row, k, ord); return; }
       editCard(k);
@@ -351,6 +358,84 @@ function inlineOrdinance(row, k, pillEl) {
   sel.addEventListener("blur", () => setTimeout(() => finish(false), 120));
 }
 
+// "Meets: Monthly" pill → select in place (none / monthly / 2× a month / quarterly)
+function inlineCadence(row, k, pillEl) {
+  if (row.querySelector("select.ord-sel")) return;
+  const sel = document.createElement("select");
+  sel.className = "ord-sel";
+  sel.innerHTML = `<option value="">— no regular meeting —</option>` + CADENCES.map(([v, l]) => `<option value="${v}"${k.cadence === v ? " selected" : ""}>${l}</option>`).join("");
+  pillEl.replaceWith(sel);
+  sel.focus();
+  row.draggable = false;
+  let done = false;
+  const finish = async (save) => {
+    if (done) return; done = true;
+    row.draggable = true;
+    if (save && sel.value !== (k.cadence || "")) {
+      try { await updateDoc(doc(db, "board", k.id), { cadence: sel.value, updatedAt: serverTimestamp() }); k.cadence = sel.value; toast("Saved"); }
+      catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
+    }
+    render();
+  };
+  sel.addEventListener("click", (e) => e.stopPropagation());
+  sel.addEventListener("mousedown", (e) => e.stopPropagation());
+  sel.addEventListener("change", () => finish(true));
+  sel.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.preventDefault(); finish(false); } });
+  sel.addEventListener("blur", () => setTimeout(() => finish(false), 120));
+}
+
+// Printable list of everyone with a regular meeting, for the executive
+// secretary to schedule (2026-09-20): grouped by cadence, with last met and
+// when the next one is due.
+function printMeetingList() {
+  const people = cards.filter((k) => k.cadence);
+  if (!people.length) { toast("Nobody has a regular meeting set yet — click “+ regular meeting” on a card"); return; }
+  const colOf = (k) => cols.find((c) => c.id === k.column)?.label || "";
+  const lastMet = (k) => meetingsOf(k)[0]?.date || "";
+  const dueDate = (k) => {
+    const last = lastMet(k); const days = CADENCES.find(([v]) => v === k.cadence)?.[2] || 30;
+    if (!last) return "";
+    const d = new Date(last + "T12:00:00"); d.setDate(d.getDate() + days);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+  const today = todayIso();
+  const fmt = (iso) => (iso ? new Date(iso + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—");
+  const groups = CADENCES.map(([v, l]) => ({ label: l, rows: people.filter((k) => k.cadence === v).sort((a, b) => (dueDate(a) || "0").localeCompare(dueDate(b) || "0") || (a.name || "").localeCompare(b.name || "")) })).filter((g) => g.rows.length);
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Regular meetings · ${esc(new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" }))}</title>
+<style>
+  @page { size: letter; margin: .6in; }
+  html { color-scheme: light; }
+  body { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; color: #111; margin: 0; background: #fff; }
+  .bar { position: sticky; top: 0; display: flex; gap: .6rem; align-items: center; padding: .55rem .9rem; background: #1f2733; color: #fff; font: 600 14px/1.2 -apple-system, sans-serif; }
+  .bar button { font: inherit; padding: .4rem .9rem; border: 0; border-radius: 6px; background: #fff; color: #1f2733; cursor: pointer; }
+  .page { max-width: 7.3in; margin: 1.5rem auto; padding: 0 1rem; }
+  h1 { font-size: 20px; margin: 0 0 .1in; } .sub { color: #555; margin: 0 0 .25in; font-size: 13px; }
+  h2 { font-size: 15px; margin: .3in 0 .08in; padding-bottom: .04in; border-bottom: 2px solid #1f2733; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #555; padding: .05in .08in; border-bottom: 1px solid #bbb; }
+  td { padding: .09in .08in; border-bottom: 1px solid #e3e3e3; vertical-align: top; }
+  td.name { font-weight: 700; } td.sec { color: #555; }
+  td.due.late { color: #b3402f; font-weight: 700; }
+  td.sched { width: 1.9in; } .line { display: inline-block; width: 100%; border-bottom: 1px solid #999; height: .18in; }
+  .foot { margin-top: .35in; font-size: 11px; color: #777; }
+  @media print { .bar { display: none; } .page { margin: 0; padding: 0; max-width: none; } }
+</style></head><body>
+<div class="bar"><button onclick="window.print()">🖨 Print</button><span>Regular meetings — for scheduling</span></div>
+<div class="page">
+  <h1>Regular bishop meetings</h1>
+  <p class="sub">Printed ${esc(new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }))} · ${people.length} ${people.length === 1 ? "person" : "people"} · “Due” = last meeting + the cadence; in red when it's already past.</p>
+  ${groups.map((g) => `
+  <h2>${esc(g.label)} <span style="font-weight:400;color:#777;font-size:12px">· ${g.rows.length}</span></h2>
+  <table><thead><tr><th>Name</th><th>Section</th><th>Last met</th><th>Due</th><th>Scheduled</th></tr></thead><tbody>
+    ${g.rows.map((k) => { const due = dueDate(k); return `<tr><td class="name">${esc(k.name || "")}</td><td class="sec">${esc(colOf(k))}</td><td>${fmt(lastMet(k))}</td><td class="due${due && due < today ? " late" : ""}">${due ? fmt(due) : "not yet met"}</td><td class="sched"><span class="line"></span></td></tr>`; }).join("")}
+  </tbody></table>`).join("")}
+  <p class="foot">From the 6th Ward app · Member Board</p>
+</div></body></html>`;
+  const w = window.open("", "_blank");
+  if (!w) { toast("Pop-up blocked — allow pop-ups to print the list"); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
+
 // Click the notes on a card → edit them right there. Blur or ⌘/Ctrl+Enter
 // saves, Esc cancels. The textarea grows with the text.
 function inlineNotes(row, k, noteEl) {
@@ -453,6 +538,7 @@ function renderMeetingsView(wrap, editor) {
     (!f.section || (col?.id || "") === f.section) &&
     (!f.person || k.id === f.person) &&
     (!f.ordinance || (k.nextOrdinance || "") === f.ordinance) &&
+    (!f.cadence || (k.cadence || "") === f.cadence) &&
     (!f.from || (m.date || "") >= f.from) && (!f.to || (m.date || "") <= f.to) &&
     (!f.open || /^\s*\[ \]/m.test(m.notes || "")) &&
     (!q || (m.notes || "").toLowerCase().includes(q) || (k.name || "").toLowerCase().includes(q)));
@@ -464,6 +550,7 @@ function renderMeetingsView(wrap, editor) {
       ${sel("section", cols.map((c) => [c.id, c.label]), f.section, "All sections")}
       ${sel("person", people.map((k) => [k.id, k.name || "—"]), f.person, "Everyone")}
       ${sel("ordinance", [...new Set(cards.map((k) => k.nextOrdinance).filter(Boolean))].sort().map((o) => [o, o]), f.ordinance, "Any next ordinance")}
+      ${sel("cadence", CADENCES.map(([v, l]) => [v, l]), f.cadence, "Any cadence")}
       <input class="mtg-f" data-f="q" placeholder="Search words…" value="${esc(f.q)}" autocomplete="off">
       <label class="mtg-f-date"><span>From</span><input type="date" class="mtg-f" data-f="from" value="${esc(f.from)}"></label>
       <label class="mtg-f-date"><span>To</span><input type="date" class="mtg-f" data-f="to" value="${esc(f.to)}"></label>

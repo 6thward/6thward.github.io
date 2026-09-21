@@ -1336,3 +1336,6 @@ th.us-sort:hover, th.us-sort.on { color: var(--brand); }
 .mtg-feed-who:hover { text-decoration: underline; }
 .mtg-feed-col { font-size: .72rem; }
 .mtg-feed-edit { margin-left: auto; }
+
+/* regular-meeting cadence pill on board cards (2026-09-20) */
+.cad-pill { margin-left: .1rem; }
