@@ -3,12 +3,12 @@
 // added, renamed, reordered and removed. Data:
 //   boardColumns/{id}  { label, order }
 //   board/{id}         { name, notes, column, order, createdAt, updatedAt }
-import { db } from "./firebase-init.js?v=1789965186";
-import { ctx, can } from "./app.js?v=1789965186";
+import { db } from "./firebase-init.js?v=1789965665";
+import { ctx, can } from "./app.js?v=1789965665";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789965186";
+import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789965665";
 
 // Next ordinance a person is working toward — shown as a pill beside the name.
 const ORDINANCES = ["Sacrament", "Aaronic Priesthood", "Melchizedek Priesthood", "Endowment", "Sealing"];
@@ -120,7 +120,9 @@ function render() {
       const pill = e.target.closest(".todo-pill");
       if (pill && pill.dataset.addtodo) { e.stopPropagation(); inlineNewTodo(row, k, pill); return; }
       if (pill) { e.stopPropagation(); const t = (k.todos || []).find((x) => x.id === pill.dataset.todo); if (t) editTodo(k, t); return; }
-      const mp = e.target.closest(".mtg-pill");
+      const rc = e.target.closest(".mtg-preview [data-rc]");
+      if (rc) { e.stopPropagation(); if (editor) { const [mid, idx] = rc.dataset.rc.split(":"); toggleRecapTodo(k, mid, Number(idx)); } return; }
+      const mp = e.target.closest(".mtg-pill, .mtg-preview");
       if (mp) { e.stopPropagation(); openMeetings(k); return; }
       const more = e.target.closest(".board-note-more");
       if (more) { e.stopPropagation(); if (expandedNotes.has(k.id)) expandedNotes.delete(k.id); else expandedNotes.add(k.id); render(); return; }
@@ -425,7 +427,10 @@ const meetingsOf = (k) => [...(k.meetings || [])].sort((a, b) => (b.date || "").
 function meetingsPill(k, editor) {
   const ms = meetingsOf(k);
   if (!ms.length) return editor ? `<span class="mtg-pill mtg-empty" title="Add notes from a meeting">🗓 + meeting recap</span>` : "";
-  return `<span class="mtg-pill" title="Click to read the recaps">🗓 ${ms.length} meeting${ms.length === 1 ? "" : "s"} · last ${fmtDue(ms[0].date)}</span>`;
+  // the latest recap shows right on the card, clamped to ~5 lines (2026-09-20); the pill opens them all
+  const last = ms[0];
+  return `<span class="mtg-pill" title="Click to read the recaps">🗓 ${ms.length} meeting${ms.length === 1 ? "" : "s"} · last ${fmtDue(last.date)}</span>
+    <div class="mtg-preview" data-mtgpreview="${last.id}" title="Click to open the recaps">${recapHtml(last.notes, last.id, editor)}</div>`;
 }
 async function saveMeetings(k, meetings) {
   k.meetings = meetings;
