@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789959873";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789959873";
+import { db } from "./firebase-init.js?v=1789963737";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789963737";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789959873";
-import { HYMNS } from "./hymns.js?v=1789959873";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1789959873";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789963737";
+import { HYMNS } from "./hymns.js?v=1789963737";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1789963737";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -267,6 +267,23 @@ const CANON = ["announcements", "openingHymn", "invocation", "wardBusiness", "ba
   "sacramentHymn", "sacrament", "blessing", "primarySpeaker", "youthSpeaker", "speaker", "musical",
   "choir", "intermediateHymn", "testimonies", "closingHymn", "benediction", "custom"];
 
+// Change a plan's meeting type WITHOUT losing what's already filled in
+// (2026-09-20): the new type's default agenda is built, then every slot
+// takes the values of the same kind of slot from the old plan (prayers,
+// hymns, speakers, music, business, announcements…). Conference types have
+// no agenda; the old items are kept so switching back restores them.
+function retypeItems(oldItems, newType) {
+  if (NO_MEETING(newType)) return oldItems || [];
+  const fresh = defaultItems(newType);
+  const pool = (oldItems || []).map((it) => ({ ...it }));
+  const take = (kind) => { const i = pool.findIndex((it) => it.kind === kind); return i < 0 ? null : pool.splice(i, 1)[0]; };
+  const merged = fresh.map((it) => { const old = take(it.kind); return old ? { ...it, ...old, kind: it.kind } : it; });
+  // anything the old plan had that the new default doesn't (extra speakers,
+  // a musical number, baby blessings, custom items) comes along too
+  pool.filter((it) => it.name || it.who || it.hymn || it.num || it.title || it.text || (it.sustainings || []).length || (it.releasings || []).length || it.kind === "custom")
+    .forEach((it) => insertCanonical(merged, it));
+  return merged;
+}
 function defaultItems(type) {
   const mk = (kind, time) => blankItem(kind, time);
   if (type === "fast") {
@@ -1107,7 +1124,7 @@ function renderCards(wrap) {
             ${m?.theme
               ? `<span class="theme-tag${canEdit ? " st-click" : ""}"${canEdit ? ` data-qe='{"t":"theme"}' title="Click to edit the theme"` : ""}>“${esc(m.theme)}”</span>`
               : (canEdit && !isConf ? `<span class="theme-tag theme-add" data-qe='{"t":"theme"}' title="Add a theme for this Sunday">+ theme</span>` : "")}
-            ${megaphone}${wbIcon}${hbIcon}${type !== "sacrament" ? `<span class="pill head-pill ${isConf ? "pill-conf" : type === "fast" ? "pill-fast" : "pill-approved"}">${esc(typeLabel(m, date))}</span>` : ""}${nth === 5 ? `<span class="nth-pill nth-5 head-pill">5th Sunday</span>` : ""}${babies.map((b, bi) => `<span class="pill-baby-bold head-pill${canEdit ? " st-click" : ""}" ${canEdit ? `data-baby="${bi}" title="Click to edit"` : ""}>Blessing${b.name ? ": " + esc(b.name) : ""}${b.by ? ` <span class="pill-baby-by">by ${esc(b.by)}</span>` : ""}</span>`).join("")}
+            ${megaphone}${wbIcon}${hbIcon}${type !== "sacrament" || canEdit ? `<span class="pill head-pill type-pill ${isConf ? "pill-conf" : type === "fast" ? "pill-fast" : type === "sacrament" ? "pill-type-plain" : "pill-approved"}${canEdit ? " st-click" : ""}"${canEdit ? ` data-type="${date}" title="Click to change the meeting type"` : ""}>${esc(typeLabel(m, date))}</span>` : ""}${nth === 5 ? `<span class="nth-pill nth-5 head-pill">5th Sunday</span>` : ""}${babies.map((b, bi) => `<span class="pill-baby-bold head-pill${canEdit ? " st-click" : ""}" ${canEdit ? `data-baby="${bi}" title="Click to edit"` : ""}>Blessing${b.name ? ": " + esc(b.name) : ""}${b.by ? ` <span class="pill-baby-by">by ${esc(b.by)}</span>` : ""}</span>`).join("")}
           </h3>
           <div class="row-sub" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">${condChip}${isConf ? "<span>no sacrament meeting</span>" : ""}</div>
         </div>
@@ -1155,6 +1172,26 @@ function renderCards(wrap) {
       e.stopPropagation();
       if (canEdit) quickEdit(el.dataset.wbicon, { t: "wb" });
       else wbModal(el.dataset.wbicon);
+    }));
+  // meeting type, right on the card (2026-09-20): click the type pill → select; nothing else in the plan is lost
+  wrap.querySelectorAll("[data-type]").forEach((pill) =>
+    pill.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (pill.querySelector("select")) return;
+      const date = pill.dataset.type;
+      const cur = meetings[date]?.type || defaultTypeFor(date);
+      pill.innerHTML = `<select class="st-place-sel">${MEETING_TYPES.map(([k, l]) => `<option value="${k}"${cur === k ? " selected" : ""}>${l}</option>`).join("")}</select>`;
+      const sel = pill.querySelector("select");
+      sel.focus();
+      let done = false;
+      ["click", "mousedown"].forEach((ev) => sel.addEventListener(ev, (x) => x.stopPropagation()));
+      sel.addEventListener("change", () => {
+        done = true;
+        const val = sel.value;
+        patchMeeting(date, (mm) => { mm.items = retypeItems(mm.items, val); mm.type = val; if (val !== "other") mm.customType = ""; });
+      });
+      sel.addEventListener("keydown", (ev) => { if (ev.key === "Escape") { done = true; render(); } });
+      sel.addEventListener("blur", () => setTimeout(() => { if (!done) render(); }, 120));
     }));
   wrap.querySelectorAll("[data-addbaby]").forEach((b) =>
     b.addEventListener("click", (e) => { e.stopPropagation(); quickAddBaby(b.dataset.addbaby); }));
@@ -2514,9 +2551,8 @@ function commitCell(el) {
       return it;
     };
     if (cell === "type") {
-      const wasUnplanned = !meetings[date];
+      m.items = retypeItems(m.items, val); // keeps prayers / hymns / speakers across the switch
       m.type = val;
-      if (wasUnplanned || (m.items.length === 0 && val !== "conference")) m.items = defaultItems(val);
     } else if (cell === "theme") {
       m.theme = val.trim();
     } else if (cell === "chorister") {
@@ -2682,11 +2718,8 @@ function editMeeting(date) {
     const t = e.target.value;
     el.querySelector("#mt-custom-wrap").style.display = t === "other" ? "" : "none";
     el.querySelector("#mt-agenda-wrap").style.display = NO_MEETING(t) ? "none" : "";
-    // offer a fresh default agenda when switching between sacrament and fast
-    if ((t === "fast" || t === "sacrament") && confirm("Reset the agenda to the default for this meeting type?")) {
-      draft.items = defaultItems(t);
-      renderItems(el);
-    }
+    // switch the agenda shape to the new type, keeping everything already filled in (2026-09-20)
+    if (!NO_MEETING(t)) { syncDraft(el); draft.items = retypeItems(draft.items, t); renderItems(el); }
   });
 
   el.querySelector("#mt-add-item").addEventListener("click", () => {

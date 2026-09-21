@@ -1289,3 +1289,8 @@ th.us-sort:hover, th.us-sort.on { color: var(--brand); }
 .st-inter .st-music-field { border-radius: 14px; align-items: flex-start; padding: .18rem .55rem; }
 .st-inter .st-music-ta { resize: none; overflow: hidden; white-space: normal; line-height: 1.25; min-height: 1.25em; display: block; }
 .st-inter .st-music-field .st-li-ic { margin-top: .1rem; }
+
+/* card header: meeting-type pill is clickable; a regular Sunday shows a quiet one (2026-09-20) */
+.type-pill.pill-type-plain { background: transparent; color: var(--ink-soft); border: 1px dashed rgba(31,39,51,.25); }
+.type-pill.st-click:hover { border-color: var(--brand); color: var(--brand); }
+.type-pill .st-place-sel { font-size: .78rem; }
