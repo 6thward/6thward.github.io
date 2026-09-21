@@ -15,13 +15,13 @@
 // whose profile doc carries `alias: <googleUid>` plus a mirror of the name /
 // organization / calling / pages, so the rules see the same access either
 // way. The table shows one row; the mirror is kept in step on every save.
-import { db } from "./firebase-init.js?v=1789965665";
-import { ctx, AREAS, normalizePerms } from "./app.js?v=1789965665";
+import { db } from "./firebase-init.js?v=1789965842";
+import { ctx, AREAS, normalizePerms } from "./app.js?v=1789965842";
 import {
   collection, onSnapshot, updateDoc, setDoc, deleteDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1789965665";
-import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1789965665";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1789965842";
+import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1789965842";
 
 let sort = { key: "created", dir: 1 }; // default: oldest at the top; click a header for A→Z / Z→A (2026-09-19)
 let users = [];   // profiles (alias PIN docs are folded into their Google row)

@@ -3,12 +3,12 @@
 // added, renamed, reordered and removed. Data:
 //   boardColumns/{id}  { label, order }
 //   board/{id}         { name, notes, column, order, createdAt, updatedAt }
-import { db } from "./firebase-init.js?v=1789965665";
-import { ctx, can } from "./app.js?v=1789965665";
+import { db } from "./firebase-init.js?v=1789965842";
+import { ctx, can } from "./app.js?v=1789965842";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789965665";
+import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789965842";
 
 // Next ordinance a person is working toward — shown as a pill beside the name.
 const ORDINANCES = ["Sacrament", "Aaronic Priesthood", "Melchizedek Priesthood", "Endowment", "Sealing"];
@@ -21,6 +21,10 @@ let started = false;
 const expandedNotes = new Set(); // card ids whose long notes are shown in full
 let seeding = false;
 
+// Board (cards by section) or Meetings (every recap, newest first, with filters) — 2026-09-20
+let view = localStorage.getItem("sw-board-view") === "meetings" ? "meetings" : "board";
+const mtgFilter = { section: "", person: "", ordinance: "", q: "", from: "", to: "", open: false, order: "desc" };
+
 export function initBoard() {
   if (started) return;
   started = true;
@@ -30,18 +34,28 @@ export function initBoard() {
     <div class="panel-head">
       <div>
         <h2>Member Board</h2>
-        <p class="panel-sub">A card per person, in sections you name. Drag cards between sections.</p>
+        <p class="panel-sub" id="board-sub">A card per person, in sections you name. Drag cards between sections.</p>
       </div>
-      ${editor ? `<div style="display:flex;gap:.5rem;flex-wrap:wrap">
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+        <div class="view-toggle" id="board-view">
+          <button class="chip${view === "board" ? " active" : ""}" data-view="board" type="button">Board</button>
+          <button class="chip${view === "meetings" ? " active" : ""}" data-view="meetings" type="button">Meetings</button>
+        </div>
+        ${editor ? `
         <button class="btn" id="btn-new-section">+ New section</button>
-        <button class="btn btn-primary" id="btn-new-card">+ Add person</button>
-      </div>` : ""}
+        <button class="btn btn-primary" id="btn-new-card">+ Add person</button>` : ""}
+      </div>
     </div>
     <div id="board-wrap"></div>`;
   if (editor) {
     panel.querySelector("#btn-new-section").addEventListener("click", () => editSection(null));
     panel.querySelector("#btn-new-card").addEventListener("click", () => editCard(null));
   }
+  panel.querySelectorAll("#board-view [data-view]").forEach((b) => b.addEventListener("click", () => {
+    view = b.dataset.view; localStorage.setItem("sw-board-view", view);
+    panel.querySelectorAll("#board-view .chip").forEach((x) => x.classList.toggle("active", x === b));
+    render();
+  }));
 
   onSnapshot(collection(db, "boardColumns"), (qs) => {
     cols = qs.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -73,6 +87,9 @@ function render() {
   const wrap = document.getElementById("board-wrap");
   if (!wrap) return;
   const editor = can("board", "edit");
+  const sub = document.getElementById("board-sub");
+  if (sub) sub.textContent = view === "meetings" ? "Every meeting recap, in date order. Filter by section, person, or words." : "A card per person, in sections you name. Drag cards between sections.";
+  if (view === "meetings") { renderMeetingsView(wrap, editor); return; }
   if (!cols.length) {
     wrap.innerHTML = `<div class="card"><div class="empty-note">${editor ? "Setting up your first sections…" : "No sections yet."}</div></div>`;
     return;
@@ -424,13 +441,75 @@ function newTodo(k) {
 // ---- meeting recaps: dated notes from each time you met with the person ----
 // Stored on the card: meetings: [{ id, date (YYYY-MM-DD), notes, createdAt }]
 const meetingsOf = (k) => [...(k.meetings || [])].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+
+// ---- Meetings view (2026-09-20): all recaps across the board ----
+function renderMeetingsView(wrap, editor) {
+  const f = mtgFilter;
+  const colOf = (k) => cols.find((c) => c.id === k.column);
+  const all = [];
+  cards.forEach((k) => (k.meetings || []).forEach((m) => all.push({ m, k, col: colOf(k) })));
+  const q = f.q.trim().toLowerCase();
+  let rows = all.filter(({ m, k, col }) =>
+    (!f.section || (col?.id || "") === f.section) &&
+    (!f.person || k.id === f.person) &&
+    (!f.ordinance || (k.nextOrdinance || "") === f.ordinance) &&
+    (!f.from || (m.date || "") >= f.from) && (!f.to || (m.date || "") <= f.to) &&
+    (!f.open || /^\s*\[ \]/m.test(m.notes || "")) &&
+    (!q || (m.notes || "").toLowerCase().includes(q) || (k.name || "").toLowerCase().includes(q)));
+  rows.sort((a, b) => (f.order === "asc" ? -1 : 1) * ((b.m.date || "").localeCompare(a.m.date || "")) || (a.k.name || "").localeCompare(b.k.name || "")); // desc = newest first
+  const people = [...cards].filter((k) => (k.meetings || []).length).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  const sel = (id, opts, cur, blank) => `<select class="mtg-f" data-f="${id}"><option value="">${blank}</option>${opts.map(([v, l]) => `<option value="${v}"${cur === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+  wrap.innerHTML = `
+    <div class="card mtg-filters">
+      ${sel("section", cols.map((c) => [c.id, c.label]), f.section, "All sections")}
+      ${sel("person", people.map((k) => [k.id, k.name || "—"]), f.person, "Everyone")}
+      ${sel("ordinance", [...new Set(cards.map((k) => k.nextOrdinance).filter(Boolean))].sort().map((o) => [o, o]), f.ordinance, "Any next ordinance")}
+      <input class="mtg-f" data-f="q" placeholder="Search words…" value="${esc(f.q)}" autocomplete="off">
+      <label class="mtg-f-date"><span>From</span><input type="date" class="mtg-f" data-f="from" value="${esc(f.from)}"></label>
+      <label class="mtg-f-date"><span>To</span><input type="date" class="mtg-f" data-f="to" value="${esc(f.to)}"></label>
+      <label class="mtg-f-check"><input type="checkbox" class="mtg-f" data-f="open" ${f.open ? "checked" : ""}> Has open to-dos</label>
+      <button class="chip mtg-f-order" type="button" title="Flip the order">${f.order === "asc" ? "Oldest first ▲" : "Newest first ▼"}</button>
+      <span class="row-sub">${rows.length} of ${all.length}</span>
+    </div>
+    <div class="mtg-feed">
+      ${rows.length ? rows.map(({ m, k, col }) => `
+        <div class="card mtg-feed-row" data-card="${k.id}" data-mtg="${m.id}" style="--cc:${colColor(Math.max(0, cols.indexOf(col)))}">
+          <div class="mtg-feed-head">
+            <span class="mtg-feed-date">${fmtDate(m.date, { year: true })}</span>
+            <span class="mtg-feed-who st-click" data-open="${k.id}" title="Open ${esc(k.name || "")}">${esc(k.name || "—")}</span>
+            ${col ? `<span class="pill mtg-feed-col" style="background:var(--cc);color:#fff">${esc(col.label)}</span>` : ""}
+            ${editor ? `<button class="btn btn-sm mtg-feed-edit" type="button" title="Edit this recap">✎</button>` : ""}
+          </div>
+          <div class="mtg-notes">${recapHtml(m.notes, m.id, editor)}</div>
+        </div>`).join("") : `<div class="card"><div class="empty-note">No recaps match.</div></div>`}
+    </div>`;
+  const apply = () => renderMeetingsView(wrap, editor);
+  wrap.querySelectorAll(".mtg-f").forEach((el) => el.addEventListener(el.type === "checkbox" || el.tagName === "SELECT" || el.type === "date" ? "change" : "input", () => {
+    const key = el.dataset.f;
+    mtgFilter[key] = el.type === "checkbox" ? el.checked : el.value;
+    if (key === "q") { // keep typing: re-render the feed only
+      const pos = el.selectionStart; apply(); const again = wrap.querySelector('[data-f="q"]'); again.focus(); again.setSelectionRange(pos, pos);
+    } else apply();
+  }));
+  wrap.querySelector(".mtg-f-order").addEventListener("click", () => { mtgFilter.order = f.order === "asc" ? "desc" : "asc"; apply(); });
+  wrap.querySelectorAll(".mtg-feed-row").forEach((row) => {
+    const k = cards.find((x) => x.id === row.dataset.card);
+    row.querySelector(".mtg-feed-edit")?.addEventListener("click", () => openMeetings(k, row.dataset.mtg));
+    row.querySelector("[data-open]").addEventListener("click", () => editCard(k));
+    row.querySelectorAll("[data-rc]").forEach((cb) => cb.addEventListener("change", async () => {
+      const [mid, idx] = cb.dataset.rc.split(":"); await toggleRecapTodo(k, mid, Number(idx));
+    }));
+  });
+}
 function meetingsPill(k, editor) {
   const ms = meetingsOf(k);
   if (!ms.length) return editor ? `<span class="mtg-pill mtg-empty" title="Add notes from a meeting">🗓 + meeting recap</span>` : "";
   // the latest recap shows right on the card, clamped to ~5 lines (2026-09-20); the pill opens them all
   const last = ms[0];
-  return `<span class="mtg-pill" title="Click to read the recaps">🗓 ${ms.length} meeting${ms.length === 1 ? "" : "s"} · last ${fmtDue(last.date)}</span>
-    <div class="mtg-preview" data-mtgpreview="${last.id}" title="Click to open the recaps">${recapHtml(last.notes, last.id, editor)}</div>`;
+  return `<div class="mtg-preview" data-mtgpreview="${last.id}" title="Click to open the recaps">
+      <div class="mtg-preview-date">🗓 ${fmtDate(last.date, { year: true })}${ms.length > 1 ? ` <span class="mtg-more">+${ms.length - 1} more</span>` : ""}</div>
+      <div class="mtg-preview-body">${recapHtml(last.notes, last.id, editor)}</div>
+    </div>`;
 }
 async function saveMeetings(k, meetings) {
   k.meetings = meetings;

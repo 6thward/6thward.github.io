@@ -1309,9 +1309,29 @@ th.us-sort:hover, th.us-sort.on { color: var(--brand); }
 .mtg-notes .rc-gap { height: .45rem; }
 
 /* latest meeting recap previewed on the card, ~5 lines (2026-09-20) */
-.mtg-preview { margin-top: .3rem; font-size: .8rem; line-height: 1.35; color: var(--ink); background: rgba(255,255,255,.7); border: 1px solid var(--line); border-radius: 8px; padding: .35rem .55rem; cursor: pointer; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
+.mtg-preview { margin-top: .3rem; font-size: .8rem; line-height: 1.35; color: var(--ink); background: rgba(255,255,255,.7); border: 1px solid var(--line); border-radius: 8px; padding: .35rem .55rem; cursor: pointer; }
+.mtg-preview-date { font-weight: 700; color: var(--brand); font-size: .78rem; margin-bottom: .2rem; display: flex; align-items: center; gap: .4rem; }
+.mtg-preview-date .mtg-more { font-weight: 600; color: var(--ink-soft); font-size: .72rem; }
+.mtg-preview-body { display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
 .mtg-preview .rc-list { margin: 0; padding-left: 1.1rem; }
 .mtg-preview .rc-todo { display: flex; align-items: flex-start; gap: .35rem; margin: .05rem 0; }
 .mtg-preview .rc-todo.done span { text-decoration: line-through; color: var(--ink-soft); }
 .mtg-preview .rc-todo input { width: .85rem; height: .85rem; margin-top: .15rem; }
 .mtg-preview .rc-gap { height: .25rem; }
+
+/* Member Board: Board / Meetings view toggle + meetings feed (2026-09-20) */
+.view-toggle { display: inline-flex; gap: .25rem; background: #eef1f4; border-radius: 99px; padding: .2rem; }
+.view-toggle .chip { border: none; }
+.view-toggle .chip.active { background: var(--brand); color: #fff; }
+.mtg-filters { display: flex; flex-wrap: wrap; gap: .5rem .6rem; align-items: center; }
+.mtg-filters select, .mtg-filters input:not([type=checkbox]) { font: inherit; font-size: .9rem; padding: .35rem .5rem; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.mtg-filters input[data-f="q"] { min-width: 12rem; flex: 1; }
+.mtg-f-date, .mtg-f-check { display: inline-flex; align-items: center; gap: .35rem; font-size: .85rem; color: var(--ink-soft); }
+.mtg-feed { display: flex; flex-direction: column; gap: .6rem; margin-top: .8rem; max-width: 60rem; }
+.mtg-feed-row { border-left: 5px solid var(--cc); }
+.mtg-feed-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-bottom: .3rem; }
+.mtg-feed-date { font-weight: 700; color: var(--brand); }
+.mtg-feed-who { font-weight: 700; font-size: 1.02rem; }
+.mtg-feed-who:hover { text-decoration: underline; }
+.mtg-feed-col { font-size: .72rem; }
+.mtg-feed-edit { margin-left: auto; }
