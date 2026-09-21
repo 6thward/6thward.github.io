@@ -1309,9 +1309,10 @@ th.us-sort:hover, th.us-sort.on { color: var(--brand); }
 .mtg-notes .rc-gap { height: .45rem; }
 
 /* latest meeting recap previewed on the card, ~5 lines (2026-09-20) */
-.mtg-preview { margin-top: .3rem; font-size: .8rem; line-height: 1.35; color: var(--ink); background: rgba(255,255,255,.7); border: 1px solid var(--line); border-radius: 8px; padding: .35rem .55rem; cursor: pointer; }
-.mtg-preview-date { font-weight: 700; color: var(--brand); font-size: .78rem; margin-bottom: .2rem; display: flex; align-items: center; gap: .4rem; }
-.mtg-preview-date .mtg-more { font-weight: 600; color: var(--ink-soft); font-size: .72rem; }
+.mtg-preview { margin-top: .3rem; font-size: .8rem; line-height: 1.35; color: var(--ink); background: rgba(255,255,255,.7); border: 1px solid var(--line); border-radius: 8px; padding: 0 0 .4rem; cursor: pointer; overflow: hidden; }
+.mtg-preview-date { font-weight: 700; color: #fff; background: var(--cc, var(--brand)); font-size: .78rem; padding: .28rem .55rem; margin-bottom: .3rem; display: flex; align-items: center; gap: .4rem; } /* coloured header bar in the card's colour (2026-09-20) */
+.mtg-preview-date .mtg-more { font-weight: 600; color: rgba(255,255,255,.8); font-size: .72rem; }
+.mtg-preview-body { padding: 0 .55rem; }
 .mtg-preview-body { display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
 .mtg-preview .rc-list { margin: 0; padding-left: 1.1rem; }
 .mtg-preview .rc-todo { display: flex; align-items: flex-start; gap: .35rem; margin: .05rem 0; }

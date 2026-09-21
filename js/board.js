@@ -3,12 +3,12 @@
 // added, renamed, reordered and removed. Data:
 //   boardColumns/{id}  { label, order }
 //   board/{id}         { name, notes, column, order, createdAt, updatedAt }
-import { db } from "./firebase-init.js?v=1789965842";
-import { ctx, can } from "./app.js?v=1789965842";
+import { db } from "./firebase-init.js?v=1789965984";
+import { ctx, can } from "./app.js?v=1789965984";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789965842";
+import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789965984";
 
 // Next ordinance a person is working toward — shown as a pill beside the name.
 const ORDINANCES = ["Sacrament", "Aaronic Priesthood", "Melchizedek Priesthood", "Endowment", "Sealing"];
@@ -507,7 +507,7 @@ function meetingsPill(k, editor) {
   // the latest recap shows right on the card, clamped to ~5 lines (2026-09-20); the pill opens them all
   const last = ms[0];
   return `<div class="mtg-preview" data-mtgpreview="${last.id}" title="Click to open the recaps">
-      <div class="mtg-preview-date">🗓 ${fmtDate(last.date, { year: true })}${ms.length > 1 ? ` <span class="mtg-more">+${ms.length - 1} more</span>` : ""}</div>
+      <div class="mtg-preview-date">${fmtDate(last.date, { year: true })}${ms.length > 1 ? ` <span class="mtg-more">+${ms.length - 1} more</span>` : ""}</div>
       <div class="mtg-preview-body">${recapHtml(last.notes, last.id, editor)}</div>
     </div>`;
 }
