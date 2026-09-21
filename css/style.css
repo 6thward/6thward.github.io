@@ -1298,3 +1298,12 @@ th.us-sort:hover, th.us-sort.on { color: var(--brand); }
 /* meeting-type pill: a touch bolder, squared corners so it reads as a label (2026-09-20) */
 .head-pill.type-pill { border-radius: 5px; font-weight: 700; letter-spacing: .01em; padding: .28rem .7rem; }
 .type-pill.pill-type-plain { border-radius: 5px; }
+
+/* meeting recaps: bullets + to-do boxes (2026-09-20) */
+.rc-tools { display: flex; gap: .4rem; align-items: center; margin-bottom: .35rem; }
+.mtg-notes .rc-list { margin: .1rem 0; padding-left: 1.2rem; }
+.mtg-notes .rc-list li { margin: .05rem 0; }
+.mtg-notes .rc-todo { display: flex; align-items: flex-start; gap: .4rem; margin: .12rem 0; cursor: pointer; }
+.mtg-notes .rc-todo input { margin-top: .2rem; width: 1rem; height: 1rem; }
+.mtg-notes .rc-todo.done span { text-decoration: line-through; color: var(--ink-soft); }
+.mtg-notes .rc-gap { height: .45rem; }

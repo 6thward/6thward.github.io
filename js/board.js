@@ -3,12 +3,12 @@
 // added, renamed, reordered and removed. Data:
 //   boardColumns/{id}  { label, order }
 //   board/{id}         { name, notes, column, order, createdAt, updatedAt }
-import { db } from "./firebase-init.js?v=1789964118";
-import { ctx, can } from "./app.js?v=1789964118";
+import { db } from "./firebase-init.js?v=1789965186";
+import { ctx, can } from "./app.js?v=1789965186";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789964118";
+import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1789965186";
 
 // Next ordinance a person is working toward — shown as a pill beside the name.
 const ORDINANCES = ["Sacrament", "Aaronic Priesthood", "Melchizedek Priesthood", "Endowment", "Sealing"];
@@ -431,6 +431,64 @@ async function saveMeetings(k, meetings) {
   k.meetings = meetings;
   await updateDoc(doc(db, "board", k.id), { meetings, updatedAt: serverTimestamp() });
 }
+// Recap text supports simple lists (2026-09-20):
+//   "- item"  → bullet     "[ ] item" / "[x] item" → to-do checkbox (click to tick)
+function recapHtml(notes, mid, editor) {
+  const lines = String(notes || "").split("\n");
+  let html = "", inList = false;
+  const closeList = () => { if (inList) { html += "</ul>"; inList = false; } };
+  lines.forEach((raw, i) => {
+    const line = raw.replace(/\s+$/, "");
+    let m;
+    if ((m = /^\s*[-•*]\s+(.*)$/.exec(line))) {
+      if (!inList) { html += `<ul class="rc-list">`; inList = true; }
+      html += `<li>${esc(m[1])}</li>`;
+    } else if ((m = /^\s*\[( |x|X)\]\s*(.*)$/.exec(line))) {
+      closeList();
+      const done = m[1].toLowerCase() === "x";
+      html += `<label class="rc-todo${done ? " done" : ""}"><input type="checkbox" data-rc="${mid}:${i}" ${done ? "checked" : ""} ${editor ? "" : "disabled"}> <span>${esc(m[2])}</span></label>`;
+    } else if (line.trim() === "") {
+      closeList(); html += `<div class="rc-gap"></div>`;
+    } else {
+      closeList(); html += `<div>${esc(line)}</div>`;
+    }
+  });
+  closeList();
+  return html;
+}
+// flip "[ ]" ↔ "[x]" on one line of one recap and save
+async function toggleRecapTodo(k, mid, lineIdx) {
+  const next = (k.meetings || []).map((m) => {
+    if (m.id !== mid) return m;
+    const lines = String(m.notes || "").split("\n");
+    lines[lineIdx] = lines[lineIdx].replace(/^(\s*)\[( |x|X)\]/, (_, sp, c) => `${sp}[${c === " " ? "x" : " "}]`);
+    return { ...m, notes: lines.join("\n") };
+  });
+  await saveMeetings(k, next);
+}
+// textarea helpers: prefix the current line, and continue a list on Enter
+function lineStart(ta) { return ta.value.lastIndexOf("\n", ta.selectionStart - 1) + 1; }
+function prefixLine(ta, prefix) {
+  const st = lineStart(ta);
+  const cur = ta.value.slice(st).split("\n")[0];
+  const stripped = cur.replace(/^\s*(?:[-•*]\s+|\[( |x|X)\]\s*)/, "");
+  const already = cur.startsWith(prefix);
+  const repl = already ? stripped : prefix + stripped;
+  ta.setRangeText(repl, st, st + cur.length, "end");
+  ta.focus(); ta.dispatchEvent(new Event("input"));
+}
+function continueList(ta, e) {
+  if (e.key !== "Enter" || e.shiftKey) return;
+  const st = lineStart(ta);
+  const cur = ta.value.slice(st, ta.selectionStart);
+  const m = /^(\s*)(?:([-•*])\s+|\[( |x|X)\]\s*)(.*)$/.exec(cur);
+  if (!m) return;
+  e.preventDefault();
+  const prefix = m[2] ? `${m[1]}${m[2]} ` : `${m[1]}[ ] `;
+  if (!m[4].trim()) { ta.setRangeText("", st, ta.selectionStart, "end"); return; } // empty item → leave the list
+  ta.setRangeText("\n" + prefix, ta.selectionStart, ta.selectionEnd, "end");
+}
+
 function openMeetings(k, editingId) {
   const editor = can("board", "edit");
   const ms = meetingsOf(k);
@@ -445,6 +503,7 @@ function openMeetings(k, editingId) {
           <span class="row-sub">${editing ? "Editing this recap" : "New recap"}</span>
           ${editing ? `<button class="btn btn-sm btn-ghost btn-danger" id="mr-del" type="button" style="margin-left:auto">Delete</button>` : ""}
         </div>
+        <div class="rc-tools"><button class="btn btn-sm" type="button" data-rcprefix="- " title="Bullet point">• Bullet</button><button class="btn btn-sm" type="button" data-rcprefix="[ ] " title="To-do with a checkbox">☐ To-do</button><span class="row-sub">Enter continues a list</span></div>
         <textarea id="mr-notes" placeholder="What was discussed, what was decided, what's next…" style="width:100%;box-sizing:border-box;min-height:6rem;padding:.55rem .65rem;border:1.5px solid var(--line);border-radius:8px;font:inherit;font-size:.92rem">${esc(editing ? editing.notes : "")}</textarea>
         <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.5rem">
           ${editing ? `<button class="btn" id="mr-cancel-edit" type="button">Cancel edit</button>` : ""}
@@ -455,7 +514,7 @@ function openMeetings(k, editingId) {
       ${ms.length ? ms.map((m) => `
         <div class="mtg-entry${editing && editing.id === m.id ? " editing" : ""}" data-mtg="${m.id}">
           <div class="mtg-date">${fmtDate(m.date, { year: true })}</div>
-          <div class="mtg-notes">${esc(m.notes || "")}</div>
+          <div class="mtg-notes">${recapHtml(m.notes, m.id, editor)}</div>
           ${editor ? `<button class="btn btn-sm mtg-edit" type="button" title="Edit this recap">✎</button>` : ""}
         </div>`).join("") : `<div class="empty-note" style="padding:.8rem">No recaps yet.</div>`}
     </div>
@@ -463,6 +522,17 @@ function openMeetings(k, editingId) {
   el.querySelector("#mr-close").addEventListener("click", closeModal);
   el.querySelectorAll(".mtg-edit").forEach((b) => b.addEventListener("click", () => openMeetings(k, b.closest(".mtg-entry").dataset.mtg)));
   if (!editor) return;
+  // to-do boxes in the list tick in place
+  el.querySelectorAll("[data-rc]").forEach((cb) => cb.addEventListener("change", async () => {
+    const [mid, idx] = cb.dataset.rc.split(":");
+    await toggleRecapTodo(k, mid, Number(idx)); openMeetings(k, editingId);
+  }));
+  const ta = el.querySelector("#mr-notes");
+  el.querySelectorAll("[data-rcprefix]").forEach((b) => b.addEventListener("click", () => prefixLine(ta, b.dataset.rcprefix)));
+  ta.addEventListener("keydown", (e) => continueList(ta, e));
+  if (editing) { // ✎ → land in the text, ready to type
+    setTimeout(() => { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); ta.scrollIntoView({ block: "center" }); }, 40);
+  }
   el.querySelector("#mr-cancel-edit")?.addEventListener("click", () => openMeetings(k));
   el.querySelector("#mr-del")?.addEventListener("click", async () => {
     if (!confirm("Delete this recap?")) return;
