@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1789967537";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1789967537";
+import { db } from "./firebase-init.js?v=1789967732";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1789967732";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789967537";
-import { HYMNS } from "./hymns.js?v=1789967537";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1789967537";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1789967732";
+import { HYMNS } from "./hymns.js?v=1789967732";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1789967732";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -968,7 +968,14 @@ function statusChips(m, date) {
   })();
   // 2026-09-13 — placement ("after speaker 3") is its own pill; click to move the slot
   const placePill = slotPos && planned ? `<span class="st-place${can ? " st-click" : ""}"${can ? ` data-place="1" title="Click to change where it falls in the program"` : ""}>${esc(slotPos)}</span>` : "";
-  if (can && type !== "fast") {
+  // 2026-09-20 — a Sunday can drop the Music Number box and/or the Youth
+  // Speakers box entirely (m.hide.music / m.hide.youth); a small dashed chip
+  // at the end of the row brings one back.
+  const hide = (m && m.hide) || {};
+  const xBtn = (key, what) => can ? `<span class="st-x" data-hide="${key}" title="Remove the ${what} box from this Sunday">✕</span>` : "";
+  if (hide.music) {
+    // nothing — restore chip added below
+  } else if (can && type !== "fast") {
     // 2026-09-19 — editors get the type + detail right on the pill (no popup):
     // a type select, one field for the detail, and the placement pill.
     // Clicking the "Music Number" headline still opens the full editor.
@@ -989,7 +996,7 @@ function statusChips(m, date) {
       ? `<span class="st-li-ic st-confirm-dot${isConf(slotIt) ? "" : " st-unconf"}" data-confirm='${JSON.stringify({ k: slotIt.kind, o: 0 })}' title="${isConf(slotIt) ? "Confirmed — click if this still needs confirming" : "Not confirmed yet — click once it's confirmed"}">${isConf(slotIt) ? "✓" : "!"}</span>`
       : "";
     chips.push(`<span class="st st-inter ${cls}${dragAttr ? " st-drag" : ""}"${dragAttr}>
-      <span class="st-head st-click" data-qe='{"t":"inter"}' title="Click for the full editor">Music Number</span>
+      <span class="st-head st-click" data-qe='{"t":"inter"}' title="Click for the full editor">Music Number${xBtn("music", "Music Number")}</span>
       <select class="st-mtype" data-mtype title="Type"><option value="none"${mode === "none" ? " selected" : ""}>— none —</option>${INTER_MODES.map(([k, l]) => `<option value="${k}"${mode === k ? " selected" : ""}>${l}</option>`).join("")}</select>
       ${field ? `<span class="st-music-field">${field}${conf}</span>` : ""}
       ${placePill}
@@ -1012,10 +1019,10 @@ function statusChips(m, date) {
     ...spkLines("primarySpeaker", (it, i) => prim.length > 1 ? `Primary ${i + 1}` : "Primary"),
     ...spkLines("youthSpeaker", (it, i) => yth.length > 1 ? `Youth ${i + 1}` : "Youth"),
   ];
-  if (youthLines.length || (can && type !== "fast")) {
+  if (!hide.youth && (youthLines.length || (can && type !== "fast"))) {
     // 2026-09-19 — "+" adds another youth or primary speaker right on the pill
     const addY = can ? `<span class="st-add-row"><span class="st-add" data-addspk="youthSpeaker" title="Add another youth speaker">+ youth</span><span class="st-add" data-addspk="primarySpeaker" title="Add another primary speaker">+ primary</span></span>` : "";
-    chips.push(groupChip("Youth Speakers", { t: "py" }, youthLines, null, addY));
+    chips.push(groupChip(`Youth Speakers${xBtn("youth", "Youth Speakers")}`, { t: "py" }, youthLines, null, addY));
   }
   if (adultSpk.length) {
     // "+" under the last speaker line: opens the editor with a fresh row ready
@@ -1024,6 +1031,13 @@ function statusChips(m, date) {
       spkLines("speaker", (it, i) => String(i + 1)), null, addBtn));
   }
 
+  // restore chips for boxes that were removed
+  if (can && !NO_MEETING(type)) {
+    const restore = [];
+    if (hide.music) restore.push(`<span class="st-restore" data-unhide="music" title="Bring the Music Number box back">+ Music Number</span>`);
+    if (hide.youth) restore.push(`<span class="st-restore" data-unhide="youth" title="Bring the Youth Speakers box back">+ Youth Speakers</span>`);
+    if (restore.length) chips.push(`<span class="st-restore-wrap">${restore.join("")}</span>`);
+  }
   return `<div class="st-row">${chips.join("")}</div>`;
 }
 
@@ -1172,6 +1186,36 @@ function renderCards(wrap) {
       e.stopPropagation();
       if (canEdit) quickEdit(el.dataset.wbicon, { t: "wb" });
       else wbModal(el.dataset.wbicon);
+    }));
+  // remove / restore the Music Number or Youth Speakers box for one Sunday (2026-09-20)
+  wrap.querySelectorAll("[data-hide]").forEach((x) =>
+    x.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const key = x.dataset.hide;
+      const date = x.closest("[data-date]").dataset.date;
+      const its = itemsFor(meetings[date], date);
+      const has = key === "music" ? its.some((i) => SLOT_KINDS.includes(i.kind) && (i.num || i.title || i.who || i.hymn))
+        : its.some((i) => (i.kind === "primarySpeaker" || i.kind === "youthSpeaker") && i.name);
+      if (has && !confirm(`Remove the ${key === "music" ? "Music Number" : "Youth Speakers"} box for this Sunday? What's in it will be cleared.`)) return;
+      patchMeeting(date, (mm) => {
+        mm.hide = { ...(mm.hide || {}), [key]: true };
+        if (key === "music") setInterSlot(mm, "none", {}, "");
+        else mm.items = mm.items.filter((i) => i.kind !== "primarySpeaker" && i.kind !== "youthSpeaker");
+      });
+    }));
+  wrap.querySelectorAll("[data-unhide]").forEach((x) =>
+    x.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const key = x.dataset.unhide;
+      const date = x.closest("[data-date]").dataset.date;
+      patchMeeting(date, (mm) => {
+        mm.hide = { ...(mm.hide || {}), [key]: false };
+        if (key === "music") { if (!mm.items.some((i) => SLOT_KINDS.includes(i.kind))) setInterSlot(mm, "hymn", {}, ""); }
+        else {
+          if (!mm.items.some((i) => i.kind === "primarySpeaker")) insertCanonical(mm.items, blankItem("primarySpeaker", 3));
+          if (!mm.items.some((i) => i.kind === "youthSpeaker")) insertCanonical(mm.items, blankItem("youthSpeaker", 5));
+        }
+      });
     }));
   // meeting type, right on the card (2026-09-20): click the type pill → select; nothing else in the plan is lost
   wrap.querySelectorAll("[data-type]").forEach((pill) =>

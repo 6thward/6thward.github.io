@@ -1339,3 +1339,11 @@ th.us-sort:hover, th.us-sort.on { color: var(--brand); }
 
 /* regular-meeting cadence pill on board cards (2026-09-20) */
 .cad-pill { margin-left: .1rem; }
+
+/* card boxes can be removed for a Sunday: ✕ in the header, dashed chip to restore (2026-09-20) */
+.st-head { position: relative; }
+.st-head .st-x { position: absolute; right: .35rem; top: 50%; transform: translateY(-50%); font-size: .7rem; font-weight: 400; opacity: .35; cursor: pointer; padding: .1rem .3rem; border-radius: 6px; }
+.st-head .st-x:hover { opacity: 1; background: rgba(0,0,0,.08); }
+.st-restore-wrap { display: flex; flex-direction: column; gap: .3rem; align-self: flex-start; }
+.st-restore { display: inline-block; font-size: .74rem; font-weight: 600; color: var(--ink-soft); background: transparent; border: 1px dashed rgba(31,39,51,.3); border-radius: 99px; padding: .25rem .6rem; cursor: pointer; white-space: nowrap; }
+.st-restore:hover { color: var(--brand); border-color: var(--brand); }
