@@ -5,13 +5,13 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1789967732";
+import { db } from "./firebase-init.js?v=1790515450";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1789967732";
-import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1789967732";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1790515450";
+import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1790515450";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
@@ -662,10 +662,29 @@ function render() {
       zone.classList.add("bb-over");
     });
     zone.addEventListener("dragleave", () => zone.classList.remove("bb-over"));
-    zone.addEventListener("drop", async (e) => {
+    zone.addEventListener("drop", (e) => { e.preventDefault(); e.stopPropagation(); dropOnZone(zone, e.target); });
+  });
+  // 2026-09-27 — the WHOLE column is a drop target, not just the strip around
+  // its cards: dropping in a column's empty space lands in that column (for
+  // Calling to Fill, in the ungrouped section at the bottom).
+  document.querySelectorAll("#panel-callings .bb-col").forEach((col) => {
+    const zoneOf = () => { const z = col.querySelectorAll(".bb-drop"); return z[z.length - 1] || null; };
+    col.addEventListener("dragover", (e) => {
+      if (!dragId || e.target.closest(".bb-drop")) return;
       e.preventDefault();
+      zoneOf()?.classList.add("bb-over");
+    });
+    col.addEventListener("dragleave", (e) => { if (!col.contains(e.relatedTarget)) zoneOf()?.classList.remove("bb-over"); });
+    col.addEventListener("drop", (e) => {
+      if (!dragId || e.target.closest(".bb-drop")) return;
+      e.preventDefault();
+      const z = zoneOf(); if (z) dropOnZone(z, col);
+    });
+  });
+  async function dropOnZone(zone, target) {
+    {
       zone.classList.remove("bb-over");
-      const targetRow = e.target.closest(".list-row");
+      const targetRow = target.closest(".list-row");
       const beforeId = targetRow && targetRow.dataset.id !== dragId ? targetRow.dataset.id : null;
       clearMarks();
       const it = items.find((x) => x.id === dragId);
@@ -688,13 +707,19 @@ function render() {
         return;
       }
       const upd = { stage: st };
-      if (st === "fill") upd.decided = ""; // dragged back = reconsidering
-      else if (!it.decided) upd.decided = (it.candidates || [])[0];
+      if (st === "fill") {
+        upd.decided = ""; // dragged back = reconsidering…
+        const cands = it.candidates || [];
+        // …but the name stays on the card as a name under consideration
+        if (it.decided && !cands.some((n) => n.toLowerCase() === it.decided.toLowerCase())) upd.candidates = [...cands, it.decided];
+      } else if (!it.decided) upd.decided = (it.candidates || [])[0];
+      // stepping back out of Set Apart & MLS clears its ticks so it can't re-complete by itself
+      if (it.stage === "apart" && st !== "apart") { upd.setApart = false; upd.mlsDone = false; }
       const before = { ...it }; // ward-business sync needs the pre-drag stage
       it.stage = st;
       save(it.id, upd, before).then(() => reorderWithin(st, it.id, beforeId));
-    });
-  });
+    }
+  }
 }
 
 // ---- Calling-to-Fill groupings ----
