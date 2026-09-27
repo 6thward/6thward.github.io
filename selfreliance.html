@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Self-Reliance Plan</title>
+<link rel="icon" href="assets/program-logo.jpg">
+<style>
+  :root { --ink: #1f2733; --soft: #5b6675; --line: #d9dee5; --brand: #1f4e79; --brand-soft: #eaf1f8; --ok: #2e7d4f; --danger: #b3402f; --bg: #f3f5f8; color-scheme: light; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  #sr { max-width: 46rem; margin: 0 auto; padding: 1rem .9rem 4rem; }
+  .sr-card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 1.1rem 1.15rem 1.2rem; margin-top: .9rem; }
+  .sr-intro h1 { margin: 0; font-size: 1.6rem; letter-spacing: -.01em; }
+  .sr-ward { margin: .1rem 0 .6rem; color: var(--soft); font-weight: 600; }
+  .sr-private { background: var(--brand-soft); border-radius: 10px; padding: .6rem .75rem; font-size: .92rem; margin: .7rem 0 0; }
+  h2 { font-size: 1.15rem; margin: 0 0 .5rem; display: flex; gap: .5rem; align-items: baseline; flex-wrap: wrap; }
+  h3 { font-size: .95rem; margin: 1.1rem 0 .4rem; color: var(--brand); }
+  .sr-step { font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #fff; background: var(--brand); border-radius: 5px; padding: .12rem .45rem; }
+  .sr-help { color: var(--soft); font-size: .9rem; margin: 0 0 .6rem; }
+  .sr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem .8rem; }
+  .sr-wide { grid-column: 1 / -1; }
+  .sr-field { display: flex; flex-direction: column; gap: .25rem; margin-bottom: .7rem; }
+  .sr-grid .sr-field { margin-bottom: 0; }
+  .sr-field > span { font-size: .88rem; font-weight: 600; }
+  .sr-field i { font-weight: 400; color: var(--soft); font-style: normal; }
+  .sr-req { color: var(--danger); }
+  input, textarea { font: inherit; color: inherit; width: 100%; padding: .6rem .7rem; border: 1.5px solid var(--line); border-radius: 9px; background: #fff; }
+  textarea { resize: vertical; min-height: 4.5rem; }
+  input:focus, textarea:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(31,78,121,.15); }
+  .sr-money { display: flex; align-items: center; justify-content: space-between; gap: .8rem; padding: .3rem 0; border-bottom: 1px solid #eef1f4; }
+  .sr-money > span:first-child { font-size: .93rem; }
+  .sr-dollar { position: relative; flex: 0 0 8.2rem; }
+  .sr-dollar::before { content: "$"; position: absolute; left: .6rem; top: 50%; transform: translateY(-50%); color: var(--soft); }
+  .sr-dollar input { padding-left: 1.4rem; text-align: right; font-variant-numeric: tabular-nums; }
+  .sr-two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1.4rem; }
+  .sr-other { display: flex; gap: .6rem; align-items: center; padding: .3rem 0; }
+  .sr-other > input { flex: 1; }
+  .sr-total { display: flex; justify-content: space-between; align-items: center; background: var(--brand-soft); border-radius: 9px; padding: .5rem .75rem; margin-top: .5rem; font-weight: 600; }
+  .sr-total b { font-variant-numeric: tabular-nums; font-size: 1.05rem; }
+  .sr-net { background: #eef6f0; } .sr-net b { color: var(--ok); } .sr-net b.neg { color: var(--danger); }
+  .sr-plan-head, .sr-plan-row { display: grid; grid-template-columns: 1.3fr 1.3fr 9.5rem; gap: .5rem; }
+  .sr-plan-head { font-size: .8rem; font-weight: 700; color: var(--soft); margin-bottom: .3rem; }
+  .sr-plan-row { margin-bottom: .45rem; }
+  .sr-files { border: 1.5px dashed var(--line); border-radius: 12px; padding: .8rem .9rem; margin-top: .7rem; }
+  .sr-files h3 { margin-top: 0; }
+  .sr-file { display: flex; align-items: center; gap: .6rem; padding: .45rem .6rem; background: #f6f8fa; border-radius: 8px; margin-bottom: .35rem; font-size: .92rem; }
+  .sr-file-none { color: var(--soft); background: transparent; padding-left: 0; }
+  .sr-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sr-file-size { color: var(--soft); font-size: .82rem; white-space: nowrap; }
+  .sr-file-x { border: 0; background: transparent; color: var(--soft); font-size: 1rem; cursor: pointer; padding: .2rem .4rem; border-radius: 6px; }
+  .sr-file-x:hover { color: var(--danger); background: #fbe7e3; }
+  .sr-btn { display: inline-block; font: inherit; font-weight: 600; border-radius: 10px; padding: .65rem 1.1rem; cursor: pointer; border: 1.5px solid var(--line); background: #fff; color: var(--ink); }
+  .sr-btn-primary { background: var(--brand); border-color: var(--brand); color: #fff; font-size: 1.05rem; padding: .85rem 1.6rem; width: 100%; }
+  .sr-btn-primary:disabled { opacity: .6; cursor: default; }
+  .sr-btn-ghost:hover { border-color: var(--brand); color: var(--brand); }
+  .sr-check { display: flex; gap: .6rem; align-items: flex-start; margin-top: .9rem; font-size: .95rem; }
+  .sr-check input { width: 1.2rem; height: 1.2rem; margin-top: .15rem; flex: none; }
+  .sr-actions { margin-top: 1rem; }
+  .sr-err { color: var(--danger); background: #fbe7e3; border-radius: 10px; padding: .65rem .8rem; margin: 1rem 0 0; font-weight: 600; }
+  .sr-progress { margin-top: .8rem; text-align: center; color: var(--soft); font-size: .92rem; }
+  .sr-bar { height: .55rem; background: #e3e8ee; border-radius: 99px; overflow: hidden; }
+  .sr-bar span { display: block; height: 100%; width: 0; background: var(--brand); transition: width .2s; }
+  .sr-msg { text-align: center; padding: 2.4rem 1.2rem; }
+  .sr-msg h2 { justify-content: center; font-size: 1.3rem; }
+  .sr-tick { width: 3.4rem; height: 3.4rem; border-radius: 50%; background: var(--ok); color: #fff; font-size: 1.9rem; line-height: 3.4rem; margin: 0 auto .8rem; }
+  .sr-loading { text-align: center; color: var(--soft); padding: 3rem 1rem; }
+  @media (max-width: 560px) {
+    .sr-grid, .sr-two { grid-template-columns: 1fr; }
+    .sr-plan-head { display: none; }
+    .sr-plan-row { grid-template-columns: 1fr; gap: .3rem; padding-bottom: .5rem; border-bottom: 1px solid #eef1f4; }
+    .sr-dollar { flex-basis: 7rem; }
+  }
+</style>
+</head>
+<body>
+<div id="sr"><div class="sr-loading">Opening the form…</div></div>
+<script type="module">
+  import { initForm } from "./js/sr-form.js?v=1790537024";
+  initForm(document.getElementById("sr"), new URLSearchParams(location.search).get("k") || "");
+</script>
+</body>
+</html>

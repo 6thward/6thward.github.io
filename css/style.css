@@ -1347,3 +1347,34 @@ th.us-sort:hover, th.us-sort.on { color: var(--brand); }
 .st-restore-wrap { display: flex; flex-direction: column; gap: .3rem; align-self: flex-start; }
 .st-restore { display: inline-block; font-size: .74rem; font-weight: 600; color: var(--ink-soft); background: transparent; border: 1px dashed rgba(31,39,51,.3); border-radius: 99px; padding: .25rem .6rem; cursor: pointer; white-space: nowrap; }
 .st-restore:hover { color: var(--brand); border-color: var(--brand); }
+
+/* Self-Reliance review page (2026-09-27) */
+.sr-filters { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+.sr-filters select, .sr-filters input { font: inherit; font-size: .9rem; padding: .35rem .55rem; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.sr-filters input { min-width: 14rem; }
+.sr-table .num, .sr-mt .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sr-table th.num { text-align: right; }
+.sr-row { cursor: pointer; }
+.sr-row:hover td { background: var(--brand-soft); }
+.sr-row.sr-new td:first-child b::after { content: ""; display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; background: var(--pending); margin-left: .4rem; vertical-align: middle; }
+.sr-neg { color: var(--danger); font-weight: 700; } .sr-pos { color: var(--ok); font-weight: 600; }
+.modal.modal-wide { max-width: 56rem; width: min(56rem, 96vw); }
+.sr-modal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: .4rem; }
+.sr-sec { margin-top: 1rem; }
+.sr-sec h4 { margin: 0 0 .4rem; padding-bottom: .25rem; border-bottom: 2px solid var(--brand); color: var(--brand); font-size: .98rem; display: flex; align-items: center; gap: .45rem; }
+.sr-step-tag { font-size: .66rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #fff; background: var(--brand); border-radius: 4px; padding: .08rem .4rem; }
+.sr-q { font-weight: 700; font-size: .88rem; margin-top: .5rem; }
+.sr-a { font-size: .95rem; white-space: normal; }
+.sr-kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .3rem 1.2rem; font-size: .93rem; }
+.sr-kv span { color: var(--ink-soft); margin-right: .4rem; }
+.sr-sig { font-family: "Snell Roundhand", "Brush Script MT", cursive; font-size: 1.25rem; font-weight: 400; }
+.sr-money-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1.4rem; align-items: start; }
+.sr-mt { width: 100%; border-collapse: collapse; font-size: .92rem; }
+.sr-mt th { text-align: left; font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); border-bottom: 1px solid var(--line); padding: .25rem 0; }
+.sr-mt td { padding: .25rem 0; border-bottom: 1px solid #eef1f4; vertical-align: top; }
+.sr-mt tfoot td { font-weight: 700; border-top: 2px solid var(--ink); border-bottom: 0; }
+.sr-plan-t td { padding-right: .8rem; }
+.sr-net-line { display: flex; justify-content: space-between; font-weight: 700; background: #eef6f0; border-radius: 8px; padding: .45rem .7rem; margin-top: .6rem; }
+.sr-net-line b { color: var(--ok); } .sr-net-line.neg { background: #fbe7e3; } .sr-net-line.neg b { color: var(--danger); }
+.sr-attach { display: flex; flex-wrap: wrap; gap: .4rem; margin: .25rem 0 .4rem; }
+@media (max-width: 650px) { .sr-money-cols { grid-template-columns: 1fr; } }

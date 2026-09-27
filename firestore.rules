@@ -195,6 +195,52 @@ service cloud.firestore {
       allow write: if canEdit('callings');
     }
 
+    // ---- Self-Reliance Plans (2026-09-27) ----
+    // The public form (no sign-in) may CREATE a plan when it carries an
+    // active form-link token, then upload the statement files as chunk
+    // documents and flip complete → true. It can never read anything back.
+    // Reading is for the bishop and people explicitly given the page —
+    // legacy "bishopric" roles are NOT enough (bank statements live here).
+    function srManages() {
+      return isBishop() || pinLevel('selfreliance') == 'edit';
+    }
+    function srLinkOk(token) {
+      return token is string && token.size() > 10 && token.size() < 64
+        && exists(/databases/$(database)/documents/srLinks/$(token))
+        && get(/databases/$(database)/documents/srLinks/$(token)).data.active == true;
+    }
+    match /srLinks/{token} {
+      allow get: if true;             // the form checks its own link is still active
+      allow list: if srManages();     // tokens can't be enumerated by the public
+      allow write: if srManages();
+    }
+    match /selfReliance/{sid} {
+      allow create: if srLinkOk(request.resource.data.link)
+        && request.resource.data.complete == false
+        && request.resource.data.status == 'new'
+        && request.resource.data.submittedAt == request.time
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0 && request.resource.data.name.size() < 200
+        && request.resource.data.files is list && request.resource.data.files.size() <= 8
+        && !('leaderNotes' in request.resource.data);
+      allow update: if srManages()
+        || (resource.data.complete == false && request.resource.data.complete == true
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['complete'])
+            && request.time < resource.data.submittedAt + duration.value(2, 'h'));
+      allow read, delete: if srManages();
+
+      match /chunks/{cid} {
+        allow create: if exists(/databases/$(database)/documents/selfReliance/$(sid))
+          && get(/databases/$(database)/documents/selfReliance/$(sid)).data.complete == false
+          && request.time < get(/databases/$(database)/documents/selfReliance/$(sid)).data.submittedAt + duration.value(2, 'h')
+          && request.resource.data.keys().hasOnly(['f', 'i', 'd'])
+          && request.resource.data.f is string && request.resource.data.f.size() < 40
+          && request.resource.data.i is int && request.resource.data.i >= 0 && request.resource.data.i < 40
+          && request.resource.data.d is bytes && request.resource.data.d.size() <= 1000000;
+        allow read, delete: if srManages();
+      }
+    }
+
     // ---- Confidential (bishop, or a PIN the bishop explicitly grants) ----
     match /confidential/{id} {
       allow read: if isBishop() || pinLevel('confidential') == 'view' || pinLevel('confidential') == 'edit';

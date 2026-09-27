@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1790515450";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1790515450";
+import { db } from "./firebase-init.js?v=1790537024";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1790537024";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1790515450";
-import { HYMNS } from "./hymns.js?v=1790515450";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1790515450";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1790537024";
+import { HYMNS } from "./hymns.js?v=1790537024";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1790537024";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -1036,6 +1036,7 @@ function statusChips(m, date) {
     const restore = [];
     if (hide.music) restore.push(`<span class="st-restore" data-unhide="music" title="Bring the Music Number box back">+ Music Number</span>`);
     if (hide.youth) restore.push(`<span class="st-restore" data-unhide="youth" title="Bring the Youth Speakers box back">+ Youth Speakers</span>`);
+    if (!adultSpk.length && type !== "fast") restore.push(`<span class="st-restore" data-unhide="speakers" title="Add a Speakers box to this Sunday">+ Speakers</span>`); // e.g. a Primary Program that also has a speaker
     if (restore.length) chips.push(`<span class="st-restore-wrap">${restore.join("")}</span>`);
   }
   return `<div class="st-row">${chips.join("")}</div>`;
@@ -1211,7 +1212,10 @@ function renderCards(wrap) {
       patchMeeting(date, (mm) => {
         mm.hide = { ...(mm.hide || {}), [key]: false };
         if (key === "music") { if (!mm.items.some((i) => SLOT_KINDS.includes(i.kind))) setInterSlot(mm, "hymn", {}, ""); }
-        else {
+        else if (key === "speakers") {
+          delete mm.hide.speakers;
+          if (!mm.items.some((i) => i.kind === "speaker")) { insertCanonical(mm.items, blankItem("speaker", 10)); insertCanonical(mm.items, blankItem("speaker", 12)); }
+        } else {
           if (!mm.items.some((i) => i.kind === "primarySpeaker")) insertCanonical(mm.items, blankItem("primarySpeaker", 3));
           if (!mm.items.some((i) => i.kind === "youthSpeaker")) insertCanonical(mm.items, blankItem("youthSpeaker", 5));
         }

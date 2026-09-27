@@ -1,20 +1,21 @@
 // App shell: auth flow (Google + PIN), permission gating, tab routing.
-import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1790515450";
+import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1790537024";
 import {
   signInWithPopup, signInWithEmailAndPassword, signOut, onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
   doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { initTasks } from "./tasks.js?v=1790515450";
-import { initSacrament, openMeetingLink } from "./sacrament.js?v=1790515450";
-import { initCalendar } from "./calendar.js?v=1790515450";
-import { initCallings } from "./callings.js?v=1790515450";
-import { initConfidential } from "./confidential.js?v=1790515450";
-import { initAdmin } from "./admin.js?v=1790515450";
-import { initBoard } from "./board.js?v=1790515450";
-import { initHomeSacrament } from "./home-sacrament.js?v=1790515450";
-import { initCouncil } from "./council.js?v=1790515450";
+import { initTasks } from "./tasks.js?v=1790537024";
+import { initSacrament, openMeetingLink } from "./sacrament.js?v=1790537024";
+import { initCalendar } from "./calendar.js?v=1790537024";
+import { initCallings } from "./callings.js?v=1790537024";
+import { initConfidential } from "./confidential.js?v=1790537024";
+import { initAdmin } from "./admin.js?v=1790537024";
+import { initBoard } from "./board.js?v=1790537024";
+import { initHomeSacrament } from "./home-sacrament.js?v=1790537024";
+import { initCouncil } from "./council.js?v=1790537024";
+import { initSelfReliance } from "./selfreliance.js?v=1790537024";
 
 const ROLE_RANK = { pending: 0, member: 1, bishopric: 2, bishop: 3 };
 
@@ -30,6 +31,7 @@ export const AREAS = [
   { key: "board",        label: "Member Board",   hint: "Person cards sorted into sections you name" },
   { key: "council",      label: "Ward Council",   hint: "Weekly council agendas" },
   { key: "confidential", label: "Confidential",   hint: "Bishop's private notes — grant with care" },
+  { key: "selfreliance", label: "Self-Reliance",  hint: "Self-Reliance Plans people send in, with their bank and credit statements — grant with care" },
   { key: "tasks",        label: "Tasks",          hint: "Assignments and follow-ups" },
   { key: "users",        label: "Users",          hint: "Add people, set their access, revoke" },
 ];
@@ -57,7 +59,7 @@ export function hasRole(minRole) {
 function permsForRole(role) {
   const all = (lvl) => Object.fromEntries(AREAS.map((a) => [a.key, lvl]));
   if (role === "bishop") return all("edit");
-  if (role === "bishopric") return { ...all("edit"), confidential: "", users: "" };
+  if (role === "bishopric") return { ...all("edit"), confidential: "", selfreliance: "", users: "" }; // private pages are granted by name only
   if (role === "member") return { ...all(""), sacrament: "view", calendar: "view", tasks: "view" };
   return all("");
 }
@@ -293,6 +295,7 @@ onAuthStateChanged(auth, async (user) => {
   if (can("board")) initBoard();
   if (can("council")) initCouncil();
   if (can("confidential")) initConfidential();
+  if (can("selfreliance")) initSelfReliance();
   if (can("users")) initAdmin();
 
   selectTab(localStorage.getItem("sw-tab") || "sacrament");
