@@ -6,9 +6,9 @@
 // meeting content comes straight from that Sunday's plan.
 //
 //   settings/program  { wardName, stakeName, logo (data URL | "" = built-in), opts: {...} }
-import { db } from "./firebase-init.js?v=1790537024";
+import { db } from "./firebase-init.js?v=1790565582";
 import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1790537024";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1790565582";
 
 export const DEFAULT_LOGO = "assets/program-logo.jpg"; // Christus arch, built in
 // Fixed by Jordan (2026-09-19): Presiding + Conducting always shown, speaker
@@ -183,6 +183,12 @@ const HYMN_KINDS = ["openingHymn", "sacramentHymn", "intermediateHymn", "closing
 const SPEAKER_KINDS = ["primarySpeaker", "youthSpeaker", "speaker"];
 const PRAYER_KINDS = ["invocation", "benediction"];
 
+// "High Council" in a theme links to the stake's speaking page (tappable on the shared program)
+const HC_URL = "https://www.stgeorgeeast.org/hc-speaking";
+function hcTheme(theme) {
+  const t = String(theme || ""); const m = /high\s+council/i.exec(t);
+  return m ? `${esc(t.slice(0, m.index))}<a href="${HC_URL}" target="_blank" rel="noopener" style="color:inherit">${esc(m[0])}</a>${esc(t.slice(m.index + m[0].length))}` : esc(t);
+}
 export function buildProgramHtml(ctx, opts = {}) {
   const o = { ...DEFAULT_OPTS, ...opts };
   const s = ctx.settings || programSettings; // the public page passes the snapshot's settings
@@ -256,7 +262,7 @@ export function buildProgramHtml(ctx, opts = {}) {
       </div>
       <div class="title">Sacrament Meeting</div>
       <div class="date">${esc(ctx.fmtDate(ctx.date))}</div>
-      ${m.theme ? `<div class="theme">“${esc(m.theme)}”</div>` : ""}
+      ${m.theme ? `<div class="theme">“${hcTheme(m.theme)}”</div>` : ""}
       <div class="rule"></div><div class="officers">${officers}</div><div class="rule"></div>
       <div class="rows">${rows.join("")}</div>
       ${announcements ? `<div class="ann"><div class="ann-h">Announcements</div>${announcements}</div>` : ""}

@@ -1378,3 +1378,8 @@ th.us-sort:hover, th.us-sort.on { color: var(--brand); }
 .sr-net-line b { color: var(--ok); } .sr-net-line.neg { background: #fbe7e3; } .sr-net-line.neg b { color: var(--danger); }
 .sr-attach { display: flex; flex-wrap: wrap; gap: .4rem; margin: .25rem 0 .4rem; }
 @media (max-width: 650px) { .sr-money-cols { grid-template-columns: 1fr; } }
+
+/* "High Council" in a theme links to the stake's speaking page (2026-09-27) */
+.theme-tag .hc-link { color: inherit; text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 2px; cursor: pointer; }
+.theme-tag .hc-link::after { content: " ↗"; font-style: normal; font-size: .8em; opacity: .7; }
+.theme-tag .hc-link:hover { color: var(--brand); }

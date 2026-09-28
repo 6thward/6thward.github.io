@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1790537024";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1790537024";
+import { db } from "./firebase-init.js?v=1790565582";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1790565582";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1790537024";
-import { HYMNS } from "./hymns.js?v=1790537024";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1790537024";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1790565582";
+import { HYMNS } from "./hymns.js?v=1790565582";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1790565582";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -840,6 +840,16 @@ function itemsFor(m, date) {
   return m?.items ?? defaultItems(m?.type || defaultTypeFor(date));
 }
 
+// High Council Sundays (2026-09-27): wherever a theme says "High Council",
+// those words link to the stake's high-council speaking page.
+const HC_URL = "https://www.stgeorgeeast.org/hc-speaking";
+function themeHtml(theme) {
+  const t = String(theme || "");
+  const m = /high\s+council/i.exec(t);
+  if (!m) return esc(t);
+  return `${esc(t.slice(0, m.index))}<a class="hc-link" href="${HC_URL}" target="_blank" rel="noopener" title="High council speaking — stgeorgeeast.org">${esc(m[0])}</a>${esc(t.slice(m.index + m[0].length))}`;
+}
+
 // ---- Quick status chips ----
 function statusChips(m, date) {
   const type = m?.type || defaultTypeFor(date);
@@ -1137,7 +1147,7 @@ function renderCards(wrap) {
         <div>
           <h3 style="margin:0"><span class="card-date">${fmtDay(date, { year: true })}</span>
             ${m?.theme
-              ? `<span class="theme-tag${canEdit ? " st-click" : ""}"${canEdit ? ` data-qe='{"t":"theme"}' title="Click to edit the theme"` : ""}>“${esc(m.theme)}”</span>`
+              ? `<span class="theme-tag${canEdit ? " st-click" : ""}"${canEdit ? ` data-qe='{"t":"theme"}' title="Click to edit the theme"` : ""}>“${themeHtml(m.theme)}”</span>`
               : (canEdit && !isConf ? `<span class="theme-tag theme-add" data-qe='{"t":"theme"}' title="Add a theme for this Sunday">+ theme</span>` : "")}
             ${megaphone}${wbIcon}${hbIcon}${type !== "sacrament" || canEdit ? `<span class="pill head-pill type-pill ${isConf ? "pill-conf" : type === "fast" ? "pill-fast" : type === "sacrament" ? "pill-type-plain" : "pill-approved"}${canEdit ? " st-click" : ""}"${canEdit ? ` data-type="${date}" title="Click to change the meeting type"` : ""}>${esc(typeLabel(m, date))}</span>` : ""}${nth === 5 ? `<span class="nth-pill nth-5 head-pill">5th Sunday</span>` : ""}${babies.map((b, bi) => `<span class="pill-baby-bold head-pill${canEdit ? " st-click" : ""}" ${canEdit ? `data-baby="${bi}" title="Click to edit"` : ""}>Blessing${b.name ? ": " + esc(b.name) : ""}${b.by ? ` <span class="pill-baby-by">by ${esc(b.by)}</span>` : ""}</span>`).join("")}
           </h3>
@@ -1241,6 +1251,7 @@ function renderCards(wrap) {
       sel.addEventListener("keydown", (ev) => { if (ev.key === "Escape") { done = true; render(); } });
       sel.addEventListener("blur", () => setTimeout(() => { if (!done) render(); }, 120));
     }));
+  wrap.querySelectorAll(".hc-link").forEach((a) => a.addEventListener("click", (e) => e.stopPropagation()));
   wrap.querySelectorAll("[data-addbaby]").forEach((b) =>
     b.addEventListener("click", (e) => { e.stopPropagation(); quickAddBaby(b.dataset.addbaby); }));
   wrap.querySelectorAll("[data-baby]").forEach((p) =>
@@ -2230,7 +2241,7 @@ function viewMeeting(date) {
   }
   const el = openModal(`
     <h3>${fmtDay(date, { year: true })} <span class="row-sub">·${nthSunday(date) === 5 ? " 5th Sunday ·" : ""} ${esc(typeLabel(m, date))}</span>
-      ${m.theme ? `<div class="theme-tag" style="margin-top:.2rem">“${esc(m.theme)}”</div>` : ""}</h3>
+      ${m.theme ? `<div class="theme-tag" style="margin-top:.2rem">“${themeHtml(m.theme)}”</div>` : ""}</h3>
     <div id="ag-wrap">${renderAgendaView(m, canEdit)}</div>
     <div class="modal-actions">
       <div style="display:flex;gap:.4rem;flex-wrap:wrap"><button class="btn" id="vw-print" title="Print or save as PDF">🖨 Print</button><button class="btn" id="vw-program" title="Two-up printed program">Program</button><button class="btn" id="vw-link" title="Copy a link, share, or text this agenda">🔗 Link</button></div>
