@@ -1537,3 +1537,10 @@ mark.nt-hl { padding: 0 .15em; border-radius: 3px; color: inherit; }
 .wc-asg-in:placeholder-shown:focus { background: #fff; border-color: var(--brand); }
 .wc-asg-ro { display: block; padding: .4rem .6rem; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
 .wc-asg-ro.wc-asg-open { background: #fde4ec; border-color: #f3b6c8; }
+/* Assignment suggestions: name + the last time they had that assignment (2026-10-04) */
+.wc-asg { position: relative; }
+.wc-asg-pop { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 30; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 28px rgba(31,39,51,.16); padding: .3rem; max-height: 19rem; overflow-y: auto; min-width: 15rem; }
+.wc-asg-opt { display: flex; justify-content: space-between; align-items: baseline; gap: .8rem; padding: .45rem .6rem; border-radius: 7px; cursor: pointer; font-weight: 600; font-size: .93rem; }
+.wc-asg-opt:hover, .wc-asg-opt.sel { background: var(--brand-soft); }
+.wc-asg-opt i { font-style: normal; font-weight: 400; font-size: .8rem; color: var(--ink-soft); white-space: nowrap; }
+.wc-asg-opt i.never { color: #c2567a; }

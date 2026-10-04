@@ -9,14 +9,14 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1791146013";
-import { ctx, can } from "./app.js?v=1791146013";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1791146013";
-import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791146013";
+import { db } from "./firebase-init.js?v=1791146254";
+import { ctx, can } from "./app.js?v=1791146254";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1791146254";
+import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791146254";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1791146013";
+import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1791146254";
 
 let cards = [];
 let councils = {};    // date -> doc
@@ -198,6 +198,17 @@ async function saveTodoPatch(k, todoId, mut) {
   await updateDoc(doc(db, "board", k.id), { todos, updatedAt: serverTimestamp() });
 }
 
+// who last had an assignment before a given meeting: lowercased name -> { name, date }
+function lastAssigned(k, before) {
+  const out = new Map();
+  Object.keys(councils).filter((d) => d < before).sort().forEach((d) => {
+    const n = String(councils[d].assign?.[k] || "").trim();
+    if (n) out.set(n.toLowerCase(), { name: n, date: d });
+  });
+  return out;
+}
+const shortDay = (d) => new Date(d + "T12:00:00").toLocaleDateString("en-US", d.slice(0, 4) === String(new Date().getFullYear()) ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
+
 function render() {
   const body = document.getElementById("wc-body");
   const dateEl = document.getElementById("wc-date");
@@ -263,7 +274,7 @@ function render() {
       <h3 style="margin:0 0 .4rem">Assignments</h3>
       <div class="wc-assign">
         ${ASSIGN.map(([k, l]) => `<label class="wc-asg"><span>${esc(l)}</span>${editor
-          ? `<input class="wc-asg-in" data-asg="${k}" list="dl-council-members" value="${esc(asg[k] || "")}" placeholder=" " title="Pick a council member or type any name" autocomplete="off">`
+          ? `<input class="wc-asg-in" data-asg="${k}" value="${esc(asg[k] || "")}" placeholder=" " title="Pick a council member or type any name" autocomplete="off">`
           : `<b class="wc-asg-ro${asg[k] ? "" : " wc-asg-open"}">${asg[k] ? esc(asg[k]) : "&nbsp;"}</b>`}</label>`).join("")}
       </div>
       <datalist id="dl-council-members">${members.map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist>
@@ -398,7 +409,41 @@ function render() {
       catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
     };
     inp.addEventListener("change", save);
-    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); inp.blur(); } });
+    // suggestions: council members (plus anyone who has had this assignment), each with the last
+    // time they had THIS assignment — longest-ago / never first, so it's easy to rotate (2026-10-04)
+    const k = inp.dataset.asg, wrap = inp.closest(".wc-asg");
+    let pop = null, sel = -1;
+    const close = () => { pop?.remove(); pop = null; sel = -1; };
+    const pick = (name) => { inp.value = name; close(); inp.blur(); save(); };
+    const mark = () => pop?.querySelectorAll(".wc-asg-opt").forEach((o, i) => o.classList.toggle("sel", i === sel));
+    const open = () => {
+      const last = lastAssigned(k, date);
+      const q = inp.value.trim().toLowerCase();
+      const byKey = new Map(); // one row per person, however the name was capitalised
+      [...members, ...[...last.values()].map((v) => v.name)].forEach((n) => { if (!byKey.has(n.toLowerCase())) byKey.set(n.toLowerCase(), n); });
+      const names = [...byKey.values()];
+      const rows = names.map((n) => ({ n, d: last.get(n.toLowerCase())?.date || "" }))
+        .filter((r) => !q || r.n.toLowerCase().includes(q))
+        .sort((a, b) => a.d.localeCompare(b.d) || a.n.localeCompare(b.n));
+      close();
+      if (!rows.length) return;
+      pop = document.createElement("div");
+      pop.className = "wc-asg-pop";
+      pop.innerHTML = rows.map((r) => `<div class="wc-asg-opt" data-name="${esc(r.n)}"><span>${esc(r.n)}</span><i class="${r.d ? "" : "never"}">${r.d ? "last " + shortDay(r.d) : "never"}</i></div>`).join("");
+      pop.addEventListener("mousedown", (e) => { e.preventDefault(); const o = e.target.closest(".wc-asg-opt"); if (o) pick(o.dataset.name); });
+      wrap.appendChild(pop);
+    };
+    inp.addEventListener("focus", open);
+    inp.addEventListener("click", () => { if (!pop) open(); });
+    inp.addEventListener("input", open);
+    inp.addEventListener("blur", close);
+    inp.addEventListener("keydown", (e) => {
+      const opts = pop ? [...pop.querySelectorAll(".wc-asg-opt")] : [];
+      if (e.key === "ArrowDown" && opts.length) { e.preventDefault(); sel = (sel + 1) % opts.length; mark(); opts[sel].scrollIntoView({ block: "nearest" }); }
+      else if (e.key === "ArrowUp" && opts.length) { e.preventDefault(); sel = (sel - 1 + opts.length) % opts.length; mark(); opts[sel].scrollIntoView({ block: "nearest" }); }
+      else if (e.key === "Enter") { e.preventDefault(); if (sel >= 0 && opts[sel]) pick(opts[sel].dataset.name); else inp.blur(); }
+      else if (e.key === "Escape") close();
+    });
   });
   // owner chip → a box in place (council members suggested, any name allowed)
   body.querySelectorAll(".wc-row [data-owner]").forEach((chip) => chip.addEventListener("click", (e) => {
