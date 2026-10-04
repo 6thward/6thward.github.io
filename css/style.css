@@ -754,7 +754,7 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 
 @media (max-width: 720px) {
   .topbar { padding: 0 .5rem; }
-  .topbar-user span { display: none; }
+  .topbar-user #user-name, .topbar-user .user-caret { display: none; }
   main { padding: .9rem .6rem 4rem; }
   .form-grid.two-col { grid-template-columns: 1fr; }
   .cal-cell { min-height: 3.6rem; }
@@ -1505,13 +1505,30 @@ mark.nt-hl { padding: 0 .15em; border-radius: 3px; color: inherit; }
 .wc-owner.wc-owner-add:hover { color: var(--brand); border-color: var(--brand); }
 .wc-owner-inp { margin-left: .5rem; font: inherit; font-size: .82rem; padding: .1rem .4rem; border: 1px solid var(--brand); border-radius: 8px; width: 11rem; }
 
-/* Top bar: every page tab stays visible (2026-10-04) — on a computer the tabs wrap onto a second
-   row instead of scrolling Users / Tasks out of sight; on a phone they still swipe, with a fade hint */
-.tabs { min-width: 0; }
-@media (min-width: 721px) {
-  .tabs { flex-wrap: wrap; overflow-x: visible; }
-  .tab { padding: .7rem .7rem; }
-}
-@media (max-width: 720px) {
-  .tabs { padding-right: 1.6rem; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.6rem), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 1.6rem), transparent); }
-}
+/* Top bar (2026-10-04): tabs that don't fit move into a "☰ More" menu (app.js layoutTabs) —
+   nothing scrolls out of sight and the bar stays one row */
+.tabs { min-width: 0; overflow: visible; flex-wrap: nowrap; }
+.tabs > .tab, .tabs-more { flex: none; }
+.tabs-more { position: relative; margin-left: auto; }
+.tabs-more-btn { border: none; background: none; cursor: pointer; font: inherit; font-size: .92rem; color: var(--ink-soft); padding: .85rem .8rem; border-bottom: 3px solid transparent; white-space: nowrap; max-width: 11rem; overflow: hidden; text-overflow: ellipsis; }
+.tabs-more-btn:hover, .tabs-more-btn[aria-expanded="true"] { color: var(--ink); }
+.tabs-more-btn.active { color: var(--brand); border-bottom-color: var(--brand); font-weight: 600; }
+.tabs-more-ic { font-size: 1.05rem; }
+.tabs-menu { position: absolute; right: 0; top: calc(100% + 2px); min-width: 12.5rem; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 28px rgba(31,39,51,.16); padding: .35rem; z-index: 60; display: flex; flex-direction: column; }
+.tabs-menu.hidden { display: none; }
+.tabs-menu .tab { display: block; width: 100%; text-align: left; padding: .6rem .8rem; border-bottom: none; border-radius: 8px; font-size: .95rem; }
+.tabs-menu .tab.hidden { display: none; }
+.tabs-menu .tab:hover { background: var(--brand-soft); }
+.tabs-menu .tab.active { background: var(--brand-soft); color: var(--brand); }
+.tabs-menu .tab-confidential.active { color: var(--accent); }
+/* Account menu: first name in the bar, full name + Sign out underneath (2026-10-04) */
+.topbar-user { position: relative; flex: none; }
+.user-btn { display: flex; align-items: center; gap: .45rem; border: none; background: none; cursor: pointer; font: inherit; font-size: .9rem; color: var(--ink-soft); padding: .35rem .5rem; border-radius: 99px; }
+.user-btn:hover, .user-btn[aria-expanded="true"] { background: var(--brand-soft); color: var(--ink); }
+.user-initial { width: 28px; height: 28px; border-radius: 50%; background: var(--brand); color: #fff; font-weight: 700; font-size: .85rem; display: grid; place-items: center; }
+.user-caret { font-size: .7rem; opacity: .7; }
+.user-menu { position: absolute; right: 0; top: calc(100% + 6px); min-width: 13rem; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 28px rgba(31,39,51,.16); padding: .35rem; z-index: 60; }
+.user-menu-head { padding: .5rem .7rem .55rem; border-bottom: 1px solid var(--line); margin-bottom: .3rem; color: var(--ink); font-size: .92rem; }
+.user-menu-head div { font-size: .8rem; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; }
+.user-menu-item { display: block; width: 100%; text-align: left; border: none; background: none; cursor: pointer; font: inherit; font-size: .93rem; color: var(--ink); padding: .55rem .7rem; border-radius: 8px; }
+.user-menu-item:hover { background: var(--brand-soft); color: var(--brand); }

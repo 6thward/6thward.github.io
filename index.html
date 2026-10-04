@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>6th Ward</title>
 <link rel="icon" href="assets/program-logo.jpg">
-<link rel="stylesheet" href="css/style.css?v=1791145662">
+<link rel="stylesheet" href="css/style.css?v=1791145883">
 </head>
 <body>
 
@@ -54,11 +54,22 @@
       <button class="tab" data-tab="selfreliance" data-area="selfreliance">Self-Reliance</button>
       <button class="tab" data-tab="admin" data-area="users">Users</button>
       <button class="tab" data-tab="tasks" data-area="tasks">Tasks</button>
+      <div class="tabs-more hidden" id="tabs-more">
+        <button type="button" class="tabs-more-btn" id="tabs-more-btn" aria-haspopup="true" aria-expanded="false" title="More pages"><span class="tabs-more-ic" aria-hidden="true">☰</span> <span id="tabs-more-label">More</span></button>
+        <div class="tabs-menu hidden" id="tabs-menu"></div>
+      </div>
     </nav>
-    <div class="topbar-user">
-      <img id="user-photo" class="user-photo" alt="" referrerpolicy="no-referrer">
-      <span id="user-name"></span>
-      <button id="btn-signout" class="btn btn-ghost btn-sm">Sign out</button>
+    <div class="topbar-user" id="user-wrap">
+      <button type="button" class="user-btn" id="user-btn" aria-haspopup="true" aria-expanded="false" title="Your account">
+        <img id="user-photo" class="user-photo" alt="" referrerpolicy="no-referrer">
+        <span id="user-initial" class="user-initial hidden" aria-hidden="true"></span>
+        <span id="user-name"></span>
+        <span class="user-caret" aria-hidden="true">▾</span>
+      </button>
+      <div class="user-menu hidden" id="user-menu">
+        <div class="user-menu-head"><b id="user-full"></b><div id="user-sub"></div></div>
+        <button type="button" id="btn-signout" class="user-menu-item">Sign out</button>
+      </div>
     </div>
   </header>
 
@@ -83,6 +94,6 @@
 
 <div id="toast" class="toast hidden"></div>
 
-<script type="module" src="js/app.js?v=1791145662"></script>
+<script type="module" src="js/app.js?v=1791145883"></script>
 </body>
 </html>

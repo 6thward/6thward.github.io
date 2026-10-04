@@ -1,21 +1,21 @@
 // App shell: auth flow (Google + PIN), permission gating, tab routing.
-import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1791145662";
+import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1791145883";
 import {
   signInWithPopup, signInWithEmailAndPassword, signOut, onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
   doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { initTasks } from "./tasks.js?v=1791145662";
-import { initSacrament, openMeetingLink } from "./sacrament.js?v=1791145662";
-import { initCalendar } from "./calendar.js?v=1791145662";
-import { initCallings } from "./callings.js?v=1791145662";
-import { initConfidential } from "./confidential.js?v=1791145662";
-import { initAdmin } from "./admin.js?v=1791145662";
-import { initBoard } from "./board.js?v=1791145662";
-import { initHomeSacrament } from "./home-sacrament.js?v=1791145662";
-import { initCouncil } from "./council.js?v=1791145662";
-import { initSelfReliance } from "./selfreliance.js?v=1791145662";
+import { initTasks } from "./tasks.js?v=1791145883";
+import { initSacrament, openMeetingLink } from "./sacrament.js?v=1791145883";
+import { initCalendar } from "./calendar.js?v=1791145883";
+import { initCallings } from "./callings.js?v=1791145883";
+import { initConfidential } from "./confidential.js?v=1791145883";
+import { initAdmin } from "./admin.js?v=1791145883";
+import { initBoard } from "./board.js?v=1791145883";
+import { initHomeSacrament } from "./home-sacrament.js?v=1791145883";
+import { initCouncil } from "./council.js?v=1791145883";
+import { initSelfReliance } from "./selfreliance.js?v=1791145883";
 
 const ROLE_RANK = { pending: 0, member: 1, bishopric: 2, bishop: 3 };
 
@@ -91,7 +91,17 @@ $("btn-google-signin").addEventListener("click", async () => {
     loginError("Sign-in failed: " + (err.code || err.message));
   }
 });
-$("btn-signout").addEventListener("click", () => signOut(auth));
+$("btn-signout").addEventListener("click", () => { $("user-menu").classList.add("hidden"); signOut(auth); });
+// the name in the top bar opens a small account menu (Sign out lives there)
+$("user-btn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  $("tabs-menu").classList.add("hidden");
+  const open = $("user-menu").classList.toggle("hidden") === false;
+  e.currentTarget.setAttribute("aria-expanded", String(open));
+});
+const closeUserMenu = () => { $("user-menu").classList.add("hidden"); $("user-btn").setAttribute("aria-expanded", "false"); };
+document.addEventListener("click", (e) => { if (!e.target.closest("#user-wrap")) closeUserMenu(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeUserMenu(); });
 $("btn-signout-pending").addEventListener("click", () => signOut(auth));
 
 // PIN sign-in. Five wrong PINs lock this screen for 15 minutes (kept in
@@ -276,16 +286,24 @@ onAuthStateChanged(auth, async (user) => {
   // last-usage stamp for the Users tab (own doc only; rules allow just this field)
   try { await updateDoc(uref, { lastSeen: serverTimestamp() }); } catch {}
   hide("login-screen"); hide("pending-screen"); show("app");
-  $("user-name").textContent = ctx.name;
-  const photo = $("user-photo");
-  if (!ctx.isPin && user.photoURL) { photo.src = user.photoURL; photo.classList.remove("hidden"); }
-  else photo.classList.add("hidden");
+  // top bar shows just the first name; the full name + Sign out sit in the menu under it (2026-10-04)
+  const fullName = String(ctx.name || "").trim();
+  $("user-name").textContent = fullName.split(/\s+/)[0] || "Account";
+  $("user-full").textContent = fullName || "Signed in";
+  $("user-sub").textContent = ctx.isPin ? "Signed in with a PIN" : (user.email || "");
+  const photo = $("user-photo"), initial = $("user-initial");
+  const hasPhoto = !ctx.isPin && !!user.photoURL;
+  if (hasPhoto) photo.src = user.photoURL;
+  photo.classList.toggle("hidden", !hasPhoto);
+  initial.textContent = (fullName[0] || "?").toUpperCase();
+  initial.classList.toggle("hidden", hasPhoto);
 
   // show only the tabs this person may see
   document.querySelectorAll("#main-tabs .tab").forEach((t) => {
     const area = t.dataset.area;
     t.classList.toggle("hidden", !!area && !can(area));
   });
+  layoutTabs();
 
   if (can("tasks")) initTasks();
   if (can("sacrament")) initSacrament();
@@ -316,8 +334,51 @@ function selectTab(name) {
   document.querySelectorAll(".panel").forEach((p) =>
     p.classList.toggle("hidden", p.id !== "panel-" + name));
   localStorage.setItem("sw-tab", name);
+  layoutTabs();
 }
 document.getElementById("main-tabs").addEventListener("click", (e) => {
   const tab = e.target.closest(".tab");
   if (tab) selectTab(tab.dataset.tab);
 });
+
+// Tabs that don't fit on the bar move into a "☰ More" menu (2026-10-04)
+const TAB_ORDER = [...document.querySelectorAll("#main-tabs .tab")];
+function closeTabsMenu() {
+  document.getElementById("tabs-menu").classList.add("hidden");
+  document.getElementById("tabs-more-btn").setAttribute("aria-expanded", "false");
+}
+// when the open page lives in the menu, the button carries its name
+function labelMore() {
+  const act = document.querySelector("#tabs-menu .tab.active");
+  document.getElementById("tabs-more-label").textContent = act ? act.textContent.trim() : "More";
+  document.getElementById("tabs-more-btn").classList.toggle("active", !!act);
+}
+function layoutTabs() {
+  const nav = document.getElementById("main-tabs"), more = document.getElementById("tabs-more"), menu = document.getElementById("tabs-menu");
+  closeTabsMenu();
+  TAB_ORDER.forEach((t) => nav.insertBefore(t, more));
+  more.classList.add("hidden");
+  const fits = () => nav.scrollWidth <= nav.clientWidth + 1;
+  if (!fits()) {
+    more.classList.remove("hidden");
+    const shown = TAB_ORDER.filter((t) => !t.classList.contains("hidden"));
+    // re-label as we go: the button widens when it carries the open page's name
+    for (let i = shown.length - 1; i >= 0; i--) { labelMore(); if (fits()) break; menu.insertBefore(shown[i], menu.firstChild); }
+  }
+  labelMore();
+}
+document.getElementById("tabs-more-btn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  document.getElementById("user-menu").classList.add("hidden");
+  const open = document.getElementById("tabs-menu").classList.toggle("hidden") === false;
+  e.currentTarget.setAttribute("aria-expanded", String(open));
+});
+document.addEventListener("click", (e) => { if (!e.target.closest("#tabs-more")) closeTabsMenu(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeTabsMenu(); });
+{
+  let lastW = -1;
+  const refit = () => { const w = document.getElementById("main-tabs").clientWidth; if (w !== lastW) { lastW = w; layoutTabs(); } };
+  new ResizeObserver(refit).observe(document.getElementById("main-tabs"));
+  window.addEventListener("resize", refit);
+  document.fonts?.ready.then(layoutTabs);
+}
