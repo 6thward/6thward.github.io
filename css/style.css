@@ -1544,3 +1544,9 @@ mark.nt-hl { padding: 0 .15em; border-radius: 3px; color: inherit; }
 .wc-asg-opt:hover, .wc-asg-opt.sel { background: var(--brand-soft); }
 .wc-asg-opt i { font-style: normal; font-weight: 400; font-size: .8rem; color: var(--ink-soft); white-space: nowrap; }
 .wc-asg-opt i.never { color: #c2567a; }
+/* Ward Council header tidy-up (2026-10-04): bigger date, page blurb behind a hover asterisk */
+.wc-date { font-size: 1.4rem; min-width: 0; padding: 0 .35rem; letter-spacing: -.01em; }
+.wc-info { position: relative; border: none; background: none; cursor: help; font: inherit; font-size: 1.1rem; font-weight: 700; color: var(--ink-soft); padding: 0 .3rem; vertical-align: top; line-height: 1; }
+.wc-info:hover, .wc-info:focus { color: var(--brand); outline: none; }
+.wc-info::after { content: attr(data-tip); display: none; position: absolute; left: 0; top: calc(100% + 6px); z-index: 30; width: min(22rem, 80vw); background: #1f2733; color: #fff; font-size: .82rem; font-weight: 400; line-height: 1.4; letter-spacing: 0; text-align: left; padding: .55rem .7rem; border-radius: 9px; box-shadow: 0 8px 22px rgba(31,39,51,.25); white-space: normal; }
+.wc-info:hover::after, .wc-info:focus::after { display: block; }

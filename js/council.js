@@ -9,14 +9,14 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1791146254";
-import { ctx, can } from "./app.js?v=1791146254";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1791146254";
-import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791146254";
+import { db } from "./firebase-init.js?v=1791146305";
+import { ctx, can } from "./app.js?v=1791146305";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1791146305";
+import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791146305";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1791146254";
+import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1791146305";
 
 let cards = [];
 let councils = {};    // date -> doc
@@ -47,21 +47,18 @@ export function initCouncil() {
   panel.innerHTML = `
     <div class="panel-head">
       <div>
-        <h2>Ward Council</h2>
-        <p class="panel-sub">An agenda for each meeting. Items flagged “Ward council” on the Member Board join the next agenda automatically.</p>
+        <h2>Ward Council <button type="button" class="wc-info" aria-label="About this page" data-tip="An agenda for each meeting. Items flagged “Ward council” on the Member Board join the next agenda automatically.">*</button></h2>
       </div>
     </div>
     <div class="hs-nav">
       <button class="btn btn-sm" id="wc-prev" title="Previous meeting">‹</button>
-      <div class="hs-date" id="wc-date"></div>
+      <div class="hs-date wc-date" id="wc-date"></div>
       <button class="btn btn-sm" id="wc-next" title="Next meeting">›</button>
-      <button class="btn btn-sm" id="wc-upcoming">Next council</button>
       ${can("council", "edit") ? `<button class="btn btn-sm" id="wc-dates" title="Choose which Sundays have ward council">📅 Council dates</button>` : ""}
     </div>
     <div id="wc-body"><div class="empty-note">Loading…</div></div>`;
   panel.querySelector("#wc-prev").addEventListener("click", () => { date = stepDate(date, -1); render(); });
   panel.querySelector("#wc-next").addEventListener("click", () => { date = stepDate(date, 1); render(); });
-  panel.querySelector("#wc-upcoming").addEventListener("click", () => { date = nextCouncil(); render(); });
   panel.querySelector("#wc-dates")?.addEventListener("click", editDates);
   onSnapshot(collection(db, "users"), (qs) => {
     const names = qs.docs.map((d) => d.data()).filter((u) => u.councilMember && !u.revoked && !u.alias && u.name).map((u) => u.name.trim());
@@ -219,7 +216,7 @@ function render() {
   const done = items.filter((i) => i.discussed);
   const cdoc = councils[date] || {};
   const next = isNextAgenda(date);
-  dateEl.textContent = fmtDay(date) + (next ? " · next council" : isFuture(date) ? " · upcoming" : "") + (hasSchedule() && !schedule.includes(date) ? " · not a council week" : "");
+  dateEl.textContent = fmtDay(date) + (hasSchedule() && !schedule.includes(date) ? " · not a council week" : "");
 
   // notes render with bullets ("- ") and to-do boxes ("[ ] "); the raw text is kept for the editor (2026-10-04)
   const rawNotes = new Map();
