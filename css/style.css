@@ -1432,3 +1432,14 @@ mark.nt-hl { padding: 0 .15em; border-radius: 3px; color: inherit; }
 .wc-nextwk { white-space: nowrap; }
 .wc-nextwk-box { display: inline-flex; align-items: center; gap: .3rem; flex-wrap: wrap; justify-content: flex-end; }
 .wc-actions { display: flex; align-items: center; gap: .3rem; flex-wrap: wrap; justify-content: flex-end; }
+
+/* bolder special-Sunday pills on the Sacrament cards (2026-10-04) */
+.type-pill.pill-conf { background: #1f2733; color: #fff; }                         /* General / Stake / Ward Conference: black */
+.type-pill.type-primary { background: #1f5fbf; color: #fff; }                      /* Primary Program: solid blue */
+.type-pill.type-christmas { background: #b3402f; color: #fff; }
+.type-pill.type-easter { background: #7a3fb0; color: #fff; }
+.type-pill.type-other { background: #46586e; color: #fff; }
+.type-pill.type-fast { background: var(--violet); color: #fff; }
+.type-pill.pill-conf.st-click:hover, .type-pill.type-primary.st-click:hover, .type-pill.type-christmas.st-click:hover,
+.type-pill.type-easter.st-click:hover, .type-pill.type-other.st-click:hover, .type-pill.type-fast.st-click:hover { color: #fff; filter: brightness(1.15); border-color: transparent; }
+.nth-pill.nth-5.head-pill { background: #c76a12; color: #fff; font-weight: 700; border-radius: 5px; padding: .28rem .7rem; letter-spacing: .01em; } /* 5th Sunday: solid orange */

@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1791134746";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1791134746";
+import { db } from "./firebase-init.js?v=1791135284";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1791135284";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1791134746";
-import { HYMNS } from "./hymns.js?v=1791134746";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1791134746";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1791135284";
+import { HYMNS } from "./hymns.js?v=1791135284";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1791135284";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -1149,7 +1149,7 @@ function renderCards(wrap) {
             ${m?.theme
               ? `<span class="theme-tag${canEdit ? " st-click" : ""}"${canEdit ? ` data-qe='{"t":"theme"}' title="Click to edit the theme"` : ""}>“${themeHtml(m.theme)}”</span>`
               : (canEdit && !isConf ? `<span class="theme-tag theme-add" data-qe='{"t":"theme"}' title="Add a theme for this Sunday">+ theme</span>` : "")}
-            ${megaphone}${wbIcon}${hbIcon}${type !== "sacrament" || canEdit ? `<span class="pill head-pill type-pill ${isConf ? "pill-conf" : type === "fast" ? "pill-fast" : type === "sacrament" ? "pill-type-plain" : "pill-approved"}${canEdit ? " st-click" : ""}"${canEdit ? ` data-type="${date}" title="Click to change the meeting type"` : ""}>${esc(typeLabel(m, date))}</span>` : ""}${nth === 5 ? `<span class="nth-pill nth-5 head-pill">5th Sunday</span>` : ""}${babies.map((b, bi) => `<span class="pill-baby-bold head-pill${canEdit ? " st-click" : ""}" ${canEdit ? `data-baby="${bi}" title="Click to edit"` : ""}>Blessing${b.name ? ": " + esc(b.name) : ""}${b.by ? ` <span class="pill-baby-by">by ${esc(b.by)}</span>` : ""}</span>`).join("")}
+            ${megaphone}${wbIcon}${hbIcon}${type !== "sacrament" || canEdit ? `<span class="pill head-pill type-pill type-${esc(type)} ${isConf ? "pill-conf" : type === "fast" ? "pill-fast" : type === "sacrament" ? "pill-type-plain" : "pill-approved"}${canEdit ? " st-click" : ""}"${canEdit ? ` data-type="${date}" title="Click to change the meeting type"` : ""}>${esc(typeLabel(m, date))}</span>` : ""}${nth === 5 ? `<span class="nth-pill nth-5 head-pill">5th Sunday</span>` : ""}${babies.map((b, bi) => `<span class="pill-baby-bold head-pill${canEdit ? " st-click" : ""}" ${canEdit ? `data-baby="${bi}" title="Click to edit"` : ""}>Blessing${b.name ? ": " + esc(b.name) : ""}${b.by ? ` <span class="pill-baby-by">by ${esc(b.by)}</span>` : ""}</span>`).join("")}
           </h3>
           <div class="row-sub" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">${condChip}${isConf ? "<span>no sacrament meeting</span>" : ""}</div>
         </div>
