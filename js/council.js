@@ -9,16 +9,17 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1791135284";
-import { ctx, can } from "./app.js?v=1791135284";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1791135284";
+import { db } from "./firebase-init.js?v=1791135680";
+import { ctx, can } from "./app.js?v=1791135680";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1791135680";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, fmtDate } from "./ui.js?v=1791135284";
+import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1791135680";
 
 let cards = [];
 let councils = {};    // date -> doc
+let schedule = [];    // council dates (Sundays) set by the bishopric — councils/_dates.dates; empty = every Sunday
 let date = "";        // selected meeting date (YYYY-MM-DD)
 let started = false;
 
@@ -37,6 +38,7 @@ export function initCouncil() {
   if (started) return;
   started = true;
   date = upcomingSunday();
+  let positioned = false; // jump to the next scheduled council once the dates have loaded
   const panel = document.getElementById("panel-council");
   panel.innerHTML = `
     <div class="panel-head">
@@ -50,26 +52,110 @@ export function initCouncil() {
       <div class="hs-date" id="wc-date"></div>
       <button class="btn btn-sm" id="wc-next" title="Next meeting">›</button>
       <button class="btn btn-sm" id="wc-upcoming">Next council</button>
+      ${can("council", "edit") ? `<button class="btn btn-sm" id="wc-dates" title="Choose which Sundays have ward council">📅 Council dates</button>` : ""}
     </div>
     <div id="wc-body"><div class="empty-note">Loading…</div></div>`;
-  panel.querySelector("#wc-prev").addEventListener("click", () => { date = shiftWeek(date, -1); render(); });
-  panel.querySelector("#wc-next").addEventListener("click", () => { date = shiftWeek(date, 1); render(); });
-  panel.querySelector("#wc-upcoming").addEventListener("click", () => { date = upcomingSunday(); render(); });
+  panel.querySelector("#wc-prev").addEventListener("click", () => { date = stepDate(date, -1); render(); });
+  panel.querySelector("#wc-next").addEventListener("click", () => { date = stepDate(date, 1); render(); });
+  panel.querySelector("#wc-upcoming").addEventListener("click", () => { date = nextCouncil(); render(); });
+  panel.querySelector("#wc-dates")?.addEventListener("click", editDates);
   onSnapshot(collection(db, "board"), (qs) => {
     cards = qs.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
     render();
   });
   onSnapshot(collection(db, "councils"), (qs) => {
     councils = {};
-    qs.docs.forEach((d) => { councils[d.id] = d.data(); });
+    schedule = [];
+    qs.docs.forEach((d) => {
+      if (d.id === "_dates") schedule = [...new Set((d.data().dates || []).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x)))].sort();
+      else councils[d.id] = d.data();
+    });
+    if (!positioned) { positioned = true; date = nextCouncil(); }
     render();
   });
 }
 
-// The next open agenda = the upcoming Sunday (or the selected date when it is
-// today or later). Board items belong to it until they're discussed.
-function isNextAgenda(d) { return d >= todayIso() && d === upcomingSunday(); }
-function isFuture(d) { return d > upcomingSunday(); }
+// ---- choose the council Sundays ----
+function editDates() {
+  const start = upcomingSunday();
+  const sundays = Array.from({ length: 40 }, (_, i) => shiftWeek(start, i)); // ~9 months ahead
+  const chosen = new Set(schedule.filter((d) => d >= start));
+  const past = schedule.filter((d) => d < start);
+  const nth = (d) => Math.ceil(new Date(d + "T12:00:00").getDate() / 7);
+  const monthKey = (d) => d.slice(0, 7);
+  const months = [...new Set(sundays.map(monthKey))];
+  const el = openModal(`
+    <h3>Ward council dates</h3>
+    <p class="row-sub" style="margin:0 0 .6rem">Tick the Sundays that have ward council. Agendas exist only for those weeks, and flagged Member Board items wait for the next one.${hasSchedule() ? "" : " Nothing is chosen yet, so every Sunday currently counts."}</p>
+    <div class="wcd-quick">
+      <span class="row-sub">Quick pick:</span>
+      <button class="btn btn-sm" type="button" data-pat="1,3">1st &amp; 3rd</button>
+      <button class="btn btn-sm" type="button" data-pat="2,4">2nd &amp; 4th</button>
+      <button class="btn btn-sm" type="button" data-pat="1">1st only</button>
+      <button class="btn btn-sm" type="button" data-pat="1,2,3,4,5">Every Sunday</button>
+      <button class="btn btn-sm btn-ghost" type="button" data-pat="">Clear</button>
+    </div>
+    <div class="wcd-months">
+      ${months.map((mk) => `
+        <div class="wcd-month">
+          <div class="wcd-month-name">${new Date(mk + "-15T12:00:00").toLocaleDateString("en-US", { month: "long", year: "numeric" })}</div>
+          <div class="wcd-days">${sundays.filter((d) => monthKey(d) === mk).map((d) => `<button type="button" class="wcd-day${chosen.has(d) ? " on" : ""}" data-d="${d}" data-nth="${nth(d)}" title="${fmtDay(d)}">${Number(d.slice(8))}<span>${["", "1st", "2nd", "3rd", "4th", "5th"][nth(d)]}</span></button>`).join("")}</div>
+        </div>`).join("")}
+    </div>
+    <div class="modal-actions">
+      <span class="row-sub" id="wcd-count"></span>
+      <div class="right"><button class="btn" id="wcd-cancel">Cancel</button><button class="btn btn-primary" id="wcd-save">Save dates</button></div>
+    </div>`);
+  const count = () => { el.querySelector("#wcd-count").textContent = `${el.querySelectorAll(".wcd-day.on").length} council Sundays chosen`; };
+  count();
+  el.querySelectorAll(".wcd-day").forEach((b) => b.addEventListener("click", () => { b.classList.toggle("on"); count(); }));
+  el.querySelectorAll("[data-pat]").forEach((b) => b.addEventListener("click", () => {
+    const want = new Set(b.dataset.pat.split(",").filter(Boolean));
+    el.querySelectorAll(".wcd-day").forEach((d) => d.classList.toggle("on", want.has(d.dataset.nth)));
+    count();
+  }));
+  el.querySelector("#wcd-cancel").addEventListener("click", closeModal);
+  el.querySelector("#wcd-save").addEventListener("click", async () => {
+    const dates = [...past, ...[...el.querySelectorAll(".wcd-day.on")].map((b) => b.dataset.d)].sort();
+    try {
+      await setDoc(doc(db, "councils", "_dates"), { dates, updatedAt: serverTimestamp(), updatedBy: ctx.name || "" });
+      schedule = dates; date = nextCouncil();
+      toast(dates.length ? "Council dates saved" : "Cleared — every Sunday counts again"); closeModal(); render();
+    } catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
+  });
+}
+
+// Council dates (2026-10-04). The ward chooses which Sundays have ward
+// council (councils/_dates.dates); agendas exist only for those. With no
+// dates chosen yet, every Sunday counts, as before.
+const hasSchedule = () => schedule.length > 0;
+// the next council on or after a day (today by default)
+function nextCouncil(from = todayIso()) {
+  if (!hasSchedule()) return upcomingSunday(new Date(from + "T12:00:00"));
+  return schedule.find((d) => d >= from) || upcomingSunday(new Date(from + "T12:00:00"));
+}
+// every date the ‹ › arrows can land on: scheduled councils + any meeting that already has a record
+function navDates() {
+  const set = new Set(schedule);
+  Object.keys(councils).forEach((d) => { if (/^\d{4}-\d{2}-\d{2}$/.test(d)) set.add(d); });
+  return [...set].sort();
+}
+function stepDate(d, dir) {
+  if (!hasSchedule()) return shiftWeek(d, dir);
+  const all = navDates();
+  const later = all.filter((x) => x > d), earlier = all.filter((x) => x < d);
+  return dir > 0 ? (later[0] || d) : (earlier[earlier.length - 1] || d);
+}
+// councils after a given one — targets for "copy / move to…"
+function councilsAfter(d, n = 12) {
+  if (hasSchedule()) return schedule.filter((x) => x > d).slice(0, n);
+  return Array.from({ length: 8 }, (_, i) => shiftWeek(d, i + 1));
+}
+
+// The next open agenda = the next council on or after today. Board items
+// belong to it until they're discussed.
+function isNextAgenda(d) { return d >= todayIso() && d === nextCouncil(); }
+function isFuture(d) { return d > nextCouncil(); }
 
 function itemsFor(d) {
   const fromBoard = [];
@@ -113,7 +199,7 @@ function render() {
   const done = items.filter((i) => i.discussed);
   const cdoc = councils[date] || {};
   const next = isNextAgenda(date);
-  dateEl.textContent = fmtDay(date) + (next ? " · next council" : isFuture(date) ? " · upcoming" : "");
+  dateEl.textContent = fmtDay(date) + (next ? " · next council" : isFuture(date) ? " · upcoming" : "") + (hasSchedule() && !schedule.includes(date) ? " · not a council week" : "");
 
   // notes render with bullets ("- ") and to-do boxes ("[ ] "); the raw text is kept for the editor (2026-10-04)
   const rawNotes = new Map();
@@ -141,7 +227,7 @@ function render() {
         ${editor ? `<div class="wc-actions">
           ${it.discussed
             ? `<button class="btn btn-sm btn-ghost" data-act="reopen" title="Put it back on the agenda">↩</button>`
-            : `<button class="btn btn-sm btn-ghost wc-nextwk" data-next="1" title="Carry this item to next week's agenda (${fmtDay(shiftWeek(date, 1))})">→ Next week</button>
+            : `<span class="wc-act-wrap"><button class="btn btn-sm btn-ghost wc-act-btn" data-actions="1" type="button" title="Copy or move this item to another council">Actions ▾</button></span>
                <button class="btn btn-sm" data-act="discussed" title="Discussed — moves to this meeting's record${it.kind === "board" ? "; the to-do stays on the card" : ""}">Discussed ✓</button>
                <button class="btn btn-sm btn-ghost" data-act="remove" title="${it.kind === "board" ? "Take off the agenda (unflags the to-do)" : "Delete this agenda item"}">✕</button>`}
         </div>` : ""}
@@ -266,36 +352,59 @@ function render() {
     inp.addEventListener("blur", () => { if (inp.value.trim()) add(); });
   }
 
-  // "→ Next week": move the item to next week's agenda, or put a copy there (2026-10-04)
-  body.querySelectorAll(".wc-row [data-next]").forEach((b) => b.addEventListener("click", () => {
-    const rowEl = b.closest(".wc-row"), key = rowEl.dataset.key;
-    const nextDate = shiftWeek(date, 1);
-    const isBoard = key.startsWith("b:");
-    const box = document.createElement("span");
-    box.className = "wc-nextwk-box";
-    box.innerHTML = `<span class="row-sub">To ${fmtDay(nextDate)}:</span><button class="btn btn-sm btn-primary" data-go="move" type="button" title="Take it off this agenda and put it on next week's">Move</button>${isBoard ? "" : `<button class="btn btn-sm" data-go="copy" type="button" title="Leave it here and add a copy to next week's agenda">Copy</button>`}<button class="btn btn-sm btn-ghost" data-go="cancel" type="button">Cancel</button>`;
-    b.replaceWith(box);
-    box.querySelector('[data-go="cancel"]').addEventListener("click", () => render());
-    const go = async (mode) => {
-      try {
-        if (isBoard) {
-          // a Member Board item just waits for a later meeting
-          const [, cardId, todoId] = key.split(":");
-          const k = cards.find((c) => c.id === cardId); if (!k) return;
-          await saveTodoPatch(k, todoId, (t) => { t.council = true; t.councilNotBefore = nextDate; });
-        } else {
-          const id = key.slice(2);
-          const item = (cdoc.extra || []).find((x) => x.id === id); if (!item) return;
-          const copy = { ...item, id: "a" + Math.random().toString(36).slice(2, 9), discussed: false, discussedAt: "", carriedFrom: date, createdAt: new Date().toISOString(), by: ctx.name || "" };
-          const nextDoc = councils[nextDate] || {};
-          await saveCouncil(nextDate, { extra: [...(nextDoc.extra || []), copy] });
-          if (mode === "move") await saveCouncil(date, { extra: (cdoc.extra || []).filter((x) => x.id !== id), order: (cdoc.order || []).filter((o) => o !== key) });
-        }
-        toast(mode === "move" ? `Moved to ${fmtDay(nextDate)}` : `Copied to ${fmtDay(nextDate)}`);
-      } catch (e) { toast("Couldn't save: " + (e.code || e.message)); render(); }
+  // Actions ▾ on an item (2026-10-04): copy / move it to the next council, or to a future one you pick
+  const carry = async (key, mode, target) => {
+    try {
+      if (key.startsWith("b:")) { // a Member Board item just waits for that meeting
+        const [, cardId, todoId] = key.split(":");
+        const k = cards.find((c) => c.id === cardId); if (!k) return;
+        await saveTodoPatch(k, todoId, (t) => { t.council = true; t.councilNotBefore = target; });
+      } else {
+        const id = key.slice(2);
+        const item = (cdoc.extra || []).find((x) => x.id === id); if (!item) return;
+        const copy = { ...item, id: "a" + Math.random().toString(36).slice(2, 9), discussed: false, discussedAt: "", carriedFrom: date, createdAt: new Date().toISOString(), by: ctx.name || "" };
+        await saveCouncil(target, { extra: [...((councils[target] || {}).extra || []), copy] });
+        if (mode === "move") await saveCouncil(date, { extra: (cdoc.extra || []).filter((x) => x.id !== id), order: (cdoc.order || []).filter((o) => o !== key) });
+      }
+      toast(`${mode === "move" ? "Moved" : "Copied"} to ${fmtDay(target)}`);
+    } catch (e) { toast("Couldn't save: " + (e.code || e.message)); render(); }
+  };
+  const closeMenus = () => body.querySelectorAll(".wc-menu").forEach((x) => x.remove());
+  body.querySelectorAll(".wc-row [data-actions]").forEach((b) => b.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const wrap = b.closest(".wc-act-wrap");
+    if (wrap.querySelector(".wc-menu")) { closeMenus(); return; }
+    closeMenus();
+    const key = b.closest(".wc-row").dataset.key, isBoard = key.startsWith("b:");
+    const targets = councilsAfter(date);
+    const nextD = targets[0];
+    const menu = document.createElement("div");
+    menu.className = "wc-menu";
+    const mainMenu = () => {
+      menu.innerHTML = nextD ? `
+        ${isBoard ? "" : `<button type="button" data-m="copy-next">Copy to next council <span>${fmtDay(nextD)}</span></button>`}
+        <button type="button" data-m="move-next">Move to next council <span>${fmtDay(nextD)}</span></button>
+        ${targets.length > 1 ? `<div class="wc-menu-sep"></div>
+        ${isBoard ? "" : `<button type="button" data-m="copy-future">Copy to a future council…</button>`}
+        <button type="button" data-m="move-future">Move to a future council…</button>` : ""}`
+        : `<div class="wc-menu-empty">No later council dates are set. Add some under 📅 Council dates.</div>`;
+      menu.querySelectorAll("[data-m]").forEach((mi) => mi.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const [mode, when] = mi.dataset.m.split("-");
+        if (when === "next") { closeMenus(); carry(key, mode, nextD); }
+        else pickDate(mode);
+      }));
     };
-    box.querySelector('[data-go="move"]').addEventListener("click", () => go("move"));
-    box.querySelector('[data-go="copy"]')?.addEventListener("click", () => go("copy"));
+    const pickDate = (mode) => {
+      menu.innerHTML = `<div class="wc-menu-title">${mode === "move" ? "Move" : "Copy"} to…</div>
+        ${targets.map((d, i) => `<button type="button" data-d="${d}">${fmtDay(d)}${i === 0 ? " <span>next</span>" : ""}</button>`).join("")}
+        <div class="wc-menu-sep"></div><button type="button" data-back="1">‹ Back</button>`;
+      menu.querySelectorAll("[data-d]").forEach((di) => di.addEventListener("click", (ev) => { ev.stopPropagation(); closeMenus(); carry(key, mode, di.dataset.d); }));
+      menu.querySelector("[data-back]").addEventListener("click", (ev) => { ev.stopPropagation(); mainMenu(); });
+    };
+    mainMenu();
+    wrap.appendChild(menu);
+    setTimeout(() => document.addEventListener("click", closeMenus, { once: true }), 0);
   }));
 
   // row actions

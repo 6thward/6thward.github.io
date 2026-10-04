@@ -1443,3 +1443,22 @@ mark.nt-hl { padding: 0 .15em; border-radius: 3px; color: inherit; }
 .type-pill.pill-conf.st-click:hover, .type-pill.type-primary.st-click:hover, .type-pill.type-christmas.st-click:hover,
 .type-pill.type-easter.st-click:hover, .type-pill.type-other.st-click:hover, .type-pill.type-fast.st-click:hover { color: #fff; filter: brightness(1.15); border-color: transparent; }
 .nth-pill.nth-5.head-pill { background: #c76a12; color: #fff; font-weight: 700; border-radius: 5px; padding: .28rem .7rem; letter-spacing: .01em; } /* 5th Sunday: solid orange */
+
+/* Ward Council: Actions menu + council-date picker (2026-10-04) */
+.wc-act-wrap { position: relative; display: inline-block; }
+.wc-menu { position: absolute; right: 0; top: calc(100% + .25rem); z-index: 30; min-width: 17rem; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 28px rgba(20,30,45,.18); padding: .3rem; display: flex; flex-direction: column; max-height: 22rem; overflow: auto; }
+.wc-menu button { display: flex; justify-content: space-between; align-items: center; gap: .8rem; font: inherit; font-size: .9rem; text-align: left; background: transparent; border: 0; border-radius: 7px; padding: .45rem .6rem; cursor: pointer; color: var(--ink); white-space: nowrap; }
+.wc-menu button:hover { background: var(--brand-soft); }
+.wc-menu button span { color: var(--ink-soft); font-size: .8rem; }
+.wc-menu-sep { height: 1px; background: var(--line); margin: .25rem .2rem; }
+.wc-menu-title { font-size: .76rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); padding: .35rem .6rem .2rem; }
+.wc-menu-empty { padding: .6rem; font-size: .88rem; color: var(--ink-soft); white-space: normal; }
+.wcd-quick { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; margin-bottom: .7rem; }
+.wcd-months { display: grid; grid-template-columns: repeat(auto-fill, minmax(13.5rem, 1fr)); gap: .7rem .9rem; }
+.wcd-month-name { font-weight: 700; font-size: .9rem; margin-bottom: .3rem; }
+.wcd-days { display: flex; gap: .3rem; flex-wrap: wrap; }
+.wcd-day { width: 2.5rem; padding: .3rem 0 .2rem; border: 1.5px solid var(--line); border-radius: 9px; background: #fff; cursor: pointer; font: inherit; font-weight: 700; font-size: 1rem; line-height: 1.1; color: var(--ink); display: flex; flex-direction: column; align-items: center; }
+.wcd-day span { font-size: .6rem; font-weight: 600; color: var(--ink-soft); }
+.wcd-day:hover { border-color: var(--brand); }
+.wcd-day.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+.wcd-day.on span { color: rgba(255,255,255,.8); }
