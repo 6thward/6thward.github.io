@@ -1,21 +1,21 @@
 // App shell: auth flow (Google + PIN), permission gating, tab routing.
-import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1791136955";
+import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1791145662";
 import {
   signInWithPopup, signInWithEmailAndPassword, signOut, onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
   doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { initTasks } from "./tasks.js?v=1791136955";
-import { initSacrament, openMeetingLink } from "./sacrament.js?v=1791136955";
-import { initCalendar } from "./calendar.js?v=1791136955";
-import { initCallings } from "./callings.js?v=1791136955";
-import { initConfidential } from "./confidential.js?v=1791136955";
-import { initAdmin } from "./admin.js?v=1791136955";
-import { initBoard } from "./board.js?v=1791136955";
-import { initHomeSacrament } from "./home-sacrament.js?v=1791136955";
-import { initCouncil } from "./council.js?v=1791136955";
-import { initSelfReliance } from "./selfreliance.js?v=1791136955";
+import { initTasks } from "./tasks.js?v=1791145662";
+import { initSacrament, openMeetingLink } from "./sacrament.js?v=1791145662";
+import { initCalendar } from "./calendar.js?v=1791145662";
+import { initCallings } from "./callings.js?v=1791145662";
+import { initConfidential } from "./confidential.js?v=1791145662";
+import { initAdmin } from "./admin.js?v=1791145662";
+import { initBoard } from "./board.js?v=1791145662";
+import { initHomeSacrament } from "./home-sacrament.js?v=1791145662";
+import { initCouncil } from "./council.js?v=1791145662";
+import { initSelfReliance } from "./selfreliance.js?v=1791145662";
 
 const ROLE_RANK = { pending: 0, member: 1, bishopric: 2, bishop: 3 };
 

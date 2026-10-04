@@ -1504,3 +1504,14 @@ mark.nt-hl { padding: 0 .15em; border-radius: 3px; color: inherit; }
 .wc-owner.wc-owner-add { background: transparent; color: #a7b0bd; border: 1px dashed rgba(31,39,51,.25); font-weight: 500; }
 .wc-owner.wc-owner-add:hover { color: var(--brand); border-color: var(--brand); }
 .wc-owner-inp { margin-left: .5rem; font: inherit; font-size: .82rem; padding: .1rem .4rem; border: 1px solid var(--brand); border-radius: 8px; width: 11rem; }
+
+/* Top bar: every page tab stays visible (2026-10-04) — on a computer the tabs wrap onto a second
+   row instead of scrolling Users / Tasks out of sight; on a phone they still swipe, with a fade hint */
+.tabs { min-width: 0; }
+@media (min-width: 721px) {
+  .tabs { flex-wrap: wrap; overflow-x: visible; }
+  .tab { padding: .7rem .7rem; }
+}
+@media (max-width: 720px) {
+  .tabs { padding-right: 1.6rem; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.6rem), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 1.6rem), transparent); }
+}
