@@ -1,11 +1,10 @@
 // Calendar tab: month grid of ward meetings and the bishop's schedule.
-import { db } from "./firebase-init.js?v=1791157953";
-import { ctx, hasRole, can } from "./app.js?v=1791157953";
+import { db } from "./firebase-init.js?v=1791158176";
+import { ctx, hasRole, can } from "./app.js?v=1791158176";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { initTithing } from "./tithing.js?v=1791157953";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1791157953";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1791158176";
 
 let events = [];
 let viewYear, viewMonth; // 0-based month
@@ -23,18 +22,10 @@ export function initCalendar() {
     <div class="panel-head">
       <div>
         <h2>Calendar</h2>
-        <p class="panel-sub" id="cal-sub">Meetings, interviews, and ward events. Click a day to add.</p>
+        <p class="panel-sub">Meetings, interviews, and ward events. Click a day to add.</p>
       </div>
-      <div class="panel-actions">
-        ${can("calendar", "edit") ? `<div class="view-toggle" id="cal-view">
-          <button class="chip active" data-view="calendar" type="button">Calendar</button>
-          <button class="chip" data-view="tithing" type="button">Tithing declaration</button>
-        </div>` : ""}
-        <button class="btn btn-primary" id="btn-new-event">+ New event</button>
-      </div>
+      <button class="btn btn-primary" id="btn-new-event">+ New event</button>
     </div>
-    <div id="cal-tithing" class="hidden"></div>
-    <div id="cal-main">
     <div class="card">
       <div class="cal-head">
         <button class="btn btn-sm" id="cal-prev">‹</button>
@@ -46,21 +37,7 @@ export function initCalendar() {
     <div class="card">
       <h3>Coming up</h3>
       <div id="upcoming-list"></div>
-    </div>
     </div>`;
-
-  // Calendar ⇄ Tithing declaration sign-ups (2026-10-04)
-  panel.querySelectorAll("#cal-view [data-view]").forEach((b) => b.addEventListener("click", () => {
-    const tithing = b.dataset.view === "tithing";
-    panel.querySelectorAll("#cal-view .chip").forEach((c) => c.classList.toggle("active", c === b));
-    panel.querySelector("#cal-main").classList.toggle("hidden", tithing);
-    panel.querySelector("#cal-tithing").classList.toggle("hidden", !tithing);
-    panel.querySelector("#btn-new-event").classList.toggle("hidden", tithing);
-    panel.querySelector("#cal-sub").textContent = tithing
-      ? "Set when you're available, share the link or QR code, and members sign up for a time."
-      : "Meetings, interviews, and ward events. Click a day to add.";
-    if (tithing) initTithing(panel.querySelector("#cal-tithing"));
-  }));
 
   panel.querySelector("#cal-prev").addEventListener("click", () => shiftMonth(-1));
   panel.querySelector("#cal-next").addEventListener("click", () => shiftMonth(1));

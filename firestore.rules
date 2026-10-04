@@ -134,6 +134,10 @@ service cloud.firestore {
     // link is the only key. The public can see WHICH times are gone (taken/),
     // never who took them (signups/). A sign-up writes both docs in one batch,
     // and a time that already has a taken-marker can't be claimed again.
+    // Managed from the Bishop page: the bishop, or someone he gives that page to.
+    function bishopPage() {
+      return isBishop() || pinLevel('confidential') == 'edit';
+    }
     function tithingDoc(token) {
       return get(/databases/$(database)/documents/tithing/$(token)).data;
     }
@@ -142,22 +146,22 @@ service cloud.firestore {
     }
     match /tithing/{token} {
       allow get: if true;                       // the sign-up page reads its own link
-      allow list: if canEdit('calendar');       // tokens can't be enumerated by the public
-      allow write: if canEdit('calendar');
+      allow list: if bishopPage();       // tokens can't be enumerated by the public
+      allow write: if bishopPage();
 
       match /taken/{slotId} {
         allow read: if true;
-        allow create: if canEdit('calendar') || (tithingOpen(token)
+        allow create: if bishopPage() || (tithingOpen(token)
           && slotId in tithingDoc(token).slots
           && request.resource.data.keys().hasOnly(['len', 'at'])
           && request.resource.data.len == tithingDoc(token).slots[slotId]
           && request.resource.data.at == request.time
           && existsAfter(/databases/$(database)/documents/tithing/$(token)/signups/$(slotId)));
-        allow delete: if canEdit('calendar');
+        allow delete: if bishopPage();
       }
       match /signups/{slotId} {
-        allow read, update, delete: if canEdit('calendar');
-        allow create: if canEdit('calendar') || (tithingOpen(token)
+        allow read, update, delete: if bishopPage();
+        allow create: if bishopPage() || (tithingOpen(token)
           && slotId in tithingDoc(token).slots
           && request.resource.data.keys().hasOnly(['name', 'phone', 'address', 'at'])
           && request.resource.data.name is string
@@ -290,7 +294,7 @@ service cloud.firestore {
       }
     }
 
-    // ---- Confidential (bishop, or a PIN the bishop explicitly grants) ----
+    // ---- Bishop page, private notes (bishop, or someone the bishop explicitly grants) ----
     match /confidential/{id} {
       allow read: if isBishop() || pinLevel('confidential') == 'view' || pinLevel('confidential') == 'edit';
       allow write: if isBishop() || pinLevel('confidential') == 'edit';

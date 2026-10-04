@@ -1,11 +1,13 @@
-// Confidential tab — bishop only. Enforced server-side by Firestore rules,
-// not just by hiding the tab.
-import { db } from "./firebase-init.js?v=1791157953";
+// "Bishop" tab (was "Confidential") — the bishop, or someone he explicitly grants
+// the page. Enforced server-side by Firestore rules, not just by hiding the tab.
+// Two parts (2026-10-04): private notes, and tithing declaration sign-ups.
+import { initTithing } from "./tithing.js?v=1791158176";
+import { db } from "./firebase-init.js?v=1791158176";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1791157953";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1791158176";
 
 let items = [];
 let showDone = false;
@@ -18,11 +20,19 @@ export function initConfidential() {
   panel.innerHTML = `
     <div class="panel-head">
       <div>
-        <h2>🔒 Confidential</h2>
-        <p class="panel-sub">Visible to the bishop only — enforced by database security rules.</p>
+        <h2>🔒 Bishop</h2>
+        <p class="panel-sub" id="bp-sub"></p>
       </div>
-      <button class="btn btn-primary" id="btn-new-conf">+ New note</button>
+      <div class="panel-actions">
+        <div class="view-toggle" id="bp-view">
+          <button class="chip" data-view="notes" type="button">Private notes</button>
+          <button class="chip" data-view="tithing" type="button">Tithing declaration</button>
+        </div>
+        <button class="btn btn-primary" id="btn-new-conf">+ New note</button>
+      </div>
     </div>
+    <div id="bp-tithing" class="hidden"></div>
+    <div id="bp-notes">
     <div class="conf-banner">Keep entries appropriately brief. This is for your working notes and follow-ups, not for records that belong in official Church systems.</div>
     <div class="chips" id="conf-chips">
       <button class="chip active" data-f="open">Open</button>
@@ -30,14 +40,33 @@ export function initConfidential() {
     </div>
     <div class="card" style="margin-top:.8rem">
       <div id="conf-list"></div>
+    </div>
     </div>`;
+
+  // Private notes ⇄ Tithing declaration; the page reopens on whichever was used last
+  const showView = (view) => {
+    const tithing = view === "tithing";
+    panel.querySelectorAll("#bp-view .chip").forEach((c) => c.classList.toggle("active", c.dataset.view === view));
+    panel.querySelector("#bp-notes").classList.toggle("hidden", tithing);
+    panel.querySelector("#bp-tithing").classList.toggle("hidden", !tithing);
+    panel.querySelector("#btn-new-conf").classList.toggle("hidden", tithing);
+    panel.querySelector("#bp-sub").textContent = tithing
+      ? "Set when you're available, share the link or QR code, and members sign up for a time."
+      : "Visible only to the bishop and anyone he gives this page to — enforced by database security rules.";
+    if (tithing) initTithing(panel.querySelector("#bp-tithing"));
+    try { localStorage.setItem("sw-bishop-view", view); } catch {}
+  };
+  panel.querySelectorAll("#bp-view [data-view]").forEach((b) => b.addEventListener("click", () => showView(b.dataset.view)));
+  let startView = "notes";
+  try { if (localStorage.getItem("sw-bishop-view") === "tithing") startView = "tithing"; } catch {}
+  showView(startView);
 
   panel.querySelector("#btn-new-conf").addEventListener("click", () => editItem(null));
   panel.querySelector("#conf-chips").addEventListener("click", (e) => {
     const chip = e.target.closest(".chip");
     if (!chip) return;
     showDone = chip.dataset.f === "all";
-    panel.querySelectorAll(".chip").forEach((c) => c.classList.toggle("active", c === chip));
+    panel.querySelectorAll("#conf-chips .chip").forEach((c) => c.classList.toggle("active", c === chip));
     render();
   });
 

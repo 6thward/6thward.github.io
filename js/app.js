@@ -1,21 +1,21 @@
 // App shell: auth flow (Google + PIN), permission gating, tab routing.
-import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1791157953";
+import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1791158176";
 import {
   signInWithPopup, signInWithEmailAndPassword, signOut, onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
   doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { initTasks } from "./tasks.js?v=1791157953";
-import { initSacrament, openMeetingLink } from "./sacrament.js?v=1791157953";
-import { initCalendar } from "./calendar.js?v=1791157953";
-import { initCallings } from "./callings.js?v=1791157953";
-import { initConfidential } from "./confidential.js?v=1791157953";
-import { initAdmin } from "./admin.js?v=1791157953";
-import { initBoard } from "./board.js?v=1791157953";
-import { initHomeSacrament } from "./home-sacrament.js?v=1791157953";
-import { initCouncil } from "./council.js?v=1791157953";
-import { initSelfReliance } from "./selfreliance.js?v=1791157953";
+import { initTasks } from "./tasks.js?v=1791158176";
+import { initSacrament, openMeetingLink } from "./sacrament.js?v=1791158176";
+import { initCalendar } from "./calendar.js?v=1791158176";
+import { initCallings } from "./callings.js?v=1791158176";
+import { initConfidential } from "./confidential.js?v=1791158176";
+import { initAdmin } from "./admin.js?v=1791158176";
+import { initBoard } from "./board.js?v=1791158176";
+import { initHomeSacrament } from "./home-sacrament.js?v=1791158176";
+import { initCouncil } from "./council.js?v=1791158176";
+import { initSelfReliance } from "./selfreliance.js?v=1791158176";
 
 const ROLE_RANK = { pending: 0, member: 1, bishopric: 2, bishop: 3 };
 
@@ -30,7 +30,7 @@ export const AREAS = [
   { key: "callings",     label: "Callings",       hint: "Callings and releases pipeline — sensitive" },
   { key: "board",        label: "Member Board",   hint: "Person cards sorted into sections you name" },
   { key: "council",      label: "Ward Council",   hint: "Weekly council agendas" },
-  { key: "confidential", label: "Confidential",   hint: "Bishop's private notes — grant with care" },
+  { key: "confidential", label: "Bishop",         hint: "Bishop's private notes and tithing declaration sign-ups — grant with care" },
   { key: "selfreliance", label: "Self-Reliance",  hint: "Self-Reliance Plans people send in, with their bank and credit statements — grant with care" },
   { key: "tasks",        label: "Tasks",          hint: "Assignments and follow-ups" },
   { key: "users",        label: "Users",          hint: "Add people, set their access, revoke" },

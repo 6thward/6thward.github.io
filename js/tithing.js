@@ -1,19 +1,22 @@
 // Tithing declaration sign-ups (2026-10-04) — the bishop's side, inside the
-// Calendar page: set when you're available, share the link / QR code, and see
+// Bishop page (confidential.js): set when you're available, share the link / QR code, and see
 // who signed up. The public page is tithing.html (js/tithing-form.js).
-import { db } from "./firebase-init.js?v=1791157953";
-import { ctx, can } from "./app.js?v=1791157953";
+import { db } from "./firebase-init.js?v=1791158176";
+import { ctx, can } from "./app.js?v=1791158176";
 import {
   collection, doc, onSnapshot, setDoc, updateDoc, writeBatch, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast } from "./ui.js?v=1791157953";
+import { openModal, closeModal, toast } from "./ui.js?v=1791158176";
 import {
   GROUPS, PLACES, SLOT_LENGTHS, esc, toMin, fmtClock, fmtLongDay, fmtShortDay, slotsOf, slotMap,
   sortWindows, overlaps, newToken, parseSlotId, todayIso, addDays,
-} from "./tithing-shared.js?v=1791157953";
+} from "./tithing-shared.js?v=1791158176";
 
 let mount = null, season = null, signups = [], unsubSignups = null, started = false, dirty = false;
 let qrCache = { url: "", data: "" }, qrLib = null;
+let schedView = "cols"; // schedule: every day side by side in columns, or one long list with phone numbers
+let listFilter = "all"; // the year list: all | attended | pending | noshow
+const STATUS = { attended: "Attended", noshow: "Didn't come" };
 // the "add a time period" form keeps its values between adds (handy for several Sundays in a row)
 const form = { date: "", start: "14:00", end: "16:00", len: 15, place: "office", group: "", weeks: 1 };
 
@@ -72,7 +75,7 @@ function render() {
   const a = document.activeElement;
   if (a && mount.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) { dirty = true; return; }
   dirty = false;
-  const editor = can("calendar", "edit");
+  const editor = can("confidential", "edit");
 
   if (!season) {
     mount.innerHTML = `
@@ -171,15 +174,20 @@ function render() {
       ${list.map((s) => {
         const su = byId[s.id], g = GROUPS[s.group];
         const tags = `${s.place === "home" ? `<span class="td-tag td-tag-home" title="Home visit">🏠</span>` : ""}${g ? `<span class="td-tag td-tag-${g.cls}" title="Set aside for ${esc(g.label.toLowerCase())}">${esc(g.label)}</span>` : ""}`;
-        if (!su) return `<div class="td-srow td-srow-open"><span class="td-stime">${fmtClock(s.min)}</span><span class="td-sname row-sub">open ${tags}</span>${editor ? `<button class="btn btn-sm btn-ghost" data-addname="${s.id}" type="button" title="Put someone in this time yourself">+ add name</button>` : ""}</div>`;
+        if (!su) return `<div class="td-srow td-srow-open" data-slot="${s.id}"><span class="td-grip td-grip-none"></span><span class="td-stime">${fmtClock(s.min)}</span><span class="td-sname row-sub">open ${tags}</span>${editor ? `<button class="btn btn-sm btn-ghost" data-addname="${s.id}" type="button" title="Put someone in this time yourself">+ add name</button>` : ""}</div>`;
         const digits = String(su.phone || "").replace(/\D/g, "");
         const tel = digits.length === 10 ? "+1" + digits : digits ? "+" + digits : "";
         const msg = `Reminder: your tithing declaration with the bishop is ${fmtLongDay(s.date)} at ${fmtClock(s.min)}${s.place === "home" ? " at your home" : " at the Bishop's office"}.`;
-        return `<div class="td-srow">
+        return `<div class="td-srow${su.status ? " td-st-" + esc(su.status) : ""}" data-slot="${s.id}">
+          ${editor ? `<span class="td-grip" draggable="true" data-grip="${s.id}" title="Drag onto another time to move it (or onto someone to swap). Click for a list of open times.">⋮⋮</span>` : `<span class="td-grip td-grip-none"></span>`}
           <span class="td-stime">${fmtClock(s.min)}</span>
-          <span class="td-sname"><b>${esc(su.name)}</b> ${tags}${s.orphan ? `<span class="td-tag td-tag-warn" title="This time is no longer in your availability">⚠ outside your times</span>` : ""}
+          <span class="td-sname"${su.phone ? ` title="${esc(su.phone)}"` : ""}><b>${esc(su.name)}</b> ${tags}${s.orphan ? `<span class="td-tag td-tag-warn" title="This time is no longer in your availability">⚠ outside your times</span>` : ""}
             ${su.address ? `<span class="row-sub td-saddr">${esc(su.address)}</span>` : ""}</span>
           ${su.phone ? `<span class="td-sphone"><a href="tel:${esc(tel)}">${esc(su.phone)}</a>${tel ? ` <a class="btn btn-sm" href="sms:${esc(tel)}?&body=${encodeURIComponent(msg)}" title="Opens a text message with the reminder already written">Text reminder</a>` : ""}</span>` : `<span class="td-sphone row-sub">no phone</span>`}
+          ${editor ? `<span class="td-status" data-for="${s.id}">
+            <button type="button" class="td-st-btn td-st-yes${su.status === "attended" ? " on" : ""}" data-status="attended" title="They came">✓<span class="td-st-lbl"> Came</span></button>
+            <button type="button" class="td-st-btn td-st-no${su.status === "noshow" ? " on" : ""}" data-status="noshow" title="They didn't come">✗<span class="td-st-lbl"> No-show</span></button>
+          </span>` : (su.status ? `<span class="row-sub">${esc(STATUS[su.status] || "")}</span>` : "")}
           ${editor ? `<button class="btn btn-sm btn-ghost td-x" data-rmsign="${s.id}" title="Remove this sign-up and open the time back up">✕</button>` : ""}
         </div>`;
       }).join("")}
@@ -191,13 +199,40 @@ function render() {
     <div class="card">
       <h3 style="margin:0 0 .5rem;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">Schedule
         <span class="pill ${filled ? "pill-approved" : "pill-role-member"}">${filled} of ${upcoming.length} filled</span>
-        ${rowsAll.length ? `<button class="btn btn-sm" id="td-print" type="button" style="margin-left:auto">🖨 Print schedule</button>` : ""}
+        <span class="view-toggle" id="td-sview" style="margin-left:auto">
+          <button class="chip${schedView === "cols" ? " active" : ""}" data-sview="cols" type="button" title="Every day side by side">By day</button>
+          <button class="chip${schedView === "list" ? " active" : ""}" data-sview="list" type="button" title="One list, with phone numbers and text reminders">List</button>
+        </span>
+        ${rowsAll.length ? `<button class="btn btn-sm" id="td-print" type="button">🖨 Print schedule</button>` : ""}
       </h3>
-      ${futureD.length ? futureD.map(dayBlock).join("") : `<div class="empty-note" style="padding:.6rem">Nothing scheduled yet.</div>`}
+      ${futureD.length ? `<div class="td-sched td-sched-${schedView}">${futureD.map(dayBlock).join("")}</div>` : `<div class="empty-note" style="padding:.6rem">Nothing scheduled yet.</div>`}
       ${pastD.length ? `<details class="td-pastwrap"><summary>Past days (${pastD.length})</summary>${pastD.map(dayBlock).join("")}</details>` : ""}
     </div>`;
 
-  mount.innerHTML = share + avail + schedule;
+  // ---------- everyone who signed up / attended this year ----------
+  const people = signups.map((su) => { const p = parseSlotId(su.id); return p ? { ...su, date: p.date, min: p.min } : null; }).filter(Boolean)
+    .sort((x, y) => String(x.name || "").localeCompare(String(y.name || "")) || x.date.localeCompare(y.date));
+  const years = [...new Set(people.map((r) => r.date.slice(0, 4)))].sort();
+  const nAtt = people.filter((r) => r.status === "attended").length, nNo = people.filter((r) => r.status === "noshow").length;
+  const stText = (r) => STATUS[r.status] || (r.date < today ? "Not marked" : "Signed up");
+  const shown = people.filter((r) => listFilter === "all" || (listFilter === "pending" ? !r.status : r.status === listFilter));
+  const fchip = (k, l, n) => `<button type="button" class="chip${listFilter === k ? " active" : ""}" data-lfilter="${k}">${l} <b>${n}</b></button>`;
+  const yearList = people.length ? `
+    <div class="card">
+      <h3 style="margin:0 0 .5rem;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">${esc(years.join(" / ") || "This year")} list
+        <span class="row-sub" style="font-weight:400">everyone who signed up, and who came</span>
+        <button class="btn btn-sm" id="td-print-list" type="button" style="margin-left:auto">🖨 Print list</button>
+      </h3>
+      <div class="td-lfilters">
+        ${fchip("all", "Signed up", people.length)}${fchip("attended", "Attended", nAtt)}${fchip("pending", "Not marked yet", people.length - nAtt - nNo)}${fchip("noshow", "Didn't come", nNo)}
+      </div>
+      <table class="td-list">
+        <thead><tr><th>Name</th><th>Appointment</th><th>Phone</th><th>Status</th></tr></thead>
+        <tbody>${shown.length ? shown.map((r) => `<tr class="${r.status ? "td-st-" + esc(r.status) : ""}"><td><b>${esc(r.name)}</b></td><td>${esc(fmtShortDay(r.date))} · ${fmtClock(r.min)}</td><td>${esc(r.phone || "")}</td><td>${esc(stText(r))}</td></tr>`).join("") : `<tr><td colspan="4" class="row-sub">Nobody in this group.</td></tr>`}</tbody>
+      </table>
+    </div>` : "";
+
+  mount.innerHTML = share + avail + schedule + yearList;
 
   // ---------- wiring ----------
   const qrBox = mount.querySelector("#td-qr");
@@ -215,7 +250,60 @@ function render() {
     catch { toast("Couldn't make the QR code — check your connection"); }
   });
   mount.querySelector("#td-print")?.addEventListener("click", () => printSchedule(rowsAll, byId));
+  mount.querySelectorAll("[data-sview]").forEach((b) => b.addEventListener("click", () => { schedView = b.dataset.sview; render(); }));
+  mount.querySelectorAll("[data-lfilter]").forEach((b) => b.addEventListener("click", () => { listFilter = b.dataset.lfilter; render(); }));
+  mount.querySelector("#td-print-list")?.addEventListener("click", () => printList(people, years, stText));
   if (!editor) return;
+
+  // came / didn't come (click the lit one again to clear it)
+  mount.querySelectorAll(".td-status [data-status]").forEach((b) => b.addEventListener("click", async () => {
+    const id = b.closest(".td-status").dataset.for, su = byId[id]; if (!su) return;
+    const status = su.status === b.dataset.status ? "" : b.dataset.status;
+    try { await updateDoc(doc(db, "tithing", season.token, "signups", id), { status, statusAt: serverTimestamp(), statusBy: ctx.name || "" }); }
+    catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
+  }));
+
+  // move an appointment: drag its grip onto an open time (move) or onto another person (swap)
+  const moveSignup = async (fromId, to) => {
+    const a = byId[fromId], b = byId[to.id];
+    if (!a || fromId === to.id) return;
+    const strip = ({ id, ...rest }) => rest;
+    try {
+      const batch = writeBatch(db), at = (sub, id) => doc(db, "tithing", season.token, sub, id);
+      if (b) { batch.set(at("signups", to.id), strip(a)); batch.set(at("signups", fromId), strip(b)); } // swap — both times stay taken
+      else {
+        batch.set(at("signups", to.id), strip(a));
+        batch.set(at("taken", to.id), { len: to.len, at: serverTimestamp() });
+        batch.delete(at("signups", fromId)); batch.delete(at("taken", fromId));
+      }
+      await batch.commit();
+      toast(b ? `Swapped ${a.name} and ${b.name}` : `Moved ${a.name} to ${fmtShortDay(to.date)} ${fmtClock(to.min)}`);
+    } catch (err) { toast("Couldn't move: " + (err.code || err.message)); }
+  };
+  let dragId = null;
+  const clearDrop = () => mount.querySelectorAll(".td-drop").forEach((r) => r.classList.remove("td-drop"));
+  mount.querySelectorAll("[data-grip]").forEach((g) => {
+    g.addEventListener("dragstart", (e) => { dragId = g.dataset.grip; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", dragId); g.closest(".td-srow").classList.add("td-dragging"); });
+    g.addEventListener("dragend", () => { dragId = null; clearDrop(); mount.querySelectorAll(".td-dragging").forEach((r) => r.classList.remove("td-dragging")); });
+    // no drag on a touch screen? click the grip for a list of open times instead
+    g.addEventListener("click", () => {
+      const su = byId[g.dataset.grip]; if (!su) return;
+      const openSlots = slots.filter((x) => x.date >= today && !byId[x.id]);
+      if (!openSlots.length) return toast("No open times to move to");
+      const el = openModal(`
+        <h3>Move ${esc(su.name)}</h3>
+        <div class="form-grid"><label>New time<select id="tdm-to">${openSlots.map((x) => `<option value="${x.id}">${esc(fmtShortDay(x.date))} · ${fmtClock(x.min)}${x.place === "home" ? " · home visit" : ""}${GROUPS[x.group] ? " · " + esc(GROUPS[x.group].label) : ""}</option>`).join("")}</select></label></div>
+        <div class="modal-actions"><button class="btn" id="tdm-cancel">Cancel</button><button class="btn btn-primary" id="tdm-save">Move</button></div>`);
+      el.querySelector("#tdm-cancel").addEventListener("click", closeModal);
+      el.querySelector("#tdm-save").addEventListener("click", async () => { const to = slots.find((x) => x.id === el.querySelector("#tdm-to").value); closeModal(); if (to) await moveSignup(su.id, to); });
+    });
+  });
+  mount.querySelectorAll(".td-srow[data-slot]").forEach((rowEl) => {
+    const to = slots.find((x) => x.id === rowEl.dataset.slot); if (!to) return; // times outside the availability can't receive
+    rowEl.addEventListener("dragover", (e) => { if (!dragId || dragId === to.id) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; clearDrop(); rowEl.classList.add("td-drop"); });
+    rowEl.addEventListener("dragleave", (e) => { if (!rowEl.contains(e.relatedTarget)) rowEl.classList.remove("td-drop"); });
+    rowEl.addEventListener("drop", async (e) => { if (!dragId || dragId === to.id) return; e.preventDefault(); const from = dragId; dragId = null; clearDrop(); await moveSignup(from, to); });
+  });
 
   mount.querySelector("#td-open").addEventListener("change", async (e) => {
     try { await updateDoc(seasonRef(), { open: e.target.checked }); toast(e.target.checked ? "Sign-ups are open" : "Sign-ups are closed"); }
@@ -335,6 +423,21 @@ async function printFlyer(url) {
     .fly-note { font-size: 13pt; margin: .2in auto 0; max-width: 6in; white-space: pre-wrap; }
     .fly-days { font-size: 12pt; margin: .25in auto 0; max-width: 6.4in; }
     .fly-url { font-size: 10pt; color: #5b6675; margin-top: .3in; word-break: break-all; }`);
+}
+
+function printList(people, years, stText) {
+  const n = (k) => people.filter((r) => r.status === k).length;
+  printWindow("Tithing Declaration list", `
+    <div class="sch"><h1>Tithing Declaration ${esc(years.join(" / "))} <span>${esc(season.ward || "6th Ward")}</span></h1>
+    <p>${people.length} signed up · ${n("attended")} attended · ${n("noshow")} didn't come</p>
+    <table><tr><th>Name</th><th>Appointment</th><th>Phone</th><th>Status</th></tr>
+    ${people.map((r) => `<tr><td><b>${esc(r.name)}</b></td><td>${esc(fmtShortDay(r.date))} · ${fmtClock(r.min)}</td><td>${esc(r.phone || "")}</td><td>${esc(stText(r))}</td></tr>`).join("")}</table></div>`, `
+    @page { size: letter; margin: .5in; }
+    .sch { padding: .1in; } .sch h1 { font-size: 18pt; margin: 0 0 .05in; } .sch h1 span { font-size: 11pt; font-weight: 400; color: #5b6675; margin-left: .5em; }
+    .sch p { margin: 0 0 .15in; color: #5b6675; }
+    table { width: 100%; border-collapse: collapse; } tr { break-inside: avoid; }
+    th { text-align: left; font-size: 9pt; text-transform: uppercase; letter-spacing: .05em; color: #5b6675; border-bottom: 1.5px solid #1f2733; padding: .05in .08in; }
+    td { border-bottom: 1px solid #cfd5dd; padding: .06in .08in; }`);
 }
 
 function printSchedule(rowsAll, byId) {

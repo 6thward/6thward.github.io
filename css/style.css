@@ -1573,9 +1573,9 @@ li:hover > .nt-assign, .rc-todo:hover .nt-assign, .nt-assign:focus { opacity: 1;
 .wc-follow-person b { color: #7a4d00; }
 .wc-follow-person ul { margin: .15rem 0 0; padding-left: 1.1rem; font-size: .9rem; }
 .wc-follow-person li.done { text-decoration: line-through; color: var(--ink-soft); }
-/* Tithing declaration sign-ups — bishop's side, inside Calendar (2026-10-04) */
+/* Tithing declaration sign-ups — bishop's side, inside the Bishop page (2026-10-04) */
 .panel-actions { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
-#cal-tithing > .card + .card { margin-top: .8rem; }
+#bp-tithing > .card + .card { margin-top: .8rem; }
 .td-share { display: flex; gap: 1.2rem; align-items: flex-start; }
 .td-share-main { flex: 1; min-width: 0; }
 .td-link-row { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; }
@@ -1620,3 +1620,36 @@ li:hover > .nt-assign, .rc-todo:hover .nt-assign, .nt-assign:focus { opacity: 1;
   .td-srow { flex-wrap: wrap; } .td-sphone { width: 100%; padding-left: 5.9rem; }
   .td-win-count { margin-left: 0; }
 }
+/* Tithing schedule: drag to move, came / no-show, and the year list (2026-10-04) */
+.td-grip { flex: none; width: 1.1rem; text-align: center; color: #a7b0bd; cursor: grab; user-select: none; font-size: .85rem; letter-spacing: -.1em; }
+.td-grip:hover { color: var(--brand); } .td-grip:active { cursor: grabbing; }
+.td-grip.td-grip-none { cursor: default; }
+.td-srow.td-dragging { opacity: .45; }
+.td-srow.td-drop { background: var(--brand-soft); box-shadow: inset 0 0 0 2px var(--brand); border-radius: 8px; }
+.td-status { flex: none; display: inline-flex; gap: .3rem; }
+.td-st-btn { font: inherit; font-size: .78rem; font-weight: 600; padding: .2rem .55rem; border-radius: 99px; border: 1px solid var(--line); background: #fff; color: var(--ink-soft); cursor: pointer; white-space: nowrap; }
+.td-st-yes:hover, .td-st-yes.on { border-color: #2e7d4f; color: #2e7d4f; } .td-st-yes.on { background: #2e7d4f; color: #fff; }
+.td-st-no:hover, .td-st-no.on { border-color: var(--danger); color: var(--danger); } .td-st-no.on { background: var(--danger); color: #fff; }
+.td-srow.td-st-attended { background: #eef8f1; }
+.td-srow.td-st-noshow { background: #fdf0ee; }
+.td-lfilters { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: .6rem; }
+.td-lfilters .chip b { margin-left: .2rem; }
+.td-list { width: 100%; border-collapse: collapse; font-size: .92rem; }
+.td-list th { text-align: left; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); padding: .35rem .5rem; border-bottom: 1px solid var(--line); }
+.td-list td { padding: .4rem .5rem; border-bottom: 1px solid var(--line); }
+.td-list tr.td-st-attended td:last-child { color: #2e7d4f; font-weight: 700; }
+.td-list tr.td-st-noshow td:last-child { color: var(--danger); font-weight: 700; }
+@media (max-width: 720px) { .td-status { margin-left: 1.8rem; } .td-sphone { padding-left: 7rem; } .td-list th:nth-child(3), .td-list td:nth-child(3) { display: none; } }
+/* Tithing schedule "By day": each day is a column, side by side (2026-10-04) */
+.td-sched-cols { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(14.5rem, 1fr); gap: .7rem; overflow-x: auto; align-items: start; padding-bottom: .4rem; }
+.td-sched-cols .td-sday { margin-top: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: #fff; }
+.td-sched-cols .td-sday-head { flex-direction: column; align-items: flex-start; gap: 0; border-radius: 0; padding: .45rem .6rem; }
+.td-sched-cols .td-srow { gap: .35rem; padding: .3rem .4rem; min-height: 2.2rem; flex-wrap: nowrap; }
+.td-sched-cols .td-stime { width: 4.2rem; font-size: .84rem; }
+.td-sched-cols .td-sname { font-size: .9rem; overflow-wrap: anywhere; line-height: 1.25; }
+.td-sched-cols .td-sphone, .td-sched-cols .td-st-lbl, .td-sched-cols .td-saddr { display: none; }
+.td-sched-cols .td-status { gap: .15rem; margin-left: 0; }
+.td-sched-cols .td-st-btn { padding: .1rem .38rem; }
+.td-sched-cols .td-x, .td-sched-cols [data-addname] { padding: .1rem .3rem; font-size: .78rem; }
+.td-sched-cols .td-grip { width: .8rem; }
+.td-sched-cols .td-tag { margin-left: 0; font-size: .66rem; }
