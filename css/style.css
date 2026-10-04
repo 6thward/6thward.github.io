@@ -1486,3 +1486,21 @@ mark.nt-hl { padding: 0 .15em; border-radius: 3px; color: inherit; }
 .wc-due.wc-due-add { background: transparent; color: #a7b0bd; border: 1px dashed rgba(31,39,51,.25); font-weight: 500; }
 .wc-due.wc-due-add:hover { color: var(--brand); border-color: var(--brand); }
 .wc-due-inp { margin-left: .5rem; font: inherit; font-size: .82rem; padding: .1rem .35rem; border: 1px solid var(--brand); border-radius: 8px; }
+
+/* Ward council members: tag in Users, assignments + item owners on the agenda (2026-10-04) */
+.us-council { display: flex; gap: .55rem; align-items: flex-start; margin-top: .9rem; padding: .55rem .7rem; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+.us-council:has(input:checked) { border-color: var(--brand); background: var(--brand-soft); }
+.us-council input { margin-top: .2rem; width: 1.05rem; height: 1.05rem; }
+.us-council-pill { background: #1f2733; color: #fff; }
+.wc-assign { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .6rem .9rem; }
+.wc-asg { display: flex; flex-direction: column; gap: .2rem; }
+.wc-asg > span { font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); }
+.wc-asg-in { font: inherit; font-weight: 600; padding: .4rem .6rem; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+.wc-asg-in:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.wc-asg b { font-size: 1rem; }
+.wc-owner { display: inline-block; margin-left: .5rem; font-size: .76rem; font-weight: 600; color: var(--brand); background: var(--brand-soft); border-radius: 99px; padding: .08rem .55rem; vertical-align: middle; white-space: nowrap; }
+.wc-owner.wc-owner-edit { cursor: pointer; }
+.wc-owner.wc-owner-edit:hover { filter: brightness(.95); }
+.wc-owner.wc-owner-add { background: transparent; color: #a7b0bd; border: 1px dashed rgba(31,39,51,.25); font-weight: 500; }
+.wc-owner.wc-owner-add:hover { color: var(--brand); border-color: var(--brand); }
+.wc-owner-inp { margin-left: .5rem; font: inherit; font-size: .82rem; padding: .1rem .4rem; border: 1px solid var(--brand); border-radius: 8px; width: 11rem; }

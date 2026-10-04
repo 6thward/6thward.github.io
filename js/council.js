@@ -9,17 +9,20 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1791136522";
-import { ctx, can } from "./app.js?v=1791136522";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1791136522";
-import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791136522";
+import { db } from "./firebase-init.js?v=1791136955";
+import { ctx, can } from "./app.js?v=1791136955";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1791136955";
+import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791136955";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1791136522";
+import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1791136955";
 
 let cards = [];
 let councils = {};    // date -> doc
+let members = [];     // names of ward council members (Users tab → "Ward council member")
+// what a council member can be asked to do at a meeting (2026-10-04)
+const ASSIGN = [["openPrayer", "Opening prayer"], ["thought", "Scripture & thought"], ["training", "Handbook training"], ["closePrayer", "Closing prayer"]];
 let schedule = [];    // council dates (Sundays) set by the bishopric — councils/_dates.dates; empty = every Sunday
 let date = "";        // selected meeting date (YYYY-MM-DD)
 let started = false;
@@ -60,10 +63,15 @@ export function initCouncil() {
   panel.querySelector("#wc-next").addEventListener("click", () => { date = stepDate(date, 1); render(); });
   panel.querySelector("#wc-upcoming").addEventListener("click", () => { date = nextCouncil(); render(); });
   panel.querySelector("#wc-dates")?.addEventListener("click", editDates);
+  onSnapshot(collection(db, "users"), (qs) => {
+    const names = qs.docs.map((d) => d.data()).filter((u) => u.councilMember && !u.revoked && !u.alias && u.name).map((u) => u.name.trim());
+    members = [...new Set(names)].sort((a, b) => a.localeCompare(b));
+    render();
+  }, () => {});
   onSnapshot(collection(db, "board"), (qs) => {
     cards = qs.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
     render();
-  });
+    }, () => {}); // council members without the Member Board page just don't get its items
   onSnapshot(collection(db, "councils"), (qs) => {
     councils = {};
     schedule = [];
@@ -222,6 +230,11 @@ function render() {
     const key = itemKey(it);
     const when = it.discussed ? (it.kind === "board" ? it.t.councilDiscussedAt : it.x.discussedAt) : "";
     const files = (it.kind === "board" ? it.t.councilFiles : it.x.files) || [];
+    // who brought the item (2026-10-04): the council member who added it, or whoever it's reassigned to
+    const ownerName = it.kind === "board" ? (it.t.councilOwner || "") : (it.x.owner || it.x.by || "");
+    const owner = ownerName
+      ? `<span class="wc-owner${editor ? " wc-owner-edit" : ""}"${editor ? ` data-owner="${esc(ownerName)}" title="Owner — click to change"` : ' title="Owner"'}>👤 ${esc(ownerName)}</span>`
+      : (editor && !it.discussed ? `<span class="wc-owner wc-owner-add wc-owner-edit" data-owner="" title="Give this item an owner">+ owner</span>` : "");
     const actions = editor ? `<div class="wc-actions">
           ${it.discussed
             ? `<button class="btn btn-sm btn-ghost" data-act="reopen" title="Put it back on the agenda">↩</button>`
@@ -234,7 +247,7 @@ function render() {
       <div class="wc-row${it.discussed ? " wc-done" : ""}${editor && !it.discussed ? " wc-drag" : ""}" data-key="${key}">
         <div class="wc-num${editor && !it.discussed ? " wc-grip" : ""}"${editor && !it.discussed ? ` draggable="true" title="Drag to reorder"` : ""}>${editor && !it.discussed ? `<span class="wc-grip-dots" aria-hidden="true">⋮⋮</span>` : ""}${n}.</div>
         <div class="wc-main">
-          <div class="wc-head"><div class="wc-title">${person ? `<span class="wc-person-name">${esc(person)}</span> · ` : ""}${esc(title)}${due}</div>${actions}</div>
+          <div class="wc-head"><div class="wc-title">${person ? `<span class="wc-person-name">${esc(person)}</span> · ` : ""}${esc(title)}${owner}${due}</div>${actions}</div>
           ${context}
           ${(editor || notes) ? noteBlock(key, notes, "+ council notes") : ""}
           ${files.length ? `<div class="wc-files">${files.map((f) => `<span class="wc-file" data-file="${esc(f.id)}" title="Open ${esc(f.name)}"><span class="wc-file-ic">${fileIcon(f)}</span><span class="wc-file-name">${esc(f.name)}</span><span class="wc-file-size">${fmtBytes(f.size)}</span>${editor ? `<button type="button" class="wc-file-x" data-rmfile="${esc(f.id)}" title="Remove this attachment">✕</button>` : ""}</span>`).join("")}</div>` : ""}
@@ -244,8 +257,22 @@ function render() {
       </div>`;
   };
 
+  const asg = cdoc.assign || {};
+  const assignCard = `
+    <div class="card wc-assign-card">
+      <h3 style="margin:0 0 .4rem">Assignments</h3>
+      <div class="wc-assign">
+        ${ASSIGN.map(([k, l]) => `<label class="wc-asg"><span>${esc(l)}</span>${editor
+          ? `<input class="wc-asg-in" data-asg="${k}" list="dl-council-members" value="${esc(asg[k] || "")}" placeholder="— unassigned —" autocomplete="off">`
+          : `<b>${asg[k] ? esc(asg[k]) : `<span class="row-sub">—</span>`}</b>`}</label>`).join("")}
+      </div>
+      <datalist id="dl-council-members">${members.map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist>
+      ${editor && !members.length ? `<p class="row-sub" style="margin:.5rem 0 0">Tip: tick “Ward council member” for people on the Users tab and their names appear here as suggestions.</p>` : ""}
+    </div>`;
+
   body.innerHTML = `
-    <div class="card">
+    ${assignCard}
+    <div class="card" style="margin-top:.8rem">
       <h3 style="margin:0 0 .2rem;display:flex;align-items:center;gap:.5rem">Agenda <span class="pill ${open.length ? "pill-approved" : "pill-role-member"}">${open.length}</span>
         ${done.length ? `<span class="row-sub" style="font-weight:400">· ${done.length} discussed</span>` : ""}
         ${!next && !isFuture(date) ? `<span class="row-sub" style="margin-left:auto;font-weight:400">Past meeting — record only</span>` : ""}
@@ -354,13 +381,49 @@ function render() {
     const add = async () => {
       const title = inp.value.trim(); if (!title) return;
       inp.value = "";
-      const extra = [...(cdoc.extra || []), { id: "a" + Math.random().toString(36).slice(2, 9), title, notes: "", discussed: false, createdAt: new Date().toISOString(), by: ctx.name || "" }];
+      const extra = [...(cdoc.extra || []), { id: "a" + Math.random().toString(36).slice(2, 9), title, notes: "", discussed: false, createdAt: new Date().toISOString(), by: ctx.name || "", owner: ctx.name || "" }];
       try { await saveCouncil(date, { extra }); } catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
       setTimeout(() => body.querySelector(".wc-new")?.focus(), 60);
     };
     inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); add(); } });
     inp.addEventListener("blur", () => { if (inp.value.trim()) add(); });
   }
+
+  // assignments: type or pick a council member; saves when the box changes
+  body.querySelectorAll("[data-asg]").forEach((inp) => {
+    const save = async () => {
+      const val = inp.value.trim();
+      if (val === ((cdoc.assign || {})[inp.dataset.asg] || "")) return;
+      try { await saveCouncil(date, { assign: { ...(cdoc.assign || {}), [inp.dataset.asg]: val } }); toast("Saved"); }
+      catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
+    };
+    inp.addEventListener("change", save);
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); inp.blur(); } });
+  });
+  // owner chip → a box in place (council members suggested, any name allowed)
+  body.querySelectorAll(".wc-row [data-owner]").forEach((chip) => chip.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const key = chip.closest(".wc-row").dataset.key;
+    const inp = document.createElement("input");
+    inp.className = "wc-owner-inp"; inp.value = chip.dataset.owner || ""; inp.placeholder = "Owner"; inp.setAttribute("list", "dl-council-members"); inp.autocomplete = "off";
+    chip.replaceWith(inp); inp.focus(); inp.select();
+    let done = false;
+    const finish = async (save) => {
+      if (done) return; done = true;
+      const val = inp.value.trim();
+      try {
+        if (save && val !== (chip.dataset.owner || "")) {
+          if (key.startsWith("x:")) await saveCouncil(date, { extra: (cdoc.extra || []).map((x) => (x.id === key.slice(2) ? { ...x, owner: val } : x)) });
+          else { const [, cardId, todoId] = key.split(":"); const k = cards.find((c) => c.id === cardId); if (k) await saveTodoPatch(k, todoId, (t) => { t.councilOwner = val; }); }
+          toast(val ? "Owner saved" : "Owner removed");
+        }
+      } catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
+      render();
+    };
+    inp.addEventListener("change", () => finish(true));
+    inp.addEventListener("keydown", (ev) => { if (ev.key === "Escape") { ev.preventDefault(); finish(false); } if (ev.key === "Enter") { ev.preventDefault(); finish(true); } });
+    inp.addEventListener("blur", () => setTimeout(() => finish(true), 150));
+  }));
 
   // due date pill → a date box in place; picking a date saves, clearing it removes the due date
   body.querySelectorAll(".wc-row [data-due]").forEach((pill) => pill.addEventListener("click", (e) => {
@@ -451,7 +514,7 @@ function render() {
       } else {
         const id = key.slice(2);
         const item = (cdoc.extra || []).find((x) => x.id === id); if (!item) return;
-        const copy = { ...item, id: "a" + Math.random().toString(36).slice(2, 9), discussed: false, discussedAt: "", carriedFrom: date, createdAt: new Date().toISOString(), by: ctx.name || "" };
+        const copy = { ...item, id: "a" + Math.random().toString(36).slice(2, 9), discussed: false, discussedAt: "", carriedFrom: date, createdAt: new Date().toISOString(), by: ctx.name || "", owner: item.owner || item.by || "" };
         await saveCouncil(target, { extra: [...((councils[target] || {}).extra || []), copy] });
         if (mode === "move") await saveCouncil(date, { extra: (cdoc.extra || []).filter((x) => x.id !== id), order: (cdoc.order || []).filter((o) => o !== key) });
       }

@@ -15,13 +15,13 @@
 // whose profile doc carries `alias: <googleUid>` plus a mirror of the name /
 // organization / calling / pages, so the rules see the same access either
 // way. The table shows one row; the mirror is kept in step on every save.
-import { db } from "./firebase-init.js?v=1791136522";
-import { ctx, AREAS, normalizePerms } from "./app.js?v=1791136522";
+import { db } from "./firebase-init.js?v=1791136955";
+import { ctx, AREAS, normalizePerms } from "./app.js?v=1791136955";
 import {
   collection, onSnapshot, updateDoc, setDoc, deleteDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1791136522";
-import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1791136522";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1791136955";
+import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1791136955";
 
 let sort = { key: "created", dir: 1 }; // default: oldest at the top; click a header for A→Z / Z→A (2026-09-19)
 let users = [];   // profiles (alias PIN docs are folded into their Google row)
@@ -152,7 +152,7 @@ function render() {
     const me = u.uid === ctx.uid;
     return `
     <tr class="${u.revoked ? "us-revoked" : ""}${u.role === "pending" ? " us-waiting" : ""}">
-      <td><b>${esc(u.name || u.email || "—")}</b>${me ? " <span class='row-sub'>(you)</span>" : ""}<div class="us-sub">${signInPill(u)}${u.email && !u.invite && u.role !== "pin" ? ` <span class="row-sub">${esc(u.email)}</span>` : ""}${u.invite ? ` <span class="row-sub">${esc(u.email)}</span>` : ""}</div></td>
+      <td><b>${esc(u.name || u.email || "—")}</b>${me ? " <span class='row-sub'>(you)</span>" : ""}<div class="us-sub">${signInPill(u)}${u.councilMember ? ` <span class="pill us-council-pill" title="Ward council member">Council</span>` : ""}${u.email && !u.invite && u.role !== "pin" ? ` <span class="row-sub">${esc(u.email)}</span>` : ""}${u.invite ? ` <span class="row-sub">${esc(u.email)}</span>` : ""}</div></td>
       <td>${esc(u.organization || "")}</td>
       <td>${esc(u.calling || "")}</td>
       <td class="us-access"><div class="us-pills">${u.revoked ? `<span class="pill pill-muted">—</span>` : accessPills(permsOf(u))}</div></td>
@@ -214,6 +214,7 @@ function editUser(u) {
       </div>`}`}
     </div>
     <datalist id="dl-orgs">${["Bishopric", "Ward Clerk", "Executive Secretary", "Relief Society", "Elders Quorum", "Primary", "Young Women", "Young Men", "Sunday School", "Music", "Missionary", "Temple & Family History"].map((o) => `<option value="${o}">`).join("")}</datalist>
+    <label class="us-council"><input type="checkbox" id="uu-council" ${u?.councilMember ? "checked" : ""}> <span><b>Ward council member</b><div class="row-sub">Gets the Ward Council page, can add agenda items (and is shown as their owner), and can be given council assignments.</div></span></label>
     <h4 style="margin:1rem 0 .3rem">Pages they can open</h4>
     <p class="row-sub" style="margin:0 0 .5rem">Each page is read and write. Unticked pages don't appear for them at all.</p>
     ${bishop ? `<p class="row-sub">The bishop always has every page.</p>` : `
@@ -250,12 +251,16 @@ function editUser(u) {
   }));
   const readPerms = () => Object.fromEntries(AREAS.map((a) => [a.key, el.querySelector(`[data-area="${a.key}"]`)?.checked ? "edit" : ""]));
   const showErr = (m) => { const e = el.querySelector("#uu-err"); e.textContent = m; e.classList.remove("hidden"); };
+  // a council member always has the Ward Council page (2026-10-04)
+  el.querySelector("#uu-council").addEventListener("change", (e) => { const c = el.querySelector('[data-area="council"]'); if (c && e.target.checked) c.checked = true; });
 
   el.querySelector("#uu-save").addEventListener("click", async () => {
     const name = el.querySelector("#uu-name").value.trim();
     const organization = el.querySelector("#uu-org").value.trim();
     const calling = el.querySelector("#uu-calling").value.trim();
     const newPerms = bishop ? null : readPerms();
+    const councilMember = el.querySelector("#uu-council").checked;
+    if (councilMember && newPerms) newPerms.council = "edit";
     if (!name) return showErr("Enter a name.");
     if (newPerms && !AREAS.some((a) => newPerms[a.key])) return showErr("Tick at least one page, or they'd sign in to nothing.");
     const btn = el.querySelector("#uu-save");
@@ -268,7 +273,7 @@ function editUser(u) {
           if (!validPin(newPin)) throw new Error("PIN must be exactly 6 digits.");
           const uid = await createPinAccount(newPin);
           await setDoc(doc(db, "users", uid), {
-            name, organization, calling, role: "pin", perms: newPerms, email: "",
+            name, organization, calling, councilMember, role: "pin", perms: newPerms, email: "",
             createdAt: serverTimestamp(), createdBy: ctx.name || ctx.email || "",
           });
           await setDoc(doc(db, "pins", uid), { pin: newPin, name, updatedAt: serverTimestamp() });
@@ -281,7 +286,7 @@ function editUser(u) {
         if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error("Enter their Google email address.");
         if (users.some((x) => (x.email || "").toLowerCase() === email)) throw new Error("That email already has a profile — edit it in the list.");
         await setDoc(doc(db, "invites", email), {
-          name, organization, calling, perms: newPerms, email,
+          name, organization, calling, councilMember, perms: newPerms, email,
           invitedAt: serverTimestamp(), invitedBy: ctx.name || ctx.email || "",
         });
         closeModal();
@@ -290,20 +295,20 @@ function editUser(u) {
         return;
       }
       if (u.invite) {
-        await updateDoc(doc(db, "invites", u.email), { name, organization, calling, perms: newPerms });
+        await updateDoc(doc(db, "invites", u.email), { name, organization, calling, councilMember, perms: newPerms });
       } else {
-        const patch = { name, organization, calling };
+        const patch = { name, organization, calling, councilMember };
         if (newPerms) { patch.perms = newPerms; if (u.role !== "pin") patch.role = "user"; }
         await updateDoc(doc(db, "users", u.uid), patch);
         if (pins[u.uid]) await updateDoc(doc(db, "pins", u.uid), { name }).catch(() => {});
         // keep the Google user's PIN mirror in step (name / org / calling / pages)
         if (ap) {
-          await updateDoc(doc(db, "users", ap.uid), { name, organization, calling, perms: newPerms || permsOf(u) });
+          await updateDoc(doc(db, "users", ap.uid), { name, organization, calling, councilMember, perms: newPerms || permsOf(u) });
           await updateDoc(doc(db, "pins", ap.uid), { name }).catch(() => {});
         }
         if (newAliasPin) {
           if (!validPin(newAliasPin)) throw new Error("PIN must be exactly 6 digits.");
-          await createAliasPin({ ...u, name, organization, calling }, newAliasPin, newPerms || permsOf(u));
+          await createAliasPin({ ...u, name, organization, calling, councilMember }, newAliasPin, newPerms || permsOf(u));
           toast(`Saved — ${name} can also sign in with PIN ${newAliasPin}`); closeModal(); return;
         }
       }
@@ -319,7 +324,7 @@ function editUser(u) {
 async function createAliasPin(u, pin, perms) {
   const pinUid = await createPinAccount(pin);
   await setDoc(doc(db, "users", pinUid), {
-    alias: u.uid, name: u.name || "", organization: u.organization || "", calling: u.calling || "",
+    alias: u.uid, name: u.name || "", organization: u.organization || "", calling: u.calling || "", councilMember: !!u.councilMember,
     role: "pin", perms, email: "", revoked: !!u.revoked,
     createdAt: serverTimestamp(), createdBy: ctx.name || ctx.email || "",
   });
