@@ -9,14 +9,14 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1791146305";
-import { ctx, can } from "./app.js?v=1791146305";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1791146305";
-import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791146305";
+import { db } from "./firebase-init.js?v=1791146623";
+import { ctx, can } from "./app.js?v=1791146623";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1791146623";
+import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791146623";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1791146305";
+import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1791146623";
 
 let cards = [];
 let councils = {};    // date -> doc
@@ -195,6 +195,50 @@ async function saveTodoPatch(k, todoId, mut) {
   await updateDoc(doc(db, "board", k.id), { todos, updatedAt: serverTimestamp() });
 }
 
+// A small "who?" pop-up under a chip: council members to pick from, or type any name.
+// onPick(name) — "" clears. Clicking away keeps what was typed; Escape cancels.
+function pickName(anchor, current, onPick) {
+  document.querySelector(".wc-who-pop")?.remove();
+  const r = anchor.getBoundingClientRect();
+  const pop = document.createElement("div");
+  pop.className = "wc-who-pop";
+  pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 268)) + window.scrollX + "px";
+  pop.style.top = r.bottom + 4 + window.scrollY + "px";
+  pop.innerHTML = `<input class="wc-who-in" placeholder="Pick or type any name" value="${esc(current)}" autocomplete="off">
+    <div class="wc-who-list"></div>
+    ${current ? `<button type="button" class="wc-who-clear">✕ Remove assignment</button>` : ""}`;
+  document.body.appendChild(pop);
+  const inp = pop.querySelector("input"), list = pop.querySelector(".wc-who-list");
+  let sel = -1, typed = false, closed = false;
+  const draw = () => {
+    const q = typed ? inp.value.trim().toLowerCase() : "";
+    const rows = members.filter((n) => !q || n.toLowerCase().includes(q));
+    list.innerHTML = rows.map((n) => `<div class="wc-asg-opt${n.toLowerCase() === current.toLowerCase() ? " cur" : ""}" data-name="${esc(n)}"><span>${esc(n)}</span></div>`).join("")
+      || `<div class="row-sub" style="padding:.35rem .6rem">${members.length ? "Press Enter to use this name" : "Type a name and press Enter"}</div>`;
+    sel = -1;
+  };
+  const finish = (name) => {
+    if (closed) return; closed = true;
+    document.removeEventListener("mousedown", away, true);
+    pop.remove();
+    if (name !== null && name.trim() !== current) onPick(name.trim());
+  };
+  const away = (e) => { if (!pop.contains(e.target)) finish(typed ? inp.value : null); };
+  const mark = () => list.querySelectorAll(".wc-asg-opt").forEach((o, i) => o.classList.toggle("sel", i === sel));
+  inp.addEventListener("input", () => { typed = true; draw(); });
+  inp.addEventListener("keydown", (e) => {
+    const opts = [...list.querySelectorAll(".wc-asg-opt")];
+    if (e.key === "ArrowDown" && opts.length) { e.preventDefault(); sel = (sel + 1) % opts.length; mark(); opts[sel].scrollIntoView({ block: "nearest" }); }
+    else if (e.key === "ArrowUp" && opts.length) { e.preventDefault(); sel = (sel - 1 + opts.length) % opts.length; mark(); opts[sel].scrollIntoView({ block: "nearest" }); }
+    else if (e.key === "Enter") { e.preventDefault(); finish(sel >= 0 && opts[sel] ? opts[sel].dataset.name : inp.value); }
+    else if (e.key === "Escape") { e.preventDefault(); finish(null); }
+  });
+  list.addEventListener("mousedown", (e) => { const o = e.target.closest(".wc-asg-opt"); if (o) { e.preventDefault(); finish(o.dataset.name); } });
+  pop.querySelector(".wc-who-clear")?.addEventListener("click", () => finish(""));
+  setTimeout(() => document.addEventListener("mousedown", away, true), 0);
+  draw(); inp.focus(); inp.select();
+}
+
 // who last had an assignment before a given meeting: lowercased name -> { name, date }
 function lastAssigned(k, before) {
   const out = new Map();
@@ -222,7 +266,7 @@ function render() {
   const rawNotes = new Map();
   const noteBlock = (key, text, placeholder) => {
     rawNotes.set(key, text || "");
-    return `<div class="wc-cnotes${text ? "" : " wc-cnotes-empty"}${editor ? " wc-cnotes-edit" : ""}" data-cnotes="${key}" title="${editor ? "Click to add notes" : ""}">${text ? notesHtml(text, key, editor) : (editor ? placeholder : "")}</div>`;
+    return `<div class="wc-cnotes${text ? "" : " wc-cnotes-empty"}${editor ? " wc-cnotes-edit" : ""}" data-cnotes="${key}" title="${editor ? "Click to add notes" : ""}">${text ? notesHtml(text, key, editor, null, { assign: true }) : (editor ? placeholder : "")}</div>`;
   };
   const row = (it, n) => {
     const title = it.kind === "board" ? it.t.title : it.x.title;
@@ -243,6 +287,11 @@ function render() {
     const owner = ownerName
       ? `<span class="wc-owner${editor ? " wc-owner-edit" : ""}"${editor ? ` data-owner="${esc(ownerName)}" title="Owner — click to change"` : ' title="Owner"'}>👤 ${esc(ownerName)}</span>`
       : (editor && !it.discussed ? `<span class="wc-owner wc-owner-add wc-owner-edit" data-owner="" title="Give this item an owner">+ owner</span>` : "");
+    // who the item is assigned to (2026-10-04): a council member or anyone else
+    const asgName = (it.kind === "board" ? it.t.councilAssignee : it.x.assignee) || "";
+    const assignee = asgName
+      ? `<span class="wc-assignee${editor ? " wc-assignee-edit" : ""}"${editor ? ` data-assignee="${esc(asgName)}" title="Assigned to — click to change"` : ' title="Assigned to"'}>→ ${esc(asgName)}</span>`
+      : (editor && !it.discussed ? `<span class="wc-assignee wc-assignee-add wc-assignee-edit" data-assignee="" title="Assign this item to someone">+ assign</span>` : "");
     const actions = editor ? `<div class="wc-actions">
           ${it.discussed
             ? `<button class="btn btn-sm btn-ghost" data-act="reopen" title="Put it back on the agenda">↩</button>`
@@ -255,7 +304,7 @@ function render() {
       <div class="wc-row${it.discussed ? " wc-done" : ""}${editor && !it.discussed ? " wc-drag" : ""}" data-key="${key}">
         <div class="wc-num${editor && !it.discussed ? " wc-grip" : ""}"${editor && !it.discussed ? ` draggable="true" title="Drag to reorder"` : ""}>${editor && !it.discussed ? `<span class="wc-grip-dots" aria-hidden="true">⋮⋮</span>` : ""}${n}.</div>
         <div class="wc-main">
-          <div class="wc-head"><div class="wc-title">${person ? `<span class="wc-person-name">${esc(person)}</span> · ` : ""}${esc(title)}${owner}${due}</div>${actions}</div>
+          <div class="wc-head"><div class="wc-title">${person ? `<span class="wc-person-name">${esc(person)}</span> · ` : ""}${esc(title)}${owner}${assignee}${due}</div>${actions}</div>
           ${context}
           ${(editor || notes) ? noteBlock(key, notes, "+ council notes") : ""}
           ${files.length ? `<div class="wc-files">${files.map((f) => `<span class="wc-file" data-file="${esc(f.id)}" title="Open ${esc(f.name)}"><span class="wc-file-ic">${fileIcon(f)}</span><span class="wc-file-name">${esc(f.name)}</span><span class="wc-file-size">${fmtBytes(f.size)}</span>${editor ? `<button type="button" class="wc-file-x" data-rmfile="${esc(f.id)}" title="Remove this attachment">✕</button>` : ""}</span>`).join("")}</div>` : ""}
@@ -278,6 +327,33 @@ function render() {
       ${editor && !members.length ? `<p class="row-sub" style="margin:.5rem 0 0">Tip: tick “Ward council member” for people on the Users tab and their names appear here as suggestions.</p>` : ""}
     </div>`;
 
+  // Follow-ups (2026-10-04): everything assigned at this meeting, grouped by person
+  const follow = new Map(); // lowercased name -> { name, rows: [{ text, done }] }
+  const addFollow = (name, text, done) => {
+    const k = name.toLowerCase();
+    if (!follow.has(k)) follow.set(k, { name, rows: [] });
+    follow.get(k).rows.push({ text, done });
+  };
+  const noteFollow = (title, text) => String(text || "").split("\n").forEach((ln) => {
+    const who = lineWho(ln); if (!who) return;
+    const words = plainLine(ln);
+    addFollow(who, title ? (words ? `${title} — ${words}` : title) : words, /^\s*\[(x|X)\]/.test(ln));
+  });
+  items.forEach((it) => {
+    const title = (it.kind === "board" ? `${it.k.name} · ${it.t.title}` : it.x.title) || "";
+    const who = (it.kind === "board" ? it.t.councilAssignee : it.x.assignee) || "";
+    if (who) addFollow(who, title, false);
+    noteFollow(title, it.kind === "board" ? it.t.councilNotes : it.x.notes);
+  });
+  noteFollow("", cdoc.notes);
+  const followCard = follow.size ? `
+    <div class="card wc-follow-card" style="margin-top:.8rem">
+      <h3 style="margin:0 0 .4rem">Follow-ups <span class="row-sub" style="font-weight:400">· who has what</span></h3>
+      <div class="wc-follow">
+        ${[...follow.values()].sort((a, b) => a.name.localeCompare(b.name)).map((f) => `<div class="wc-follow-person"><b>${esc(f.name)}</b><ul>${f.rows.map((r) => `<li class="${r.done ? "done" : ""}">${esc(r.text)}</li>`).join("")}</ul></div>`).join("")}
+      </div>
+    </div>` : "";
+
   body.innerHTML = `
     ${assignCard}
     <div class="card" style="margin-top:.8rem">
@@ -292,6 +368,7 @@ function render() {
       ${editor ? `<div class="wc-add"><input class="wc-new" placeholder="+ Add an agenda item and press Enter" autocomplete="off"></div>` : ""}
       ${done.length ? `<details class="wc-hist" open><summary>Discussed at this meeting (${done.length})</summary>${done.map((it, i) => row(it, open.length + i + 1)).join("")}</details>` : ""}
     </div>
+    ${followCard}
     <div class="card" style="margin-top:.8rem">
       <h3 style="margin:0 0 .3rem">Meeting notes</h3>
       ${noteBlock("m", cdoc.notes || "", "+ general notes for this meeting")}
@@ -347,6 +424,32 @@ function render() {
       render();
     });
   });
+
+  // assign one line of the notes (a bullet, a to-do…) to someone: "+ assign" or click the name pill
+  body.querySelectorAll(".wc-cnotes-edit .nt-assign, .wc-cnotes-edit .nt-who").forEach((el) => el.addEventListener("click", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const holder = el.closest("[data-aline]"); if (!holder) return;
+    const cut = holder.dataset.aline.lastIndexOf("|");
+    const key = holder.dataset.aline.slice(0, cut), idx = Number(holder.dataset.aline.slice(cut + 1));
+    pickName(el, el.dataset.who || "", async (name) => {
+      try { await saveNote(key, setLineWho(rawNotes.get(key) || "", idx, name)); toast(name ? "Assigned to " + name : "Assignment removed"); }
+      catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
+      render();
+    });
+  }));
+  // assign the whole agenda item
+  body.querySelectorAll(".wc-row [data-assignee]").forEach((chip) => chip.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const key = chip.closest(".wc-row").dataset.key;
+    pickName(chip, chip.dataset.assignee || "", async (val) => {
+      try {
+        if (key.startsWith("x:")) await saveCouncil(date, { extra: (cdoc.extra || []).map((x) => (x.id === key.slice(2) ? { ...x, assignee: val } : x)) });
+        else { const [, cardId, todoId] = key.split(":"); const k = cards.find((c) => c.id === cardId); if (k) await saveTodoPatch(k, todoId, (t) => { t.councilAssignee = val; }); }
+        toast(val ? "Assigned to " + val : "Assignment removed");
+      } catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
+      render();
+    });
+  }));
 
   // notes (per item or per meeting) — click to type, blur / ⌘Enter saves
   body.querySelectorAll("[data-cnotes]").forEach((el) => el.addEventListener("click", () => {

@@ -4,8 +4,9 @@
 //   "[ ] item" / "[x] item" → to-do with a checkbox that ticks in place
 //   two spaces in front     → a sub-point (up to three levels deep)   (2026-10-04)
 //   **words**               → bold;  "Lead-in: rest" → the lead-in is bold
+//   {@Name}                 → that line is assigned to Name (shown as a pill)   (2026-10-04)
 // The text is stored exactly as typed, so it stays readable anywhere.
-import { esc } from "./ui.js?v=1791146305";
+import { esc } from "./ui.js?v=1791146623";
 
 const MAX_LEVEL = 3;
 const levelOf = (indent) => Math.min(MAX_LEVEL, Math.floor(String(indent || "").replace(/\t/g, "  ").length / 2));
@@ -15,11 +16,11 @@ export const HIGHLIGHTS = [["y", "Yellow", "#fff3a3"], ["g", "Green", "#c9f2d0"]
 export const TEXT_COLORS = [["red", "Red", "#c0392b"], ["orange", "Orange", "#c76a12"], ["green", "Green", "#2e7d4f"], ["blue", "Blue", "#1f5fbf"], ["purple", "Purple", "#7a3fb0"]];
 const HL = new Set(HIGHLIGHTS.map((h) => h[0]));
 const COLOR_RE = /\{(y|g|p|b|red|orange|green|blue|purple):([^{}]*)\}/g;
-const stripMarks = (t) => String(t).replace(/\{(?:y|g|p|b|red|orange|green|blue|purple):/g, "").replace(/[{}]/g, "").replace(/\*\*/g, "");
+const stripMarks = (t) => String(t).replace(/\s*\{@[^{}]*\}/g, "").replace(/\{(?:y|g|p|b|red|orange|green|blue|purple):/g, "").replace(/[{}]/g, "").replace(/\*\*/g, "");
 
 // marks only (no lead-in): colours/highlights, then **bold**
 function marks(text) {
-  let h = esc(text);
+  let h = esc(text).replace(/\{@([^{}]+)\}/g, (_, n) => `<span class="nt-who" data-who="${n.trim()}" title="Assigned to ${n.trim()}">→ ${n.trim()}</span>`);
   for (let pass = 0; pass < 2; pass++) { // twice = one level of nesting ({y:{red:x}})
     h = h.replace(COLOR_RE, (_, code, body) => (HL.has(code) ? `<mark class="nt-hl nt-hl-${code}">${body}</mark>` : `<span class="nt-c nt-c-${code}">${body}</span>`));
   }
@@ -59,9 +60,25 @@ export function wrapColor(ta, code) {
   ta.focus(); ta.dispatchEvent(new Event("input"));
 }
 
+// who a line is assigned to ("" = nobody), set / change / clear it, and the line as plain words
+export const lineWho = (line) => { const m = /\{@([^{}]+)\}/.exec(String(line ?? "")); return m ? m[1].trim() : ""; };
+export function setLineWho(text, lineIdx, name) {
+  const lines = String(text || "").split("\n");
+  if (lines[lineIdx] == null) return text;
+  const base = lines[lineIdx].replace(/\s*\{@[^{}]*\}/g, "").replace(/\s+$/, "");
+  const clean = String(name || "").replace(/[{}]/g, "").trim();
+  lines[lineIdx] = clean ? `${base} {@${clean}}` : base;
+  return lines.join("\n");
+}
+export const plainLine = (line) => stripMarks(String(line ?? "").replace(/^\s*(?:[-•*]\s+|\[( |x|X)\]\s*)/, "")).trim();
+
 // attrFn(lineIndex) → the data attribute for a to-do checkbox (default: data-todo-line="key|idx")
-export function notesHtml(text, key, editable, attrFn) {
+// opts.assign → each line carries data-aline="key|idx" and list lines get a "+ assign" button
+export function notesHtml(text, key, editable, attrFn, opts) {
   const attr = attrFn || ((i) => `data-todo-line="${esc(key)}|${i}"`);
+  const canAssign = !!(opts && opts.assign && editable);
+  const aline = (i) => (canAssign ? ` data-aline="${esc(key)}|${i}"` : "");
+  const addBtn = (line) => (canAssign && !lineWho(line) ? `<button type="button" class="nt-assign" title="Assign this to someone">+ assign</button>` : "");
   const lines = String(text || "").split("\n");
   let html = "", inList = false;
   const closeList = () => { if (inList) { html += "</ul>"; inList = false; } };
@@ -71,15 +88,15 @@ export function notesHtml(text, key, editable, attrFn) {
     if ((m = /^(\s*)[-•*]\s+(.*)$/.exec(line)) || (m = /^(\s*)[-•*]()$/.exec(line))) {
       if (!inList) { html += `<ul class="rc-list">`; inList = true; }
       const lvl = levelOf(m[1]);
-      html += `<li class="nt-l${lvl}">${inlineFmt(m[2] || "")}</li>`;
+      html += `<li class="nt-l${lvl}"${aline(i)}>${inlineFmt(m[2] || "")}${m[2] ? addBtn(line) : ""}</li>`;
     } else if ((m = /^(\s*)\[( |x|X)\]\s*(.*)$/.exec(line))) {
       closeList();
       const done = m[2].toLowerCase() === "x", lvl = levelOf(m[1]);
-      html += `<label class="rc-todo nt-l${lvl}${done ? " done" : ""}"><input type="checkbox" ${attr(i)} ${done ? "checked" : ""} ${editable ? "" : "disabled"}> <span>${inlineFmt(m[3])}</span></label>`;
+      html += `<label class="rc-todo nt-l${lvl}${done ? " done" : ""}"${aline(i)}><input type="checkbox" ${attr(i)} ${done ? "checked" : ""} ${editable ? "" : "disabled"}> <span>${inlineFmt(m[3])}${m[3] ? addBtn(line) : ""}</span></label>`;
     } else if (line.trim() === "") {
       closeList(); html += `<div class="rc-gap"></div>`;
     } else {
-      closeList(); html += `<div>${inlineFmt(line)}</div>`;
+      closeList(); html += `<div${aline(i)}>${inlineFmt(line)}</div>`;
     }
   });
   closeList();

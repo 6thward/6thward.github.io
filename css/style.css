@@ -1550,3 +1550,26 @@ mark.nt-hl { padding: 0 .15em; border-radius: 3px; color: inherit; }
 .wc-info:hover, .wc-info:focus { color: var(--brand); outline: none; }
 .wc-info::after { content: attr(data-tip); display: none; position: absolute; left: 0; top: calc(100% + 6px); z-index: 30; width: min(22rem, 80vw); background: #1f2733; color: #fff; font-size: .82rem; font-weight: 400; line-height: 1.4; letter-spacing: 0; text-align: left; padding: .55rem .7rem; border-radius: 9px; box-shadow: 0 8px 22px rgba(31,39,51,.25); white-space: normal; }
 .wc-info:hover::after, .wc-info:focus::after { display: block; }
+/* Assign an agenda item, or one line of its notes, to someone (2026-10-04) */
+.wc-assignee { display: inline-block; margin-left: .5rem; font-size: .76rem; font-weight: 700; color: #7a4d00; background: #fdebc8; border-radius: 99px; padding: .08rem .55rem; vertical-align: middle; white-space: nowrap; }
+.wc-assignee.wc-assignee-edit { cursor: pointer; }
+.wc-assignee.wc-assignee-edit:hover { filter: brightness(.95); }
+.wc-assignee.wc-assignee-add { background: transparent; color: #a7b0bd; border: 1px dashed rgba(31,39,51,.25); font-weight: 500; }
+.wc-assignee.wc-assignee-add:hover { color: #7a4d00; border-color: #c9962e; }
+.nt-who { display: inline-block; margin-left: .35rem; font-size: .78em; font-weight: 700; color: #7a4d00; background: #fdebc8; border-radius: 99px; padding: .02rem .5rem; white-space: nowrap; vertical-align: baseline; }
+.wc-cnotes-edit .nt-who { cursor: pointer; }
+.wc-cnotes-edit .nt-who:hover { filter: brightness(.95); }
+.nt-assign { margin-left: .4rem; border: 1px dashed rgba(31,39,51,.25); background: transparent; color: #8a94a3; font: inherit; font-size: .72em; padding: 0 .45rem; border-radius: 99px; cursor: pointer; opacity: 0; transition: opacity .12s; vertical-align: baseline; }
+li:hover > .nt-assign, .rc-todo:hover .nt-assign, .nt-assign:focus { opacity: 1; }
+.nt-assign:hover { color: #7a4d00; border-color: #c9962e; }
+@media (hover: none) { .nt-assign { opacity: .65; } }
+.wc-who-pop { position: absolute; z-index: 80; width: 16.25rem; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 30px rgba(31,39,51,.2); padding: .4rem; }
+.wc-who-in { width: 100%; font: inherit; font-size: .93rem; padding: .4rem .55rem; border: 1px solid var(--line); border-radius: 8px; margin-bottom: .25rem; }
+.wc-who-in:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.wc-who-list { max-height: 15rem; overflow-y: auto; }
+.wc-who-list .wc-asg-opt.cur span::after { content: " ✓"; color: var(--brand); }
+.wc-who-clear { display: block; width: 100%; text-align: left; border: none; border-top: 1px solid var(--line); background: none; cursor: pointer; font: inherit; font-size: .85rem; color: var(--danger); padding: .45rem .6rem .25rem; margin-top: .25rem; }
+.wc-follow { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: .5rem 1.4rem; }
+.wc-follow-person b { color: #7a4d00; }
+.wc-follow-person ul { margin: .15rem 0 0; padding-left: 1.1rem; font-size: .9rem; }
+.wc-follow-person li.done { text-decoration: line-through; color: var(--ink-soft); }
