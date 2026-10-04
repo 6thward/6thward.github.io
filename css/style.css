@@ -1427,3 +1427,8 @@ mark.nt-hl { padding: 0 .15em; border-radius: 3px; color: inherit; }
 .nt-sw { width: 1.25rem; height: 1.25rem; border-radius: 5px; border: 1px solid rgba(31,39,51,.2); cursor: pointer; padding: 0; font: 700 .8rem/1 inherit; display: inline-flex; align-items: center; justify-content: center; }
 .nt-sw-text { background: #fff; }
 .nt-sw:hover { transform: scale(1.15); border-color: var(--ink); }
+
+/* Ward Council: carry an item to next week (2026-10-04) */
+.wc-nextwk { white-space: nowrap; }
+.wc-nextwk-box { display: inline-flex; align-items: center; gap: .3rem; flex-wrap: wrap; justify-content: flex-end; }
+.wc-actions { display: flex; align-items: center; gap: .3rem; flex-wrap: wrap; justify-content: flex-end; }

@@ -9,13 +9,13 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1791133328";
-import { ctx, can } from "./app.js?v=1791133328";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1791133328";
+import { db } from "./firebase-init.js?v=1791133518";
+import { ctx, can } from "./app.js?v=1791133518";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1791133518";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, fmtDate } from "./ui.js?v=1791133328";
+import { toast, esc, fmtDate } from "./ui.js?v=1791133518";
 
 let cards = [];
 let councils = {};    // date -> doc
@@ -77,7 +77,11 @@ function itemsFor(d) {
     if (t.done && !t.councilDiscussedAt) return;
     const discussedOn = t.councilDiscussedAt ? String(t.councilDiscussedAt).slice(0, 10) : "";
     if (discussedOn === d) fromBoard.push({ kind: "board", k, t, discussed: true });          // discussed at this meeting
-    else if (t.council && !t.done && !discussedOn && isNextAgenda(d)) fromBoard.push({ kind: "board", k, t, discussed: false }); // waiting for the next one
+    else if (t.council && !t.done && !discussedOn) {
+      // waiting for the next council — unless it was moved to a later meeting (councilNotBefore, 2026-10-04)
+      const nb = t.councilNotBefore || "";
+      if (nb ? (d === nb || (isNextAgenda(d) && d >= nb)) : isNextAgenda(d)) fromBoard.push({ kind: "board", k, t, discussed: false });
+    }
   }));
   const extra = ((councils[d] && councils[d].extra) || []).map((x) => ({ kind: "extra", x, discussed: !!x.discussed }));
   // drag-to-reorder (2026-10-04): the meeting's doc keeps the agenda order as a list of item keys
@@ -137,7 +141,8 @@ function render() {
         ${editor ? `<div class="wc-actions">
           ${it.discussed
             ? `<button class="btn btn-sm btn-ghost" data-act="reopen" title="Put it back on the agenda">↩</button>`
-            : `<button class="btn btn-sm" data-act="discussed" title="Discussed — moves to this meeting's record${it.kind === "board" ? "; the to-do stays on the card" : ""}">Discussed ✓</button>
+            : `<button class="btn btn-sm btn-ghost wc-nextwk" data-next="1" title="Carry this item to next week's agenda (${fmtDay(shiftWeek(date, 1))})">→ Next week</button>
+               <button class="btn btn-sm" data-act="discussed" title="Discussed — moves to this meeting's record${it.kind === "board" ? "; the to-do stays on the card" : ""}">Discussed ✓</button>
                <button class="btn btn-sm btn-ghost" data-act="remove" title="${it.kind === "board" ? "Take off the agenda (unflags the to-do)" : "Delete this agenda item"}">✕</button>`}
         </div>` : ""}
       </div>`;
@@ -261,6 +266,38 @@ function render() {
     inp.addEventListener("blur", () => { if (inp.value.trim()) add(); });
   }
 
+  // "→ Next week": move the item to next week's agenda, or put a copy there (2026-10-04)
+  body.querySelectorAll(".wc-row [data-next]").forEach((b) => b.addEventListener("click", () => {
+    const rowEl = b.closest(".wc-row"), key = rowEl.dataset.key;
+    const nextDate = shiftWeek(date, 1);
+    const isBoard = key.startsWith("b:");
+    const box = document.createElement("span");
+    box.className = "wc-nextwk-box";
+    box.innerHTML = `<span class="row-sub">To ${fmtDay(nextDate)}:</span><button class="btn btn-sm btn-primary" data-go="move" type="button" title="Take it off this agenda and put it on next week's">Move</button>${isBoard ? "" : `<button class="btn btn-sm" data-go="copy" type="button" title="Leave it here and add a copy to next week's agenda">Copy</button>`}<button class="btn btn-sm btn-ghost" data-go="cancel" type="button">Cancel</button>`;
+    b.replaceWith(box);
+    box.querySelector('[data-go="cancel"]').addEventListener("click", () => render());
+    const go = async (mode) => {
+      try {
+        if (isBoard) {
+          // a Member Board item just waits for a later meeting
+          const [, cardId, todoId] = key.split(":");
+          const k = cards.find((c) => c.id === cardId); if (!k) return;
+          await saveTodoPatch(k, todoId, (t) => { t.council = true; t.councilNotBefore = nextDate; });
+        } else {
+          const id = key.slice(2);
+          const item = (cdoc.extra || []).find((x) => x.id === id); if (!item) return;
+          const copy = { ...item, id: "a" + Math.random().toString(36).slice(2, 9), discussed: false, discussedAt: "", carriedFrom: date, createdAt: new Date().toISOString(), by: ctx.name || "" };
+          const nextDoc = councils[nextDate] || {};
+          await saveCouncil(nextDate, { extra: [...(nextDoc.extra || []), copy] });
+          if (mode === "move") await saveCouncil(date, { extra: (cdoc.extra || []).filter((x) => x.id !== id), order: (cdoc.order || []).filter((o) => o !== key) });
+        }
+        toast(mode === "move" ? `Moved to ${fmtDay(nextDate)}` : `Copied to ${fmtDay(nextDate)}`);
+      } catch (e) { toast("Couldn't save: " + (e.code || e.message)); render(); }
+    };
+    box.querySelector('[data-go="move"]').addEventListener("click", () => go("move"));
+    box.querySelector('[data-go="copy"]')?.addEventListener("click", () => go("copy"));
+  }));
+
   // row actions
   body.querySelectorAll(".wc-row [data-act]").forEach((b) => b.addEventListener("click", async () => {
     const key = b.closest(".wc-row").dataset.key;
@@ -276,8 +313,8 @@ function render() {
         const [, cardId, todoId] = key.split(":");
         const k = cards.find((c) => c.id === cardId); if (!k) return;
         await saveTodoPatch(k, todoId, (t) => {
-          if (act === "discussed") { t.council = false; t.councilDiscussedAt = date + "T12:00:00.000Z"; t.councilDiscussedBy = ctx.name || ""; }
-          else if (act === "remove") { t.council = false; }
+          if (act === "discussed") { t.council = false; t.councilDiscussedAt = date + "T12:00:00.000Z"; t.councilDiscussedBy = ctx.name || ""; delete t.councilNotBefore; }
+          else if (act === "remove") { t.council = false; delete t.councilNotBefore; }
           else if (act === "reopen") { t.council = true; delete t.councilDiscussedAt; delete t.councilDiscussedBy; }
         });
       }
