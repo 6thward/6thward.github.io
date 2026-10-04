@@ -3,13 +3,13 @@
 // added, renamed, reordered and removed. Data:
 //   boardColumns/{id}  { label, order }
 //   board/{id}         { name, notes, column, order, createdAt, updatedAt }
-import { db } from "./firebase-init.js?v=1791132968";
-import { ctx, can } from "./app.js?v=1791132968";
+import { db } from "./firebase-init.js?v=1791133162";
+import { ctx, can } from "./app.js?v=1791133162";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1791132968";
-import { inlineFmt, toggleBold } from "./notes.js?v=1791132968";
+import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1791133162";
+import { notesHtml, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1791133162";
 
 // Next ordinance a person is working toward — shown as a pill beside the name.
 const ORDINANCES = ["Sacrament", "Aaronic Priesthood", "Melchizedek Priesthood", "Endowment", "Sealing"];
@@ -603,31 +603,8 @@ async function saveMeetings(k, meetings) {
   k.meetings = meetings;
   await updateDoc(doc(db, "board", k.id), { meetings, updatedAt: serverTimestamp() });
 }
-// Recap text supports simple lists (2026-09-20):
-//   "- item"  → bullet     "[ ] item" / "[x] item" → to-do checkbox (click to tick)
-function recapHtml(notes, mid, editor) {
-  const lines = String(notes || "").split("\n");
-  let html = "", inList = false;
-  const closeList = () => { if (inList) { html += "</ul>"; inList = false; } };
-  lines.forEach((raw, i) => {
-    const line = raw.replace(/\s+$/, "");
-    let m;
-    if ((m = /^\s*[-•*]\s+(.*)$/.exec(line))) {
-      if (!inList) { html += `<ul class="rc-list">`; inList = true; }
-      html += `<li>${inlineFmt(m[1])}</li>`;
-    } else if ((m = /^\s*\[( |x|X)\]\s*(.*)$/.exec(line))) {
-      closeList();
-      const done = m[1].toLowerCase() === "x";
-      html += `<label class="rc-todo${done ? " done" : ""}"><input type="checkbox" data-rc="${mid}:${i}" ${done ? "checked" : ""} ${editor ? "" : "disabled"}> <span>${inlineFmt(m[2])}</span></label>`;
-    } else if (line.trim() === "") {
-      closeList(); html += `<div class="rc-gap"></div>`;
-    } else {
-      closeList(); html += `<div>${inlineFmt(line)}</div>`;
-    }
-  });
-  closeList();
-  return html;
-}
+// Recap text supports lists, sub-points and bold — rendered by the shared notes.js
+const recapHtml = (notes, mid, editor) => notesHtml(notes, mid, editor, (i) => `data-rc="${mid}:${i}"`);
 // flip "[ ]" ↔ "[x]" on one line of one recap and save
 async function toggleRecapTodo(k, mid, lineIdx) {
   const next = (k.meetings || []).map((m) => {
@@ -638,29 +615,6 @@ async function toggleRecapTodo(k, mid, lineIdx) {
   });
   await saveMeetings(k, next);
 }
-// textarea helpers: prefix the current line, and continue a list on Enter
-function lineStart(ta) { return ta.value.lastIndexOf("\n", ta.selectionStart - 1) + 1; }
-function prefixLine(ta, prefix) {
-  const st = lineStart(ta);
-  const cur = ta.value.slice(st).split("\n")[0];
-  const stripped = cur.replace(/^\s*(?:[-•*]\s+|\[( |x|X)\]\s*)/, "");
-  const already = cur.startsWith(prefix);
-  const repl = already ? stripped : prefix + stripped;
-  ta.setRangeText(repl, st, st + cur.length, "end");
-  ta.focus(); ta.dispatchEvent(new Event("input"));
-}
-function continueList(ta, e) {
-  if (e.key !== "Enter" || e.shiftKey) return;
-  const st = lineStart(ta);
-  const cur = ta.value.slice(st, ta.selectionStart);
-  const m = /^(\s*)(?:([-•*])\s+|\[( |x|X)\]\s*)(.*)$/.exec(cur);
-  if (!m) return;
-  e.preventDefault();
-  const prefix = m[2] ? `${m[1]}${m[2]} ` : `${m[1]}[ ] `;
-  if (!m[4].trim()) { ta.setRangeText("", st, ta.selectionStart, "end"); return; } // empty item → leave the list
-  ta.setRangeText("\n" + prefix, ta.selectionStart, ta.selectionEnd, "end");
-}
-
 function openMeetings(k, editingId) {
   const editor = can("board", "edit");
   const ms = meetingsOf(k);
@@ -675,7 +629,7 @@ function openMeetings(k, editingId) {
           <span class="row-sub">${editing ? "Editing this recap" : "New recap"}</span>
           ${editing ? `<button class="btn btn-sm btn-ghost btn-danger" id="mr-del" type="button" style="margin-left:auto">Delete</button>` : ""}
         </div>
-        <div class="rc-tools"><button class="btn btn-sm" type="button" data-rcprefix="- " title="Bullet point">• Bullet</button><button class="btn btn-sm" type="button" data-rcprefix="[ ] " title="To-do with a checkbox">☐ To-do</button><button class="btn btn-sm nt-bold" type="button" id="mr-bold" title="Bold the selected words (⌘B)"><b>B</b></button><span class="row-sub">A name before a colon is bolded for you</span></div>
+        <div class="rc-tools" id="mr-tools">${toolbarHtml("Tab makes a sub-point")}</div>
         <textarea id="mr-notes" placeholder="What was discussed, what was decided, what's next…" style="width:100%;box-sizing:border-box;min-height:6rem;padding:.55rem .65rem;border:1.5px solid var(--line);border-radius:8px;font:inherit;font-size:.92rem">${esc(editing ? editing.notes : "")}</textarea>
         <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.5rem">
           ${editing ? `<button class="btn" id="mr-cancel-edit" type="button">Cancel edit</button>` : ""}
@@ -700,9 +654,8 @@ function openMeetings(k, editingId) {
     await toggleRecapTodo(k, mid, Number(idx)); openMeetings(k, editingId);
   }));
   const ta = el.querySelector("#mr-notes");
-  el.querySelectorAll("[data-rcprefix]").forEach((b) => b.addEventListener("click", () => prefixLine(ta, b.dataset.rcprefix)));
-  ta.addEventListener("keydown", (e) => { if ((e.key === "b" || e.key === "B") && (e.metaKey || e.ctrlKey)) { e.preventDefault(); toggleBold(ta); } else continueList(ta, e); });
-  el.querySelector("#mr-bold")?.addEventListener("click", () => toggleBold(ta));
+  wireToolbar(el.querySelector("#mr-tools"), ta);
+  ta.addEventListener("keydown", (e) => handleNoteKeys(ta, e));
   if (editing) { // ✎ → land in the text, ready to type
     setTimeout(() => { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); ta.scrollIntoView({ block: "center" }); }, 40);
   }

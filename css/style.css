@@ -1408,3 +1408,12 @@ th.us-sort:hover, th.us-sort.on { color: var(--brand); }
 /* notes: bold lead-in / **bold** (2026-10-04) */
 .nt-lead { font-weight: 700; }
 .nt-bold b { font-weight: 800; }
+
+/* notes: sub-points — indented bullets and to-dos, up to three levels (2026-10-04) */
+.rc-list li.nt-l1 { margin-left: 1.3rem; list-style-type: circle; }
+.rc-list li.nt-l2 { margin-left: 2.6rem; list-style-type: square; }
+.rc-list li.nt-l3 { margin-left: 3.9rem; list-style-type: "– "; }
+.rc-todo.nt-l1 { margin-left: 1.5rem !important; }
+.rc-todo.nt-l2 { margin-left: 3rem !important; }
+.rc-todo.nt-l3 { margin-left: 4.5rem !important; }
+.wc-tools, .rc-tools { flex-wrap: wrap; }
