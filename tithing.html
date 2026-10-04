@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Tithing Declaration Sign-up</title>
+<link rel="icon" href="assets/program-logo.jpg">
+<style>
+  :root { --ink: #1f2733; --soft: #5b6675; --line: #d9dee5; --brand: #1f4e79; --brand-soft: #eaf1f8; --ok: #2e7d4f; --danger: #b3402f; --bg: #f3f5f8; --fam: #1f5fbf; --fam-soft: #e3eefc; --wid: #7a3fb0; --wid-soft: #f1e7fa; color-scheme: light; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  #td { max-width: 40rem; margin: 0 auto; padding: 1rem .9rem 4rem; }
+  .td-card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 1.05rem 1.1rem 1.15rem; margin-top: .9rem; }
+  .td-intro h1 { margin: 0; font-size: 1.6rem; letter-spacing: -.01em; }
+  .td-intro p { margin: .5rem 0 0; }
+  .td-ward { color: var(--soft); font-weight: 600; margin-top: .1rem !important; }
+  .td-note { background: var(--brand-soft); border-radius: 10px; padding: .6rem .75rem; white-space: pre-wrap; }
+  .td-legend { font-size: .92rem; color: var(--soft); }
+  .td-day h2 { margin: 0 0 .6rem; font-size: 1.2rem; }
+  .td-win { border-top: 1px solid #eef1f4; padding: .7rem 0 .2rem; }
+  .td-day h2 + .td-win { border-top: none; padding-top: 0; }
+  .td-win-head { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .6rem; margin-bottom: .55rem; font-size: .92rem; }
+  .td-place { font-weight: 600; }
+  .td-len { color: var(--soft); font-size: .85rem; }
+  .td-flag { display: inline-block; font-size: .78rem; font-weight: 700; border-radius: 99px; padding: .12rem .6rem; }
+  .td-flag-fam { color: var(--fam); background: var(--fam-soft); }
+  .td-flag-wid { color: var(--wid); background: var(--wid-soft); }
+  .td-flag-block { display: block; border-radius: 10px; padding: .55rem .7rem; font-size: .9rem; font-weight: 600; margin: .6rem 0 0; }
+  .td-slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(5.6rem, 1fr)); gap: .45rem; }
+  .td-slot { font: inherit; font-weight: 600; font-variant-numeric: tabular-nums; text-align: center; padding: .6rem .2rem; border-radius: 10px; border: 1.5px solid var(--brand); background: #fff; color: var(--brand); cursor: pointer; }
+  .td-slot:hover, .td-slot:focus-visible { background: var(--brand); color: #fff; outline: none; }
+  .td-win-fam .td-slot { border-color: var(--fam); color: var(--fam); }
+  .td-win-fam .td-slot:hover, .td-win-fam .td-slot:focus-visible { background: var(--fam); color: #fff; }
+  .td-win-wid .td-slot { border-color: var(--wid); color: var(--wid); }
+  .td-win-wid .td-slot:hover, .td-win-wid .td-slot:focus-visible { background: var(--wid); color: #fff; }
+  .td-slot.td-slot-taken, .td-win-fam .td-slot.td-slot-taken, .td-win-wid .td-slot.td-slot-taken { border-color: #e3e7ec; color: #b4bcc7; background: #f6f7f9; text-decoration: line-through; cursor: default; }
+  .td-mine { display: flex; gap: .8rem; align-items: flex-start; border-color: #b9dcc6; background: #eef8f1; }
+  .td-tick { flex: none; width: 2.2rem; height: 2.2rem; border-radius: 50%; background: var(--ok); color: #fff; font-size: 1.2rem; line-height: 2.2rem; text-align: center; }
+  .td-sub { color: var(--soft); font-size: .88rem; margin-top: .2rem; }
+  .td-msg { text-align: center; padding: 2rem 1.2rem; }
+  .td-msg h2 { margin: 0 0 .4rem; font-size: 1.25rem; }
+  .td-msg p { margin: 0; color: var(--soft); }
+  .td-loading { text-align: center; color: var(--soft); padding: 3rem 1rem; }
+  .td-foot { text-align: center; color: var(--soft); font-size: .82rem; margin: 1.2rem 0 0; }
+  .td-sheet-bg { position: fixed; inset: 0; background: rgba(20,28,38,.5); display: flex; align-items: flex-end; justify-content: center; z-index: 50; }
+  .td-sheet-bg[hidden] { display: none; }
+  .td-sheet { background: #fff; width: 100%; max-width: 30rem; border-radius: 18px 18px 0 0; padding: 1.2rem 1.15rem calc(1.2rem + env(safe-area-inset-bottom)); max-height: 92vh; overflow-y: auto; }
+  .td-sheet h2 { margin: 0; font-size: 1.3rem; }
+  .td-when { margin: .25rem 0 0; color: var(--soft); font-weight: 600; }
+  .td-field { display: flex; flex-direction: column; gap: .25rem; margin-top: .85rem; }
+  .td-field > span { font-size: .9rem; font-weight: 600; }
+  .td-field i { font-weight: 400; color: var(--soft); font-style: normal; }
+  .td-field input { font: inherit; color: inherit; width: 100%; padding: .7rem .75rem; border: 1.5px solid var(--line); border-radius: 10px; background: #fff; }
+  .td-field input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(31,78,121,.15); }
+  .td-err { color: var(--danger); background: #fbe7e3; border-radius: 10px; padding: .6rem .75rem; margin: .8rem 0 0; font-weight: 600; }
+  .td-actions { display: flex; gap: .6rem; margin-top: 1rem; }
+  .td-btn { font: inherit; font-weight: 600; border-radius: 10px; padding: .8rem 1.1rem; cursor: pointer; border: 1.5px solid var(--line); background: #fff; color: var(--ink); }
+  .td-btn-primary { flex: 1; background: var(--brand); border-color: var(--brand); color: #fff; font-size: 1.05rem; }
+  .td-btn-primary:disabled { opacity: .6; cursor: default; }
+  @media (min-width: 640px) { .td-sheet-bg { align-items: center; } .td-sheet { border-radius: 18px; } }
+</style>
+</head>
+<body>
+<div id="td"><div class="td-loading">Opening the sign-up…</div></div>
+<script type="module">
+  import { initTithingForm } from "./js/tithing-form.js?v=1791157953";
+  initTithingForm(document.getElementById("td"), new URLSearchParams(location.search).get("k") || "");
+</script>
+</body>
+</html>

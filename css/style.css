@@ -1573,3 +1573,50 @@ li:hover > .nt-assign, .rc-todo:hover .nt-assign, .nt-assign:focus { opacity: 1;
 .wc-follow-person b { color: #7a4d00; }
 .wc-follow-person ul { margin: .15rem 0 0; padding-left: 1.1rem; font-size: .9rem; }
 .wc-follow-person li.done { text-decoration: line-through; color: var(--ink-soft); }
+/* Tithing declaration sign-ups — bishop's side, inside Calendar (2026-10-04) */
+.panel-actions { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+#cal-tithing > .card + .card { margin-top: .8rem; }
+.td-share { display: flex; gap: 1.2rem; align-items: flex-start; }
+.td-share-main { flex: 1; min-width: 0; }
+.td-link-row { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; }
+.td-link { flex: 1; min-width: 12rem; font: inherit; font-size: .85rem; padding: .45rem .6rem; border: 1px solid var(--line); border-radius: 9px; background: #f6f8fa; color: var(--ink-soft); }
+.td-share-actions { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin-top: .6rem; }
+.td-open { display: inline-flex; align-items: center; gap: .35rem; font-weight: 600; font-size: .9rem; margin-left: auto; cursor: pointer; }
+.td-open input { width: 1.05rem; height: 1.05rem; }
+.td-note-lbl { display: block; margin-top: .7rem; font-size: .85rem; font-weight: 600; }
+.td-note-lbl textarea { display: block; width: 100%; margin-top: .25rem; font: inherit; font-weight: 400; padding: .45rem .6rem; border: 1px solid var(--line); border-radius: 9px; resize: vertical; }
+.td-qr { flex: none; width: 9.5rem; height: 9.5rem; border: 1px solid var(--line); border-radius: 12px; background: #fff; display: grid; place-items: center; padding: .45rem; text-align: center; }
+.td-qr img { width: 100%; height: 100%; display: block; }
+.td-add { display: flex; flex-wrap: wrap; gap: .5rem .6rem; align-items: flex-end; padding: .7rem; background: #f6f8fa; border: 1px solid var(--line); border-radius: 12px; }
+.td-add label { display: flex; flex-direction: column; gap: .2rem; font-size: .74rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); }
+.td-add input, .td-add select { font: inherit; font-size: .92rem; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--ink); padding: .4rem .5rem; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.td-winlist { margin-top: .6rem; }
+.td-winrow { display: flex; align-items: center; gap: .5rem .6rem; flex-wrap: wrap; padding: .5rem .2rem; border-bottom: 1px solid var(--line); }
+.td-winrow:last-child { border-bottom: none; }
+.td-winrow.td-past { opacity: .6; }
+.td-win-day { min-width: 6.4rem; }
+.td-win-time { min-width: 10.5rem; font-variant-numeric: tabular-nums; }
+.td-win-count { margin-left: auto; }
+.td-pill-len { background: #eef1f4; color: var(--ink-soft); }
+.td-pill-place { background: var(--brand-soft); color: var(--brand); }
+.td-pill-place.td-place-home { background: #fdebc8; color: #7a4d00; }
+.td-pill-fam, .td-tag-fam { background: #e3eefc; color: #1f5fbf; }
+.td-pill-wid, .td-tag-wid { background: #f1e7fa; color: #7a3fb0; }
+.td-x { color: var(--ink-soft); }
+.td-pastwrap { margin-top: .6rem; } .td-pastwrap summary { cursor: pointer; color: var(--ink-soft); font-size: .88rem; padding: .3rem 0; }
+.td-sday { margin-top: .9rem; } .td-sday:first-of-type { margin-top: 0; }
+.td-sday-head { display: flex; align-items: baseline; gap: .6rem; padding: .35rem .5rem; background: var(--brand-soft); border-radius: 8px; color: var(--brand); }
+.td-srow { display: flex; align-items: center; gap: .7rem; padding: .4rem .5rem; border-bottom: 1px solid var(--line); min-height: 2.5rem; }
+.td-srow:last-child { border-bottom: none; }
+.td-stime { flex: none; width: 5.2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.td-sname { flex: 1; min-width: 0; }
+.td-saddr { display: block; }
+.td-sphone { flex: none; display: inline-flex; align-items: center; gap: .45rem; font-size: .9rem; }
+.td-srow-open .td-stime { font-weight: 500; color: var(--ink-soft); }
+.td-tag { display: inline-block; font-size: .72rem; font-weight: 700; border-radius: 99px; padding: .05rem .5rem; margin-left: .3rem; vertical-align: middle; }
+.td-tag-home { background: #fdebc8; } .td-tag-warn { background: #fbe7e3; color: var(--danger); }
+@media (max-width: 720px) {
+  .td-share { flex-direction: column; } .td-qr { align-self: center; }
+  .td-srow { flex-wrap: wrap; } .td-sphone { width: 100%; padding-left: 5.9rem; }
+  .td-win-count { margin-left: 0; }
+}

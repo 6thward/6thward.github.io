@@ -23,7 +23,7 @@ PAGE_IMPORT_RE = re.compile(r'(from\s+"\.\/js\/([\w-]+)\.js)(?:\?v=\d+)?(")')
 # index.html stylesheet: href="css/style.css" or "...?v=OLD"
 STYLE_RE = re.compile(r'(href="css\/style\.css)(?:\?v=\d+)?(")')
 
-targets = list(ROOT.glob("js/*.js")) + [ROOT / "index.html", ROOT / "program.html", ROOT / "selfreliance.html"]  # program.html = public program page (2026-09-20)
+targets = list(ROOT.glob("js/*.js")) + [ROOT / "index.html", ROOT / "program.html", ROOT / "selfreliance.html", ROOT / "tithing.html"]  # program.html = public program page (2026-09-20)
 changed = 0
 for path in targets:
     text = path.read_text()

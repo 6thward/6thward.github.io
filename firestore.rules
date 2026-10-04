@@ -129,6 +129,47 @@ service cloud.firestore {
       allow read, write: if manages();
     }
 
+    // ---- Tithing declaration sign-ups (2026-10-04) ----
+    // tithing/{token} holds the bishop's availability; the token in the public
+    // link is the only key. The public can see WHICH times are gone (taken/),
+    // never who took them (signups/). A sign-up writes both docs in one batch,
+    // and a time that already has a taken-marker can't be claimed again.
+    function tithingDoc(token) {
+      return get(/databases/$(database)/documents/tithing/$(token)).data;
+    }
+    function tithingOpen(token) {
+      return exists(/databases/$(database)/documents/tithing/$(token)) && tithingDoc(token).open == true;
+    }
+    match /tithing/{token} {
+      allow get: if true;                       // the sign-up page reads its own link
+      allow list: if canEdit('calendar');       // tokens can't be enumerated by the public
+      allow write: if canEdit('calendar');
+
+      match /taken/{slotId} {
+        allow read: if true;
+        allow create: if canEdit('calendar') || (tithingOpen(token)
+          && slotId in tithingDoc(token).slots
+          && request.resource.data.keys().hasOnly(['len', 'at'])
+          && request.resource.data.len == tithingDoc(token).slots[slotId]
+          && request.resource.data.at == request.time
+          && existsAfter(/databases/$(database)/documents/tithing/$(token)/signups/$(slotId)));
+        allow delete: if canEdit('calendar');
+      }
+      match /signups/{slotId} {
+        allow read, update, delete: if canEdit('calendar');
+        allow create: if canEdit('calendar') || (tithingOpen(token)
+          && slotId in tithingDoc(token).slots
+          && request.resource.data.keys().hasOnly(['name', 'phone', 'address', 'at'])
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80
+          && request.resource.data.phone is string && request.resource.data.phone.size() <= 30
+          && request.resource.data.address is string && request.resource.data.address.size() <= 160
+          && request.resource.data.at == request.time
+          && !exists(/databases/$(database)/documents/tithing/$(token)/taken/$(slotId))
+          && existsAfter(/databases/$(database)/documents/tithing/$(token)/taken/$(slotId)));
+      }
+    }
+
     // ---- Tasks ----
     match /tasks/{id} {
       allow read: if canView('tasks');
