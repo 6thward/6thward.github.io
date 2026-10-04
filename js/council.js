@@ -9,13 +9,14 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1791135680";
-import { ctx, can } from "./app.js?v=1791135680";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1791135680";
+import { db } from "./firebase-init.js?v=1791136522";
+import { ctx, can } from "./app.js?v=1791136522";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1791136522";
+import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791136522";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1791135680";
+import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1791136522";
 
 let cards = [];
 let councils = {};    // date -> doc
@@ -212,25 +213,34 @@ function render() {
     const person = it.kind === "board" ? it.k.name : "";
     const notes = it.kind === "board" ? it.t.councilNotes : it.x.notes;
     const context = it.kind === "board" && it.t.notes ? `<div class="wc-notes">${esc(it.t.notes)}</div>` : "";
-    const due = it.kind === "board" && it.t.due ? `<span class="wc-due">due ${fmtDay(it.t.due)}</span>` : "";
+    // due date on any item (2026-10-04): a Member Board item uses its to-do's deadline
+    const dueVal = (it.kind === "board" ? it.t.due : it.x.due) || "";
+    const overdue = dueVal && !it.discussed && dueVal < todayIso();
+    const due = dueVal
+      ? `<span class="wc-due${overdue ? " wc-overdue" : ""}${editor ? " wc-due-edit" : ""}"${editor ? ` data-due="${dueVal}" title="Click to change the due date"` : ""}>${overdue ? "⚠ " : ""}due ${fmtDay(dueVal)}</span>`
+      : (editor && !it.discussed ? `<span class="wc-due wc-due-add wc-due-edit" data-due="" title="Add a due date">+ due date</span>` : "");
     const key = itemKey(it);
     const when = it.discussed ? (it.kind === "board" ? it.t.councilDiscussedAt : it.x.discussedAt) : "";
+    const files = (it.kind === "board" ? it.t.councilFiles : it.x.files) || [];
+    const actions = editor ? `<div class="wc-actions">
+          ${it.discussed
+            ? `<button class="btn btn-sm btn-ghost" data-act="reopen" title="Put it back on the agenda">↩</button>`
+            : `<button class="btn btn-sm btn-ghost" data-attach="1" type="button" title="Attach a document, PDF or image">📎 Attach</button>
+               <span class="wc-act-wrap"><button class="btn btn-sm btn-ghost wc-act-btn" data-actions="1" type="button" title="Copy or move this item to another council">Actions ▾</button></span>
+               <button class="btn btn-sm" data-act="discussed" title="Discussed — moves to this meeting's record${it.kind === "board" ? "; the to-do stays on the card" : ""}">Discussed ✓</button>
+               <button class="btn btn-sm btn-ghost" data-act="remove" title="${it.kind === "board" ? "Take off the agenda (unflags the to-do)" : "Delete this agenda item"}">✕</button>`}
+        </div>` : "";
     return `
       <div class="wc-row${it.discussed ? " wc-done" : ""}${editor && !it.discussed ? " wc-drag" : ""}" data-key="${key}">
         <div class="wc-num${editor && !it.discussed ? " wc-grip" : ""}"${editor && !it.discussed ? ` draggable="true" title="Drag to reorder"` : ""}>${editor && !it.discussed ? `<span class="wc-grip-dots" aria-hidden="true">⋮⋮</span>` : ""}${n}.</div>
         <div class="wc-main">
-          <div class="wc-title">${person ? `<span class="wc-person-name">${esc(person)}</span> · ` : ""}${esc(title)}${due}</div>
+          <div class="wc-head"><div class="wc-title">${person ? `<span class="wc-person-name">${esc(person)}</span> · ` : ""}${esc(title)}${due}</div>${actions}</div>
           ${context}
           ${(editor || notes) ? noteBlock(key, notes, "+ council notes") : ""}
+          ${files.length ? `<div class="wc-files">${files.map((f) => `<span class="wc-file" data-file="${esc(f.id)}" title="Open ${esc(f.name)}"><span class="wc-file-ic">${fileIcon(f)}</span><span class="wc-file-name">${esc(f.name)}</span><span class="wc-file-size">${fmtBytes(f.size)}</span>${editor ? `<button type="button" class="wc-file-x" data-rmfile="${esc(f.id)}" title="Remove this attachment">✕</button>` : ""}</span>`).join("")}</div>` : ""}
+          <div class="wc-upload" hidden></div>
           ${it.discussed ? `<div class="row-sub">Discussed${when ? " " + fmtDay(when) : ""}${it.kind === "board" && it.t.councilDiscussedBy ? " · " + esc(it.t.councilDiscussedBy) : ""}</div>` : ""}
         </div>
-        ${editor ? `<div class="wc-actions">
-          ${it.discussed
-            ? `<button class="btn btn-sm btn-ghost" data-act="reopen" title="Put it back on the agenda">↩</button>`
-            : `<span class="wc-act-wrap"><button class="btn btn-sm btn-ghost wc-act-btn" data-actions="1" type="button" title="Copy or move this item to another council">Actions ▾</button></span>
-               <button class="btn btn-sm" data-act="discussed" title="Discussed — moves to this meeting's record${it.kind === "board" ? "; the to-do stays on the card" : ""}">Discussed ✓</button>
-               <button class="btn btn-sm btn-ghost" data-act="remove" title="${it.kind === "board" ? "Take off the agenda (unflags the to-do)" : "Delete this agenda item"}">✕</button>`}
-        </div>` : ""}
       </div>`;
   };
 
@@ -352,6 +362,85 @@ function render() {
     inp.addEventListener("blur", () => { if (inp.value.trim()) add(); });
   }
 
+  // due date pill → a date box in place; picking a date saves, clearing it removes the due date
+  body.querySelectorAll(".wc-row [data-due]").forEach((pill) => pill.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const key = pill.closest(".wc-row").dataset.key;
+    const inp = document.createElement("input");
+    inp.type = "date"; inp.className = "wc-due-inp"; inp.value = pill.dataset.due || "";
+    pill.replaceWith(inp); inp.focus();
+    try { inp.showPicker?.(); } catch { /* not allowed without a direct gesture in some browsers */ }
+    let done = false;
+    const finish = async (save) => {
+      if (done) return; done = true;
+      const val = inp.value || "";
+      try {
+        if (save && val !== (pill.dataset.due || "")) {
+          if (key.startsWith("x:")) await saveCouncil(date, { extra: (cdoc.extra || []).map((x) => (x.id === key.slice(2) ? { ...x, due: val } : x)) });
+          else { const [, cardId, todoId] = key.split(":"); const k = cards.find((c) => c.id === cardId); if (k) await saveTodoPatch(k, todoId, (t) => { t.due = val; }); }
+          toast(val ? "Due date saved" : "Due date removed");
+        }
+      } catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
+      render();
+    };
+    inp.addEventListener("change", () => finish(true));
+    inp.addEventListener("keydown", (ev) => { if (ev.key === "Escape") { ev.preventDefault(); finish(false); } if (ev.key === "Enter") { ev.preventDefault(); finish(true); } });
+    inp.addEventListener("blur", () => setTimeout(() => finish(true), 120));
+  }));
+
+  // ---- attachments on an agenda item (2026-10-04) ----
+  const filesOf = (key) => {
+    if (key.startsWith("x:")) return ((cdoc.extra || []).find((x) => x.id === key.slice(2)) || {}).files || [];
+    const [, cardId, todoId] = key.split(":");
+    return (((cards.find((c) => c.id === cardId) || {}).todos || []).find((t) => t.id === todoId) || {}).councilFiles || [];
+  };
+  const saveFiles = async (key, files) => {
+    if (key.startsWith("x:")) await saveCouncil(date, { extra: (cdoc.extra || []).map((x) => (x.id === key.slice(2) ? { ...x, files } : x)) });
+    else { const [, cardId, todoId] = key.split(":"); const k = cards.find((c) => c.id === cardId); if (k) await saveTodoPatch(k, todoId, (t) => { t.councilFiles = files; }); }
+  };
+  // a copied item points at the same stored file — only delete the bytes when nothing else uses them
+  const fileInUse = (id, exceptKey) =>
+    Object.entries(councils).some(([d, c]) => (c.extra || []).some((x) => `x:${x.id}` !== exceptKey || d !== date ? (x.files || []).some((f) => f.id === id) : false)) ||
+    cards.some((k) => (k.todos || []).some((t) => `b:${k.id}:${t.id}` !== exceptKey && (t.councilFiles || []).some((f) => f.id === id)));
+  const picker = document.createElement("input");
+  picker.type = "file"; picker.multiple = true; picker.accept = ATTACH_ACCEPT; picker.hidden = true;
+  body.appendChild(picker);
+  let attachKey = null;
+  body.querySelectorAll(".wc-row [data-attach]").forEach((b) => b.addEventListener("click", () => { attachKey = b.closest(".wc-row").dataset.key; picker.value = ""; picker.click(); }));
+  picker.addEventListener("change", async () => {
+    const key = attachKey, chosen = [...picker.files];
+    if (!key || !chosen.length) return;
+    const rowEl = [...body.querySelectorAll(".wc-row")].find((r) => r.dataset.key === key);
+    const status = rowEl?.querySelector(".wc-upload");
+    const say = (t) => { if (status) { status.hidden = !t; status.textContent = t; } };
+    const added = [];
+    try {
+      for (const [i, f] of chosen.entries()) {
+        if (f.size > MAX_ATTACH_BYTES) { toast(`“${f.name}” is ${fmtBytes(f.size)} — the limit is ${fmtBytes(MAX_ATTACH_BYTES)}`); continue; }
+        say(`Uploading ${f.name}${chosen.length > 1 ? ` (${i + 1} of ${chosen.length})` : ""}…`);
+        added.push(await uploadAttachment("councils", date, f, (p) => say(`Uploading ${f.name} — ${Math.round(p * 100)}%`)));
+      }
+      if (added.length) { await saveFiles(key, [...filesOf(key), ...added]); toast(added.length === 1 ? "Attached" : `${added.length} files attached`); }
+    } catch (e) { toast("Couldn't attach: " + (e.code || e.message)); }
+    say("");
+  });
+  body.querySelectorAll(".wc-file").forEach((chip) => chip.addEventListener("click", async (e) => {
+    const key = chip.closest(".wc-row").dataset.key;
+    const meta = filesOf(key).find((f) => f.id === chip.dataset.file); if (!meta) return;
+    if (e.target.closest("[data-rmfile]")) {
+      if (!confirm(`Remove “${meta.name}” from this item?`)) return;
+      try {
+        await saveFiles(key, filesOf(key).filter((f) => f.id !== meta.id));
+        if (!fileInUse(meta.id, key)) await deleteAttachment("councils", meta);
+        toast("Removed");
+      } catch (err) { toast("Couldn't remove: " + (err.code || err.message)); }
+      return;
+    }
+    chip.classList.add("busy");
+    try { await openAttachment("councils", meta); } catch (err) { toast(err.message || "Couldn't open that file"); }
+    chip.classList.remove("busy");
+  }));
+
   // Actions ▾ on an item (2026-10-04): copy / move it to the next council, or to a future one you pick
   const carry = async (key, mode, target) => {
     try {
@@ -415,7 +504,12 @@ function render() {
       if (key.startsWith("x:")) {
         const id = key.slice(2);
         let extra = cdoc.extra || [];
-        if (act === "remove") { if (!confirm("Delete this agenda item?")) return; extra = extra.filter((x) => x.id !== id); }
+        if (act === "remove") {
+          if (!confirm("Delete this agenda item?")) return;
+          const gone = (extra.find((x) => x.id === id) || {}).files || [];
+          extra = extra.filter((x) => x.id !== id);
+          for (const f of gone) if (!fileInUse(f.id, key)) deleteAttachment("councils", f).catch(() => {});
+        }
         else extra = extra.map((x) => (x.id === id ? { ...x, discussed: act === "discussed", discussedAt: act === "discussed" ? new Date().toISOString() : "" } : x));
         await saveCouncil(date, { extra });
       } else {

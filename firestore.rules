@@ -183,6 +183,14 @@ service cloud.firestore {
     match /councils/{id} {
       allow read: if canView('council');
       allow write: if canEdit('council');
+      // files attached to agenda items, stored as chunks (2026-10-04)
+      match /chunks/{cid} {
+        allow read: if canView('council');
+        allow create: if canEdit('council')
+          && request.resource.data.keys().hasOnly(['f', 'i', 'd'])
+          && request.resource.data.d is bytes && request.resource.data.d.size() <= 1000000;
+        allow delete: if canEdit('council');
+      }
     }
 
     // ---- Callings pipeline (sensitive) ----

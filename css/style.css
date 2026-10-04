@@ -1462,3 +1462,27 @@ mark.nt-hl { padding: 0 .15em; border-radius: 3px; color: inherit; }
 .wcd-day:hover { border-color: var(--brand); }
 .wcd-day.on { background: var(--brand); border-color: var(--brand); color: #fff; }
 .wcd-day.on span { color: rgba(255,255,255,.8); }
+
+/* Ward Council rows: actions sit on the title row; notes span the full width; attachments (2026-10-04) */
+.wc-head { display: flex; align-items: flex-start; justify-content: space-between; gap: .6rem; }
+.wc-head .wc-title { flex: 1; min-width: 0; padding-top: .12rem; }
+.wc-head .wc-actions { flex: none; }
+.wc-files { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .4rem; }
+.wc-file { display: inline-flex; align-items: center; gap: .35rem; max-width: 100%; background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: .22rem .3rem .22rem .5rem; font-size: .84rem; cursor: pointer; }
+.wc-file:hover { border-color: var(--brand); background: var(--brand-soft); }
+.wc-file.busy { opacity: .55; pointer-events: none; }
+.wc-file-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 18rem; }
+.wc-file-size { color: var(--ink-soft); font-size: .76rem; white-space: nowrap; }
+.wc-file-x { border: 0; background: transparent; color: var(--ink-soft); cursor: pointer; border-radius: 5px; padding: .05rem .3rem; font-size: .8rem; }
+.wc-file-x:hover { color: var(--danger); background: #fbe7e3; }
+.wc-upload { margin-top: .35rem; font-size: .84rem; color: var(--brand); font-weight: 600; }
+@media (max-width: 650px) { .wc-head { flex-direction: column; } .wc-head .wc-actions { align-self: flex-end; } }
+
+/* Ward Council: due dates on agenda items (2026-10-04) */
+.wc-due { display: inline-block; margin-left: .5rem; font-size: .76rem; font-weight: 600; color: var(--pending); background: var(--pending-soft); border-radius: 99px; padding: .08rem .55rem; vertical-align: middle; white-space: nowrap; }
+.wc-due.wc-overdue { color: var(--danger); background: #fbe7e3; }
+.wc-due.wc-due-edit { cursor: pointer; }
+.wc-due.wc-due-edit:hover { filter: brightness(.95); }
+.wc-due.wc-due-add { background: transparent; color: #a7b0bd; border: 1px dashed rgba(31,39,51,.25); font-weight: 500; }
+.wc-due.wc-due-add:hover { color: var(--brand); border-color: var(--brand); }
+.wc-due-inp { margin-left: .5rem; font: inherit; font-size: .82rem; padding: .1rem .35rem; border: 1px solid var(--brand); border-radius: 8px; }
