@@ -3,7 +3,7 @@
 //   "- item"                → bullet
 //   "[ ] item" / "[x] item" → to-do with a checkbox that ticks in place
 // The text is stored exactly as typed, so it stays readable anywhere.
-import { esc } from "./ui.js?v=1791132118";
+import { esc } from "./ui.js?v=1791132348";
 
 export function notesHtml(text, key, editable) {
   const lines = String(text || "").split("\n");

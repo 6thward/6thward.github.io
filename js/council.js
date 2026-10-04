@@ -9,13 +9,13 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1791132118";
-import { ctx, can } from "./app.js?v=1791132118";
-import { notesHtml, toggleTodoLine, prefixLine, continueList } from "./notes.js?v=1791132118";
+import { db } from "./firebase-init.js?v=1791132348";
+import { ctx, can } from "./app.js?v=1791132348";
+import { notesHtml, toggleTodoLine, prefixLine, continueList } from "./notes.js?v=1791132348";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, fmtDate } from "./ui.js?v=1791132118";
+import { toast, esc, fmtDate } from "./ui.js?v=1791132348";
 
 let cards = [];
 let councils = {};    // date -> doc
@@ -126,8 +126,8 @@ function render() {
     const key = itemKey(it);
     const when = it.discussed ? (it.kind === "board" ? it.t.councilDiscussedAt : it.x.discussedAt) : "";
     return `
-      <div class="wc-row${it.discussed ? " wc-done" : ""}${editor && !it.discussed ? " wc-drag" : ""}" data-key="${key}"${editor && !it.discussed ? ` draggable="true" title="Drag to reorder"` : ""}>
-        <div class="wc-num">${n}.</div>
+      <div class="wc-row${it.discussed ? " wc-done" : ""}${editor && !it.discussed ? " wc-drag" : ""}" data-key="${key}">
+        <div class="wc-num${editor && !it.discussed ? " wc-grip" : ""}"${editor && !it.discussed ? ` draggable="true" title="Drag to reorder"` : ""}>${editor && !it.discussed ? `<span class="wc-grip-dots" aria-hidden="true">⋮⋮</span>` : ""}${n}.</div>
         <div class="wc-main">
           <div class="wc-title">${person ? `<span class="wc-person-name">${esc(person)}</span> · ` : ""}${esc(title)}${due}</div>
           ${context}
@@ -168,13 +168,15 @@ function render() {
   const openRows = [...body.querySelectorAll(".wc-list > .wc-row.wc-drag")];
   const clearMarks = () => body.querySelectorAll(".wc-before, .wc-after").forEach((r) => r.classList.remove("wc-before", "wc-after"));
   openRows.forEach((rowEl) => {
-    rowEl.addEventListener("dragstart", (e) => {
-      if (e.target.closest("textarea, input, button, a")) { e.preventDefault(); return; } // typing / clicking, not dragging
+    // only the numbered grip on the left starts a drag, so the text in the row
+    // can still be selected, copied and pasted normally (2026-10-04)
+    const grip = rowEl.querySelector(".wc-grip");
+    grip?.addEventListener("dragstart", (e) => {
       dragKey = rowEl.dataset.key; rowEl.classList.add("wc-dragging");
       e.dataTransfer.effectAllowed = "move";
-      try { e.dataTransfer.setData("text/plain", ""); } catch { /* older browsers */ }
+      try { e.dataTransfer.setData("text/plain", ""); e.dataTransfer.setDragImage(rowEl, 16, 16); } catch { /* older browsers */ }
     });
-    rowEl.addEventListener("dragend", () => { dragKey = null; rowEl.classList.remove("wc-dragging"); clearMarks(); });
+    grip?.addEventListener("dragend", () => { dragKey = null; rowEl.classList.remove("wc-dragging"); clearMarks(); });
     rowEl.addEventListener("dragover", (e) => {
       if (!dragKey || rowEl.dataset.key === dragKey) return;
       e.preventDefault();
