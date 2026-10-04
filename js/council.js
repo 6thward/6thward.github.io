@@ -9,13 +9,13 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1791133162";
-import { ctx, can } from "./app.js?v=1791133162";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1791133162";
+import { db } from "./firebase-init.js?v=1791133328";
+import { ctx, can } from "./app.js?v=1791133328";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1791133328";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, fmtDate } from "./ui.js?v=1791133162";
+import { toast, esc, fmtDate } from "./ui.js?v=1791133328";
 
 let cards = [];
 let councils = {};    // date -> doc

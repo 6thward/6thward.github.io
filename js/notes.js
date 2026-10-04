@@ -5,22 +5,54 @@
 //   two spaces in front     → a sub-point (up to three levels deep)   (2026-10-04)
 //   **words**               → bold;  "Lead-in: rest" → the lead-in is bold
 // The text is stored exactly as typed, so it stays readable anywhere.
-import { esc } from "./ui.js?v=1791133162";
+import { esc } from "./ui.js?v=1791133328";
 
 const MAX_LEVEL = 3;
 const levelOf = (indent) => Math.min(MAX_LEVEL, Math.floor(String(indent || "").replace(/\t/g, "  ").length / 2));
 
-// Inline text → HTML:  **bold**, and a short lead-in before a colon is bold on its own
-export function inlineFmt(line) {
-  let h = esc(line);
-  const hadBold = /\*\*[^*]+\*\*/.test(h);
-  h = h.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
-  if (!hadBold) {
-    const m = /^([^:]{1,60}):(\s|$)/.exec(h);
-    // a short lead-in (a name, a title, initials and all) — not a whole sentence, not "https:"
-    if (m && m[1].trim().split(/\s+/).length <= 8 && !/https?$/i.test(m[1].trim())) h = `<b class="nt-lead">${m[1]}:</b>` + h.slice(m[1].length + 1);
+// Highlights and text colours (2026-10-04): {y:words} — a short code, a colon, the words.
+export const HIGHLIGHTS = [["y", "Yellow", "#fff3a3"], ["g", "Green", "#c9f2d0"], ["p", "Pink", "#ffd3e4"], ["b", "Blue", "#cfe6ff"]];
+export const TEXT_COLORS = [["red", "Red", "#c0392b"], ["orange", "Orange", "#c76a12"], ["green", "Green", "#2e7d4f"], ["blue", "Blue", "#1f5fbf"], ["purple", "Purple", "#7a3fb0"]];
+const HL = new Set(HIGHLIGHTS.map((h) => h[0]));
+const COLOR_RE = /\{(y|g|p|b|red|orange|green|blue|purple):([^{}]*)\}/g;
+const stripMarks = (t) => String(t).replace(/\{(?:y|g|p|b|red|orange|green|blue|purple):/g, "").replace(/[{}]/g, "").replace(/\*\*/g, "");
+
+// marks only (no lead-in): colours/highlights, then **bold**
+function marks(text) {
+  let h = esc(text);
+  for (let pass = 0; pass < 2; pass++) { // twice = one level of nesting ({y:{red:x}})
+    h = h.replace(COLOR_RE, (_, code, body) => (HL.has(code) ? `<mark class="nt-hl nt-hl-${code}">${body}</mark>` : `<span class="nt-c nt-c-${code}">${body}</span>`));
   }
-  return h;
+  return h.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+}
+
+// Inline text → HTML: marks, and a short lead-in before a colon is bold on its own
+export function inlineFmt(line) {
+  const raw = String(line ?? "");
+  // lead-in = what comes before the first colon that's followed by a space (or ends the line)
+  const m = /^(.*?):(?=\s|$)/.exec(raw);
+  if (m && !/\*\*/.test(raw)) {
+    const lead = m[1], plain = stripMarks(lead).trim();
+    const balanced = (lead.match(/\{/g) || []).length === (lead.match(/\}/g) || []).length;
+    // a short lead-in (a name, a title, initials and all) — not a whole sentence, not "https:"
+    if (plain && plain.length <= 60 && plain.split(/\s+/).length <= 8 && balanced && !/https?$/i.test(plain) && !/:/.test(stripMarks(lead))) {
+      return `<b class="nt-lead">${marks(lead)}:</b>` + marks(raw.slice(lead.length + 1));
+    }
+  }
+  return marks(raw);
+}
+
+// colour or highlight the selection ("" = clear any colour/highlight in it)
+export function wrapColor(ta, code) {
+  const a = ta.selectionStart, b = ta.selectionEnd, sel = ta.value.slice(a, b);
+  const whole = /^\{(?:y|g|p|b|red|orange|green|blue|purple):([^{}]*)\}$/.exec(sel);
+  if (!code) {
+    if (!sel) return;
+    ta.setRangeText(sel.replace(/\{(?:y|g|p|b|red|orange|green|blue|purple):/g, "").replace(/\}/g, ""), a, b, "select");
+  } else if (whole) ta.setRangeText(`{${code}:${whole[1]}}`, a, b, "select");       // already marked → switch colour
+  else if (sel) ta.setRangeText(`{${code}:${sel}}`, a, b, "select");
+  else { ta.setRangeText(`{${code}:}`, a, b, "start"); const pos = a + code.length + 2; ta.setSelectionRange(pos, pos); }
+  ta.focus(); ta.dispatchEvent(new Event("input"));
 }
 
 // attrFn(lineIndex) → the data attribute for a to-do checkbox (default: data-todo-line="key|idx")
@@ -142,6 +174,9 @@ export function toolbarHtml(hint) {
     `<button type="button" class="btn btn-sm" data-nt="in" title="Make it a sub-point (Tab)">→ Sub-point</button>` +
     `<button type="button" class="btn btn-sm" data-nt="out" title="Move it back out (Shift+Tab)">←</button>` +
     `<button type="button" class="btn btn-sm nt-bold" data-nt="bold" title="Bold the selected words (⌘B)"><b>B</b></button>` +
+    `<span class="nt-pal" title="Highlight the selected words">${HIGHLIGHTS.map(([c, l, hex]) => `<button type="button" class="nt-sw" data-color="${c}" title="Highlight ${l.toLowerCase()}" style="background:${hex}"></button>`).join("")}</span>` +
+    `<span class="nt-pal" title="Colour the selected words">${TEXT_COLORS.map(([c, l, hex]) => `<button type="button" class="nt-sw nt-sw-text" data-color="${c}" title="${l} text" style="color:${hex}">A</button>`).join("")}</span>` +
+    `<button type="button" class="btn btn-sm btn-ghost" data-color="" title="Remove colour and highlight from the selected words">✕ colour</button>` +
     `<span class="row-sub">${hint || "Tab makes a sub-point"}</span>`;
 }
 export function wireToolbar(box, ta) {
@@ -155,5 +190,9 @@ export function wireToolbar(box, ta) {
       else if (k === "out") indentLines(ta, -1);
       else toggleBold(ta);
     });
+  });
+  box.querySelectorAll("[data-color]").forEach((b) => {
+    b.addEventListener("mousedown", (e) => e.preventDefault());
+    b.addEventListener("click", () => wrapColor(ta, b.dataset.color));
   });
 }
