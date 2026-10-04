@@ -9,14 +9,14 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1791145883";
-import { ctx, can } from "./app.js?v=1791145883";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1791145883";
-import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791145883";
+import { db } from "./firebase-init.js?v=1791146013";
+import { ctx, can } from "./app.js?v=1791146013";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1791146013";
+import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791146013";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1791145883";
+import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1791146013";
 
 let cards = [];
 let councils = {};    // date -> doc
@@ -263,8 +263,8 @@ function render() {
       <h3 style="margin:0 0 .4rem">Assignments</h3>
       <div class="wc-assign">
         ${ASSIGN.map(([k, l]) => `<label class="wc-asg"><span>${esc(l)}</span>${editor
-          ? `<input class="wc-asg-in" data-asg="${k}" list="dl-council-members" value="${esc(asg[k] || "")}" placeholder="— unassigned —" autocomplete="off">`
-          : `<b>${asg[k] ? esc(asg[k]) : `<span class="row-sub">—</span>`}</b>`}</label>`).join("")}
+          ? `<input class="wc-asg-in" data-asg="${k}" list="dl-council-members" value="${esc(asg[k] || "")}" placeholder=" " title="Pick a council member or type any name" autocomplete="off">`
+          : `<b class="wc-asg-ro${asg[k] ? "" : " wc-asg-open"}">${asg[k] ? esc(asg[k]) : "&nbsp;"}</b>`}</label>`).join("")}
       </div>
       <datalist id="dl-council-members">${members.map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist>
       ${editor && !members.length ? `<p class="row-sub" style="margin:.5rem 0 0">Tip: tick “Ward council member” for people on the Users tab and their names appear here as suggestions.</p>` : ""}

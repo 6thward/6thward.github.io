@@ -1532,3 +1532,8 @@ mark.nt-hl { padding: 0 .15em; border-radius: 3px; color: inherit; }
 .user-menu-head div { font-size: .8rem; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; }
 .user-menu-item { display: block; width: 100%; text-align: left; border: none; background: none; cursor: pointer; font: inherit; font-size: .93rem; color: var(--ink); padding: .55rem .7rem; border-radius: 8px; }
 .user-menu-item:hover { background: var(--brand-soft); color: var(--brand); }
+/* Assignments still open are pink instead of saying "unassigned" (2026-10-04) */
+.wc-asg-in:placeholder-shown { background: #fde4ec; border-color: #f3b6c8; }
+.wc-asg-in:placeholder-shown:focus { background: #fff; border-color: var(--brand); }
+.wc-asg-ro { display: block; padding: .4rem .6rem; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+.wc-asg-ro.wc-asg-open { background: #fde4ec; border-color: #f3b6c8; }
