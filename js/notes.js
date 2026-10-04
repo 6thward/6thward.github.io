@@ -5,7 +5,7 @@
 //   two spaces in front     → a sub-point (up to three levels deep)   (2026-10-04)
 //   **words**               → bold;  "Lead-in: rest" → the lead-in is bold
 // The text is stored exactly as typed, so it stays readable anywhere.
-import { esc } from "./ui.js?v=1791133518";
+import { esc } from "./ui.js?v=1791134746";
 
 const MAX_LEVEL = 3;
 const levelOf = (indent) => Math.min(MAX_LEVEL, Math.floor(String(indent || "").replace(/\t/g, "  ").length / 2));
@@ -29,14 +29,18 @@ function marks(text) {
 // Inline text → HTML: marks, and a short lead-in before a colon is bold on its own
 export function inlineFmt(line) {
   const raw = String(line ?? "");
-  // lead-in = what comes before the first colon that's followed by a space (or ends the line)
-  const m = /^(.*?):(?=\s|$)/.exec(raw);
+  // lead-in = what comes before the first colon that's followed by a space (or ends the line),
+  // or before a dash standing on its own ("Elder Schmiel - …"); hyphenated words don't count
+  const m = /^(.*?)(:(?=\s|$)|\s+[-–—](?=\s|$))/.exec(raw);
   if (m && !/\*\*/.test(raw)) {
-    const lead = m[1], plain = stripMarks(lead).trim();
+    const lead = m[1], sep = m[2], plain = stripMarks(lead).trim();
     const balanced = (lead.match(/\{/g) || []).length === (lead.match(/\}/g) || []).length;
     // a short lead-in (a name, a title, initials and all) — not a whole sentence, not "https:"
     if (plain && plain.length <= 60 && plain.split(/\s+/).length <= 8 && balanced && !/https?$/i.test(plain) && !/:/.test(stripMarks(lead))) {
-      return `<b class="nt-lead">${marks(lead)}:</b>` + marks(raw.slice(lead.length + 1));
+      const rest = raw.slice(lead.length + sep.length);
+      return sep === ":"
+        ? `<b class="nt-lead">${marks(lead)}:</b>` + marks(rest)
+        : `<b class="nt-lead">${marks(lead)}</b>${esc(sep)}` + marks(rest);
     }
   }
   return marks(raw);
