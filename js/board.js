@@ -3,12 +3,13 @@
 // added, renamed, reordered and removed. Data:
 //   boardColumns/{id}  { label, order }
 //   board/{id}         { name, notes, column, order, createdAt, updatedAt }
-import { db } from "./firebase-init.js?v=1791132348";
-import { ctx, can } from "./app.js?v=1791132348";
+import { db } from "./firebase-init.js?v=1791132968";
+import { ctx, can } from "./app.js?v=1791132968";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1791132348";
+import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1791132968";
+import { inlineFmt, toggleBold } from "./notes.js?v=1791132968";
 
 // Next ordinance a person is working toward — shown as a pill beside the name.
 const ORDINANCES = ["Sacrament", "Aaronic Priesthood", "Melchizedek Priesthood", "Endowment", "Sealing"];
@@ -613,15 +614,15 @@ function recapHtml(notes, mid, editor) {
     let m;
     if ((m = /^\s*[-•*]\s+(.*)$/.exec(line))) {
       if (!inList) { html += `<ul class="rc-list">`; inList = true; }
-      html += `<li>${esc(m[1])}</li>`;
+      html += `<li>${inlineFmt(m[1])}</li>`;
     } else if ((m = /^\s*\[( |x|X)\]\s*(.*)$/.exec(line))) {
       closeList();
       const done = m[1].toLowerCase() === "x";
-      html += `<label class="rc-todo${done ? " done" : ""}"><input type="checkbox" data-rc="${mid}:${i}" ${done ? "checked" : ""} ${editor ? "" : "disabled"}> <span>${esc(m[2])}</span></label>`;
+      html += `<label class="rc-todo${done ? " done" : ""}"><input type="checkbox" data-rc="${mid}:${i}" ${done ? "checked" : ""} ${editor ? "" : "disabled"}> <span>${inlineFmt(m[2])}</span></label>`;
     } else if (line.trim() === "") {
       closeList(); html += `<div class="rc-gap"></div>`;
     } else {
-      closeList(); html += `<div>${esc(line)}</div>`;
+      closeList(); html += `<div>${inlineFmt(line)}</div>`;
     }
   });
   closeList();
@@ -674,7 +675,7 @@ function openMeetings(k, editingId) {
           <span class="row-sub">${editing ? "Editing this recap" : "New recap"}</span>
           ${editing ? `<button class="btn btn-sm btn-ghost btn-danger" id="mr-del" type="button" style="margin-left:auto">Delete</button>` : ""}
         </div>
-        <div class="rc-tools"><button class="btn btn-sm" type="button" data-rcprefix="- " title="Bullet point">• Bullet</button><button class="btn btn-sm" type="button" data-rcprefix="[ ] " title="To-do with a checkbox">☐ To-do</button><span class="row-sub">Enter continues a list</span></div>
+        <div class="rc-tools"><button class="btn btn-sm" type="button" data-rcprefix="- " title="Bullet point">• Bullet</button><button class="btn btn-sm" type="button" data-rcprefix="[ ] " title="To-do with a checkbox">☐ To-do</button><button class="btn btn-sm nt-bold" type="button" id="mr-bold" title="Bold the selected words (⌘B)"><b>B</b></button><span class="row-sub">A name before a colon is bolded for you</span></div>
         <textarea id="mr-notes" placeholder="What was discussed, what was decided, what's next…" style="width:100%;box-sizing:border-box;min-height:6rem;padding:.55rem .65rem;border:1.5px solid var(--line);border-radius:8px;font:inherit;font-size:.92rem">${esc(editing ? editing.notes : "")}</textarea>
         <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.5rem">
           ${editing ? `<button class="btn" id="mr-cancel-edit" type="button">Cancel edit</button>` : ""}
@@ -700,7 +701,8 @@ function openMeetings(k, editingId) {
   }));
   const ta = el.querySelector("#mr-notes");
   el.querySelectorAll("[data-rcprefix]").forEach((b) => b.addEventListener("click", () => prefixLine(ta, b.dataset.rcprefix)));
-  ta.addEventListener("keydown", (e) => continueList(ta, e));
+  ta.addEventListener("keydown", (e) => { if ((e.key === "b" || e.key === "B") && (e.metaKey || e.ctrlKey)) { e.preventDefault(); toggleBold(ta); } else continueList(ta, e); });
+  el.querySelector("#mr-bold")?.addEventListener("click", () => toggleBold(ta));
   if (editing) { // ✎ → land in the text, ready to type
     setTimeout(() => { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); ta.scrollIntoView({ block: "center" }); }, 40);
   }

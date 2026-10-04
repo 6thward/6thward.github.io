@@ -1404,3 +1404,7 @@ th.us-sort:hover, th.us-sort.on { color: var(--brand); }
 .wc-row.wc-dragging { opacity: .45; }
 .wc-row.wc-before { box-shadow: 0 -3px 0 var(--brand); }
 .wc-row.wc-after { box-shadow: 0 3px 0 var(--brand); }
+
+/* notes: bold lead-in / **bold** (2026-10-04) */
+.nt-lead { font-weight: 700; }
+.nt-bold b { font-weight: 800; }

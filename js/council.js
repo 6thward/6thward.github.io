@@ -9,13 +9,13 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1791132348";
-import { ctx, can } from "./app.js?v=1791132348";
-import { notesHtml, toggleTodoLine, prefixLine, continueList } from "./notes.js?v=1791132348";
+import { db } from "./firebase-init.js?v=1791132968";
+import { ctx, can } from "./app.js?v=1791132968";
+import { notesHtml, toggleTodoLine, prefixLine, continueList, toggleBold } from "./notes.js?v=1791132968";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, fmtDate } from "./ui.js?v=1791132348";
+import { toast, esc, fmtDate } from "./ui.js?v=1791132968";
 
 let cards = [];
 let councils = {};    // date -> doc
@@ -223,8 +223,10 @@ function render() {
     // • Bullet / ☐ To-do buttons above the box; mousedown is cancelled so the box keeps focus
     const tools = document.createElement("div");
     tools.className = "wc-tools";
-    tools.innerHTML = `<button type="button" class="btn btn-sm" data-pre="- " title="Bullet point">• Bullet</button><button type="button" class="btn btn-sm" data-pre="[ ] " title="To-do with a checkbox">☐ To-do</button><span class="row-sub">Enter continues a list · click away to save</span>`;
+    tools.innerHTML = `<button type="button" class="btn btn-sm" data-pre="- " title="Bullet point">• Bullet</button><button type="button" class="btn btn-sm" data-pre="[ ] " title="To-do with a checkbox">☐ To-do</button><button type="button" class="btn btn-sm nt-bold" data-bold="1" title="Bold the selected words (⌘B)"><b>B</b></button><span class="row-sub">A name before a colon is bolded for you · click away to save</span>`;
     tools.querySelectorAll("[data-pre]").forEach((b) => { b.addEventListener("mousedown", (e) => e.preventDefault()); b.addEventListener("click", () => prefixLine(ta, b.dataset.pre)); });
+    const boldBtn = tools.querySelector("[data-bold]");
+    boldBtn.addEventListener("mousedown", (e) => e.preventDefault()); boldBtn.addEventListener("click", () => toggleBold(ta));
     el.replaceWith(ta);
     ta.before(tools);
     const grow = () => { ta.style.height = "auto"; ta.style.height = Math.max(64, ta.scrollHeight + 2) + "px"; };
@@ -242,6 +244,7 @@ function render() {
     ta.addEventListener("keydown", (e) => {
       if (e.key === "Escape") { e.preventDefault(); finish(false); }
       else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); finish(true); }
+      else if ((e.key === "b" || e.key === "B") && (e.metaKey || e.ctrlKey)) { e.preventDefault(); toggleBold(ta); }
       else continueList(ta, e);
     });
     ta.addEventListener("blur", () => setTimeout(() => finish(true), 80));
