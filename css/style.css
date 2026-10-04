@@ -1383,3 +1383,20 @@ th.us-sort:hover, th.us-sort.on { color: var(--brand); }
 .theme-tag .hc-link { color: inherit; text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 2px; cursor: pointer; }
 .theme-tag .hc-link::after { content: " ↗"; font-style: normal; font-size: .8em; opacity: .7; }
 .theme-tag .hc-link:hover { color: var(--brand); }
+
+/* Ward Council notes: bullets + to-do boxes (2026-10-04) */
+.wc-cnotes { white-space: normal; }
+.wc-cnotes .rc-list { margin: .1rem 0; padding-left: 1.2rem; }
+.wc-cnotes .rc-list li { margin: .05rem 0; }
+.wc-cnotes .rc-todo { display: flex; align-items: flex-start; gap: .4rem; margin: .12rem 0; cursor: pointer; }
+.wc-cnotes .rc-todo input { margin-top: .2rem; width: 1rem; height: 1rem; flex: none; }
+.wc-cnotes .rc-todo.done span { text-decoration: line-through; color: var(--ink-soft); }
+.wc-cnotes .rc-gap { height: .45rem; }
+.wc-tools { display: flex; gap: .4rem; align-items: center; margin-top: .35rem; flex-wrap: wrap; }
+.wc-tools + .wc-cnotes-ta { margin-top: .3rem; }
+
+/* Ward Council: drag agenda items to reorder (2026-10-04) */
+.wc-row.wc-drag { cursor: grab; }
+.wc-row.wc-dragging { opacity: .45; }
+.wc-row.wc-before { box-shadow: 0 -3px 0 var(--brand); }
+.wc-row.wc-after { box-shadow: 0 3px 0 var(--brand); }

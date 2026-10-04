@@ -9,12 +9,13 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1790565582";
-import { ctx, can } from "./app.js?v=1790565582";
+import { db } from "./firebase-init.js?v=1791132118";
+import { ctx, can } from "./app.js?v=1791132118";
+import { notesHtml, toggleTodoLine, prefixLine, continueList } from "./notes.js?v=1791132118";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, fmtDate } from "./ui.js?v=1790565582";
+import { toast, esc, fmtDate } from "./ui.js?v=1791132118";
 
 let cards = [];
 let councils = {};    // date -> doc
@@ -79,8 +80,12 @@ function itemsFor(d) {
     else if (t.council && !t.done && !discussedOn && isNextAgenda(d)) fromBoard.push({ kind: "board", k, t, discussed: false }); // waiting for the next one
   }));
   const extra = ((councils[d] && councils[d].extra) || []).map((x) => ({ kind: "extra", x, discussed: !!x.discussed }));
-  return [...fromBoard, ...extra];
+  // drag-to-reorder (2026-10-04): the meeting's doc keeps the agenda order as a list of item keys
+  const order = (councils[d] && councils[d].order) || [];
+  const pos = (it) => { const i = order.indexOf(itemKey(it)); return i < 0 ? 1e6 : i; };
+  return [...fromBoard, ...extra].map((it, i) => ({ it, i })).sort((a, b) => pos(a.it) - pos(b.it) || a.i - b.i).map((x) => x.it);
 }
+const itemKey = (it) => (it.kind === "board" ? `b:${it.k.id}:${it.t.id}` : `x:${it.x.id}`);
 
 async function saveCouncil(d, patch) {
   const ref = doc(db, "councils", d);
@@ -106,17 +111,22 @@ function render() {
   const next = isNextAgenda(date);
   dateEl.textContent = fmtDay(date) + (next ? " · next council" : isFuture(date) ? " · upcoming" : "");
 
-  const noteBlock = (key, text, placeholder) => `<div class="wc-cnotes${text ? "" : " wc-cnotes-empty"}${editor ? " wc-cnotes-edit" : ""}" data-cnotes="${key}" title="${editor ? "Click to add notes" : ""}">${text ? esc(text) : (editor ? placeholder : "")}</div>`;
+  // notes render with bullets ("- ") and to-do boxes ("[ ] "); the raw text is kept for the editor (2026-10-04)
+  const rawNotes = new Map();
+  const noteBlock = (key, text, placeholder) => {
+    rawNotes.set(key, text || "");
+    return `<div class="wc-cnotes${text ? "" : " wc-cnotes-empty"}${editor ? " wc-cnotes-edit" : ""}" data-cnotes="${key}" title="${editor ? "Click to add notes" : ""}">${text ? notesHtml(text, key, editor) : (editor ? placeholder : "")}</div>`;
+  };
   const row = (it, n) => {
     const title = it.kind === "board" ? it.t.title : it.x.title;
     const person = it.kind === "board" ? it.k.name : "";
     const notes = it.kind === "board" ? it.t.councilNotes : it.x.notes;
     const context = it.kind === "board" && it.t.notes ? `<div class="wc-notes">${esc(it.t.notes)}</div>` : "";
     const due = it.kind === "board" && it.t.due ? `<span class="wc-due">due ${fmtDay(it.t.due)}</span>` : "";
-    const key = it.kind === "board" ? `b:${it.k.id}:${it.t.id}` : `x:${it.x.id}`;
+    const key = itemKey(it);
     const when = it.discussed ? (it.kind === "board" ? it.t.councilDiscussedAt : it.x.discussedAt) : "";
     return `
-      <div class="wc-row${it.discussed ? " wc-done" : ""}" data-key="${key}">
+      <div class="wc-row${it.discussed ? " wc-done" : ""}${editor && !it.discussed ? " wc-drag" : ""}" data-key="${key}"${editor && !it.discussed ? ` draggable="true" title="Drag to reorder"` : ""}>
         <div class="wc-num">${n}.</div>
         <div class="wc-main">
           <div class="wc-title">${person ? `<span class="wc-person-name">${esc(person)}</span> · ` : ""}${esc(title)}${due}</div>
@@ -153,15 +163,68 @@ function render() {
 
   if (!editor) return;
 
+  // drag an open agenda item onto another to move it there
+  let dragKey = null;
+  const openRows = [...body.querySelectorAll(".wc-list > .wc-row.wc-drag")];
+  const clearMarks = () => body.querySelectorAll(".wc-before, .wc-after").forEach((r) => r.classList.remove("wc-before", "wc-after"));
+  openRows.forEach((rowEl) => {
+    rowEl.addEventListener("dragstart", (e) => {
+      if (e.target.closest("textarea, input, button, a")) { e.preventDefault(); return; } // typing / clicking, not dragging
+      dragKey = rowEl.dataset.key; rowEl.classList.add("wc-dragging");
+      e.dataTransfer.effectAllowed = "move";
+      try { e.dataTransfer.setData("text/plain", ""); } catch { /* older browsers */ }
+    });
+    rowEl.addEventListener("dragend", () => { dragKey = null; rowEl.classList.remove("wc-dragging"); clearMarks(); });
+    rowEl.addEventListener("dragover", (e) => {
+      if (!dragKey || rowEl.dataset.key === dragKey) return;
+      e.preventDefault();
+      const r = rowEl.getBoundingClientRect();
+      clearMarks(); rowEl.classList.add(e.clientY > r.top + r.height / 2 ? "wc-after" : "wc-before");
+    });
+    rowEl.addEventListener("drop", async (e) => {
+      if (!dragKey || rowEl.dataset.key === dragKey) return;
+      e.preventDefault();
+      const r = rowEl.getBoundingClientRect();
+      const after = e.clientY > r.top + r.height / 2;
+      const keys = openRows.map((x) => x.dataset.key).filter((k) => k !== dragKey);
+      keys.splice(keys.indexOf(rowEl.dataset.key) + (after ? 1 : 0), 0, dragKey);
+      dragKey = null; clearMarks();
+      try { await saveCouncil(date, { order: keys }); } catch (err) { toast("Couldn't save the order: " + (err.code || err.message)); }
+    });
+  });
+
+  const saveNote = async (key, val) => {
+    if (key === "m") await saveCouncil(date, { notes: val });
+    else if (key.startsWith("x:")) await saveCouncil(date, { extra: (cdoc.extra || []).map((x) => (x.id === key.slice(2) ? { ...x, notes: val } : x)) });
+    else { const [, cardId, todoId] = key.split(":"); const k = cards.find((c) => c.id === cardId); if (k) await saveTodoPatch(k, todoId, (t) => { t.councilNotes = val; }); }
+  };
+  // to-do boxes tick in place — no need to open the editor
+  body.querySelectorAll("[data-todo-line]").forEach((cb) => {
+    cb.addEventListener("click", (e) => e.stopPropagation());
+    cb.closest("label")?.addEventListener("click", (e) => e.stopPropagation());
+    cb.addEventListener("change", async () => {
+      const cut = cb.dataset.todoLine.lastIndexOf("|");
+      const key = cb.dataset.todoLine.slice(0, cut), idx = Number(cb.dataset.todoLine.slice(cut + 1));
+      try { await saveNote(key, toggleTodoLine(rawNotes.get(key) || "", idx)); } catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
+      render();
+    });
+  });
+
   // notes (per item or per meeting) — click to type, blur / ⌘Enter saves
   body.querySelectorAll("[data-cnotes]").forEach((el) => el.addEventListener("click", () => {
     if (el.parentElement.querySelector("textarea.wc-cnotes-ta")) return;
     const key = el.dataset.cnotes;
-    const current = el.classList.contains("wc-cnotes-empty") ? "" : el.textContent;
+    const current = rawNotes.get(key) || "";
     const ta = document.createElement("textarea");
     ta.className = "wc-cnotes-ta"; ta.value = current;
     ta.placeholder = key === "m" ? "Attendance, general discussion, assignments…" : "What was discussed, decided, who follows up…";
+    // • Bullet / ☐ To-do buttons above the box; mousedown is cancelled so the box keeps focus
+    const tools = document.createElement("div");
+    tools.className = "wc-tools";
+    tools.innerHTML = `<button type="button" class="btn btn-sm" data-pre="- " title="Bullet point">• Bullet</button><button type="button" class="btn btn-sm" data-pre="[ ] " title="To-do with a checkbox">☐ To-do</button><span class="row-sub">Enter continues a list · click away to save</span>`;
+    tools.querySelectorAll("[data-pre]").forEach((b) => { b.addEventListener("mousedown", (e) => e.preventDefault()); b.addEventListener("click", () => prefixLine(ta, b.dataset.pre)); });
     el.replaceWith(ta);
+    ta.before(tools);
     const grow = () => { ta.style.height = "auto"; ta.style.height = Math.max(64, ta.scrollHeight + 2) + "px"; };
     grow(); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
     let fin = false;
@@ -169,19 +232,15 @@ function render() {
       if (fin) return; fin = true;
       const val = ta.value.trim();
       try {
-        if (save && val !== current) {
-          if (key === "m") await saveCouncil(date, { notes: val });
-          else if (key.startsWith("x:")) await saveCouncil(date, { extra: (cdoc.extra || []).map((x) => (x.id === key.slice(2) ? { ...x, notes: val } : x)) });
-          else { const [, cardId, todoId] = key.split(":"); const k = cards.find((c) => c.id === cardId); if (k) await saveTodoPatch(k, todoId, (t) => { t.councilNotes = val; }); }
-          toast("Saved");
-        }
+        if (save && val !== current.trim()) { await saveNote(key, val); toast("Saved"); }
       } catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
       render();
     };
     ta.addEventListener("input", grow);
     ta.addEventListener("keydown", (e) => {
       if (e.key === "Escape") { e.preventDefault(); finish(false); }
-      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); finish(true); }
+      else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); finish(true); }
+      else continueList(ta, e);
     });
     ta.addEventListener("blur", () => setTimeout(() => finish(true), 80));
   }));
