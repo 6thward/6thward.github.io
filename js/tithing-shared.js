@@ -1,7 +1,7 @@
 // Tithing declaration sign-ups (2026-10-04) — pieces shared by the bishop's
-// view (Calendar → Tithing declaration) and the public sign-up page (tithing.html).
+// view (the Tithing Declaration page) and the public sign-up page (tithing.html).
 //
-// tithing/{token}                 { open, ward, note, windows[], slots{ id: minutes }, created }
+// tithing/{token}                 { open, ward, note, windows[], blocked[slotId], slots{ id: minutes }, created }
 //   windows[]                     { id, date, start "HH:MM", end "HH:MM", len, place, group }
 // tithing/{token}/taken/{slotId}  { len, at }           — public: only WHICH times are gone
 // tithing/{token}/signups/{slotId}{ name, phone, address, at } — private: who took them
@@ -32,22 +32,24 @@ export const addDays = (iso, n) => { const d = new Date(iso + "T12:00:00"); d.se
 export const sortWindows = (windows) => [...(windows || [])].sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
 export const overlaps = (a, b) => a.date === b.date && toMin(a.start) < toMin(b.end) && toMin(b.start) < toMin(a.end);
 
-// every sign-up time the availability produces, in order
-export function slotsOf(windows) {
-  const out = [], seen = new Set();
+// every sign-up time the availability produces, in order; times the bishop blocked out
+// are still listed (blocked: true) so his schedule can show and unblock them
+export function slotsOf(windows, blocked) {
+  const out = [], seen = new Set(), off = new Set(blocked || []);
   sortWindows(windows).forEach((w) => {
     const len = Number(w.len) || 15, end = toMin(w.end);
     for (let t = toMin(w.start); t + len <= end; t += len) {
       const id = slotId(w.date, t);
       if (seen.has(id)) continue;
       seen.add(id);
-      out.push({ id, date: w.date, min: t, len, place: w.place || "office", group: w.group || "", win: w.id });
+      out.push({ id, date: w.date, min: t, len, place: w.place || "office", group: w.group || "", win: w.id, blocked: off.has(id) });
     }
   });
   return out;
 }
 // { slotId: minutes } — the security rules check a sign-up against this
-export const slotMap = (windows) => Object.fromEntries(slotsOf(windows).map((s) => [s.id, s.len]));
+// (blocked times are left out, so nobody can sign up for them)
+export const slotMap = (windows, blocked) => Object.fromEntries(slotsOf(windows, blocked).filter((s) => !s.blocked).map((s) => [s.id, s.len]));
 
 export const newToken = () => {
   const a = new Uint8Array(15); crypto.getRandomValues(a);

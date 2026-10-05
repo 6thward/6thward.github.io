@@ -1,16 +1,16 @@
 // Tithing declaration sign-ups (2026-10-04) — the bishop's side, its own page
 // ("Tithing Declaration" tab, area key "tithing"): set when you're available, share the link / QR code, and see
 // who signed up. The public page is tithing.html (js/tithing-form.js).
-import { db } from "./firebase-init.js?v=1791162379";
-import { ctx, can } from "./app.js?v=1791162379";
+import { db } from "./firebase-init.js?v=1791162507";
+import { ctx, can } from "./app.js?v=1791162507";
 import {
   collection, doc, onSnapshot, setDoc, updateDoc, writeBatch, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast } from "./ui.js?v=1791162379";
+import { openModal, closeModal, toast } from "./ui.js?v=1791162507";
 import {
   GROUPS, PLACES, SLOT_LENGTHS, esc, toMin, fmtClock, fmtLongDay, fmtShortDay, slotsOf, slotMap,
   sortWindows, overlaps, newToken, parseSlotId, todayIso, addDays, hhmm,
-} from "./tithing-shared.js?v=1791162379";
+} from "./tithing-shared.js?v=1791162507";
 
 let mount = null, season = null, signups = [], unsubSignups = null, started = false, dirty = false;
 let qrCache = { url: "", data: "" }, qrLib = null;
@@ -85,7 +85,7 @@ async function qrDataUrl(url) {
 }
 
 async function saveWindows(windows) {
-  await updateDoc(seasonRef(), { windows, slots: slotMap(windows), updatedAt: serverTimestamp() });
+  await updateDoc(seasonRef(), { windows, slots: slotMap(windows, season.blocked), updatedAt: serverTimestamp() });
 }
 
 function render() {
@@ -113,10 +113,10 @@ function render() {
 
   const today = todayIso();
   const windows = sortWindows(season.windows);
-  const slots = slotsOf(windows);
+  const slots = slotsOf(windows, season.blocked);
   const byId = Object.fromEntries(signups.map((s) => [s.id, s]));
   const slotIds = new Set(slots.map((s) => s.id));
-  const upcoming = slots.filter((s) => s.date >= today);
+  const upcoming = slots.filter((s) => s.date >= today && !s.blocked);
   const filled = upcoming.filter((s) => byId[s.id]).length;
   const url = linkUrl();
   if (!form.date) form.date = today;
@@ -157,8 +157,8 @@ function render() {
       <button class="btn btn-primary" id="tdf-add" type="button">+ Add</button>
     </div>` : "";
   const winRow = (w) => {
-    const list = slots.filter((s) => s.win === w.id);
-    const took = list.filter((s) => byId[s.id]).length;
+    const all = slots.filter((s) => s.win === w.id), list = all.filter((s) => !s.blocked || byId[s.id]);
+    const took = list.filter((s) => byId[s.id]).length, nOff = all.length - list.length;
     const g = GROUPS[w.group];
     return `<div class="td-winrow${w.date < today ? " td-past" : ""}">
       <b class="td-win-day">${esc(fmtShortDay(w.date))}</b>
@@ -166,7 +166,7 @@ function render() {
       <span class="pill td-pill-len">${Number(w.len) || 15} min</span>
       <span class="pill td-pill-place td-place-${esc(w.place || "office")}">${PLACES[w.place]?.icon || "🏛"} ${esc(PLACES[w.place]?.label || PLACES.office.label)}</span>
       ${g ? `<span class="pill td-pill-${g.cls}">${esc(g.label)}</span>` : ""}
-      <span class="row-sub td-win-count">${took} of ${list.length} taken</span>
+      <span class="row-sub td-win-count">${took} of ${list.length} taken${nOff ? ` · ${nOff} blocked out` : ""}</span>
       ${editor ? `<button class="btn btn-sm" data-divide="${esc(w.id)}" type="button" title="Split this block into periods with different visit lengths (15 / 10 minutes), or set part of it aside for a group">✂ Divide</button>
       <button class="btn btn-sm btn-ghost td-x" data-rmwin="${esc(w.id)}" title="Remove this time period">✕</button>` : ""}
     </div>`;
@@ -188,13 +188,14 @@ function render() {
   const rowsAll = [...slots, ...orphan].sort((x, y) => (x.date + String(x.min).padStart(4, "0")).localeCompare(y.date + String(y.min).padStart(4, "0")));
   const dayBlock = (d) => {
     const list = rowsAll.filter((s) => s.date === d);
-    const took = list.filter((s) => byId[s.id]).length;
+    const took = list.filter((s) => byId[s.id]).length, live = list.filter((s) => !s.blocked || byId[s.id]).length;
     return `<div class="td-sday">
-      <div class="td-sday-head"><b>${esc(fmtLongDay(d))}</b><span class="row-sub">${took} of ${list.length} filled</span></div>
+      <div class="td-sday-head"><b>${esc(fmtLongDay(d))}</b><span class="row-sub">${took} of ${live} filled</span></div>
       ${list.map((s) => {
         const su = byId[s.id], g = GROUPS[s.group];
         const tags = `${s.place === "home" ? `<span class="td-tag td-tag-home" title="Home visit">🏠</span>` : ""}${g ? `<span class="td-tag td-tag-${g.cls}" title="Set aside for ${esc(g.label.toLowerCase())}">${esc(g.label)}</span>` : ""}`;
-        if (!su) return `<div class="td-srow td-srow-open" data-slot="${s.id}"><span class="td-grip td-grip-none"></span><span class="td-stime">${fmtClock(s.min)}</span><span class="td-sname row-sub">open ${tags}</span>${editor ? `<button class="btn btn-sm btn-ghost" data-addname="${s.id}" type="button" title="Put someone in this time yourself">+ add name</button>` : ""}</div>`;
+        if (!su && s.blocked) return `<div class="td-srow td-srow-blocked" data-slot="${s.id}"><span class="td-grip td-grip-none"></span><span class="td-stime">${fmtClock(s.min)}</span><span class="td-sname row-sub">blocked out</span>${editor ? `<button class="btn btn-sm btn-ghost" data-block="${s.id}" data-on="0" type="button" title="Open this time back up for sign-ups">unblock</button>` : ""}</div>`;
+        if (!su) return `<div class="td-srow td-srow-open" data-slot="${s.id}"><span class="td-grip td-grip-none"></span><span class="td-stime">${fmtClock(s.min)}</span><span class="td-sname row-sub">open ${tags}</span>${editor ? `<button class="btn btn-sm btn-ghost" data-addname="${s.id}" type="button" title="Put someone in this time yourself">+ add name</button><button class="btn btn-sm btn-ghost td-blk" data-block="${s.id}" data-on="1" type="button" title="Block out this time so nobody can sign up for it">⊘<span class="td-st-lbl"> block</span></button>` : ""}</div>`;
         const digits = String(su.phone || "").replace(/\D/g, "");
         const tel = digits.length === 10 ? "+1" + digits : digits ? "+" + digits : "";
         const msg = `Reminder: your tithing declaration with the bishop is ${fmtLongDay(s.date)} at ${fmtClock(s.min)}${s.place === "home" ? " at your home" : " at the Bishop's office"}.`;
@@ -308,7 +309,7 @@ function render() {
     // no drag on a touch screen? click the grip for a list of open times instead
     g.addEventListener("click", () => {
       const su = byId[g.dataset.grip]; if (!su) return;
-      const openSlots = slots.filter((x) => x.date >= today && !byId[x.id]);
+      const openSlots = slots.filter((x) => x.date >= today && !byId[x.id] && !x.blocked);
       if (!openSlots.length) return toast("No open times to move to");
       const el = openModal(`
         <h3>Move ${esc(su.name)}</h3>
@@ -319,7 +320,7 @@ function render() {
     });
   });
   mount.querySelectorAll(".td-srow[data-slot]").forEach((rowEl) => {
-    const to = slots.find((x) => x.id === rowEl.dataset.slot); if (!to) return; // times outside the availability can't receive
+    const to = slots.find((x) => x.id === rowEl.dataset.slot); if (!to || (to.blocked && !byId[to.id])) return; // times outside the availability, or blocked out, can't receive
     rowEl.addEventListener("dragover", (e) => { if (!dragId || dragId === to.id) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; clearDrop(); rowEl.classList.add("td-drop"); });
     rowEl.addEventListener("dragleave", (e) => { if (!rowEl.contains(e.relatedTarget)) rowEl.classList.remove("td-drop"); });
     rowEl.addEventListener("drop", async (e) => { if (!dragId || dragId === to.id) return; e.preventDefault(); const from = dragId; dragId = null; clearDrop(); await moveSignup(from, to); });
@@ -379,6 +380,14 @@ function render() {
       render();
     } catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
   });
+
+  // block out one time (or open it back up): it disappears from the sign-up page
+  mount.querySelectorAll("[data-block]").forEach((b) => b.addEventListener("click", async () => {
+    const id = b.dataset.block, on = b.dataset.on === "1";
+    const blocked = on ? [...new Set([...(season.blocked || []), id])] : (season.blocked || []).filter((x) => x !== id);
+    try { await updateDoc(seasonRef(), { blocked, slots: slotMap(season.windows, blocked), updatedAt: serverTimestamp() }); toast(on ? "Blocked out" : "Open again"); }
+    catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
+  }));
 
   mount.querySelectorAll("[data-divide]").forEach((b) => b.addEventListener("click", () => {
     const w = (season.windows || []).find((x) => x.id === b.dataset.divide);
@@ -459,13 +468,13 @@ function divideWindow(w, took) {
         <span class="tdd-from">${fmtClock(toMin(startOf(i)))}</span>
         ${last ? `<span class="tdd-end">${fmtClock(toMin(p.end))}</span>` : `<input type="time" step="300" data-end="${i}" value="${esc(p.end)}">`}
         <select data-len="${i}">${SLOT_LENGTHS.map((x) => opt(x, x + " minutes", p.len)).join("")}</select>
-        <select data-group="${i}">${opt("", "Anyone", p.group)}${Object.entries(GROUPS).map(([k, g]) => opt(k, g.label, p.group)).join("")}</select>
-        <span class="tdd-n">${n} ${n === 1 ? "visit" : "visits"}${i > 0 ? ` <button type="button" class="btn btn-sm btn-ghost" data-merge="${i}" title="Remove this split (joins it to the period above)">✕</button>` : ""}</span>
+        <select data-group="${i}">${opt("", "Anyone", p.group)}${Object.entries(GROUPS).map(([k, g]) => opt(k, g.label, p.group)).join("")}${opt("off", "⊘ Blocked out — no sign-ups", p.group)}</select>
+        <span class="tdd-n">${p.group === "off" ? "break" : `${n} ${n === 1 ? "visit" : "visits"}`}${i > 0 ? ` <button type="button" class="btn btn-sm btn-ghost" data-merge="${i}" title="Remove this split (joins it to the period above)">✕</button>` : ""}</span>
       </div>`;
     }).join("");
     box.querySelectorAll("[data-end]").forEach((x) => x.addEventListener("change", () => { parts[+x.dataset.end].end = x.value; showErr(""); draw(); }));
     box.querySelectorAll("[data-len]").forEach((x) => x.addEventListener("change", () => { parts[+x.dataset.len].len = Number(x.value); draw(); }));
-    box.querySelectorAll("[data-group]").forEach((x) => x.addEventListener("change", () => { parts[+x.dataset.group].group = x.value; }));
+    box.querySelectorAll("[data-group]").forEach((x) => x.addEventListener("change", () => { parts[+x.dataset.group].group = x.value; draw(); }));
     box.querySelectorAll("[data-merge]").forEach((x) => x.addEventListener("click", () => { const i = +x.dataset.merge; parts[i - 1].end = parts[i].end; parts.splice(i, 1); showErr(""); draw(); }));
   };
   el.querySelector("#tdd-add").addEventListener("click", () => {
@@ -480,9 +489,12 @@ function divideWindow(w, took) {
     for (let i = 0; i < parts.length; i++) {
       const mins = toMin(parts[i].end) - toMin(startOf(i));
       if (!parts[i].end || mins <= 0) return showErr(`Period ${i + 1} needs to end after it starts (${fmtClock(toMin(startOf(i)))}) and before the block ends.`);
-      if (mins < parts[i].len) return showErr(`Period ${i + 1} is shorter than one ${parts[i].len}-minute visit.`);
+      if (parts[i].group !== "off" && mins < parts[i].len) return showErr(`Period ${i + 1} is shorter than one ${parts[i].len}-minute visit.`);
     }
-    const made = parts.map((p, i) => ({ id: i === 0 ? w.id : "w" + Math.random().toString(36).slice(2, 9), date: w.date, start: startOf(i), end: p.end, len: p.len, place: w.place || "office", group: p.group }));
+    if (parts.every((p) => p.group === "off")) return showErr("Everything is blocked out — to drop the whole block, cancel and use ✕ on its row instead.");
+    // a blocked-out period just isn't saved: it becomes a gap between the periods around it
+    const made = parts.map((p, i) => ({ id: "w" + Math.random().toString(36).slice(2, 9), date: w.date, start: startOf(i), end: p.end, len: p.len, place: w.place || "office", group: p.group })).filter((x) => x.group !== "off");
+    made[0].id = w.id;
     try {
       await saveWindows([...(season.windows || []).filter((x) => x.id !== w.id), ...made]);
       closeModal(); toast(made.length > 1 ? `Saved as ${made.length} periods` : "Saved");
@@ -552,7 +564,7 @@ function printSchedule(rowsAll, byId) {
     <div class="sch"><h1>Tithing Declaration <span>${esc(season.ward || "6th Ward")}</span></h1>
     ${days.map((d) => `<h2>${esc(fmtLongDay(d))}</h2><table>${rowsAll.filter((s) => s.date === d).map((s) => {
       const su = byId[s.id], g = GROUPS[s.group];
-      return `<tr><td class="t">${fmtClock(s.min)}</td><td class="n">${su ? esc(su.name) : ""}${su && su.address ? `<div class="a">${esc(su.address)}</div>` : ""}</td><td class="p">${su ? esc(su.phone || "") : ""}</td><td class="w">${s.place === "home" ? "Home visit" : s.place ? "Office" : ""}${g ? " · " + esc(g.label) : ""}</td></tr>`;
+      return `<tr><td class="t">${fmtClock(s.min)}</td><td class="n">${su ? esc(su.name) : s.blocked ? "— blocked out —" : ""}${su && su.address ? `<div class="a">${esc(su.address)}</div>` : ""}</td><td class="p">${su ? esc(su.phone || "") : ""}</td><td class="w">${s.place === "home" ? "Home visit" : s.place ? "Office" : ""}${g ? " · " + esc(g.label) : ""}</td></tr>`;
     }).join("")}</table>`).join("")}</div>`, `
     @page { size: letter; margin: .5in; }
     .sch { padding: .1in; } .sch h1 { font-size: 18pt; margin: 0 0 .1in; } .sch h1 span { font-size: 11pt; font-weight: 400; color: #5b6675; margin-left: .5em; }
