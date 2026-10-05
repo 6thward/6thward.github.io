@@ -6,9 +6,9 @@
 // meeting content comes straight from that Sunday's plan.
 //
 //   settings/program  { wardName, stakeName, logo (data URL | "" = built-in), opts: {...} }
-import { db } from "./firebase-init.js?v=1791165558";
+import { db } from "./firebase-init.js?v=1791165769";
 import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1791165558";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1791165769";
 
 export const DEFAULT_LOGO = "assets/program-logo.jpg"; // Christus arch, built in
 // Fixed by Jordan (2026-09-19): Presiding + Conducting always shown, speaker
@@ -163,6 +163,7 @@ export function publicSnapshot(m, ctx) {
   return {
     date: m.date || ctx.date, type: m.type || "sacrament", theme: m.theme || "",
     presiding: m.presiding || ctx.presidingDefault || "", conducting: m.conducting || "", chorister: m.chorister || "", organist: m.organist || "",
+    prelude: { who: m.prelude?.who || "", song: m.prelude?.song || "" },
     items,
     settings: { wardName: programSettings.wardName, stakeName: programSettings.stakeName, logo: programSettings.logo || "", opts: { footer: programSettings.opts?.footer || "" } },
     labels: ctx.labels || {},
@@ -241,6 +242,13 @@ export function buildProgramHtml(ctx, opts = {}) {
   // a plan with no sacrament item still gets the band after the sacrament hymn
   if (!blocks.some((b) => b.cat === "sac" && b.html.some((h) => h.includes("class=\"band\""))) && blocks.some((b) => b.cat === "sac")) {
     blocks.find((b) => b.cat === "sac").html.push(`<div class="band">Administration of the Sacrament</div>`);
+  }
+  // prelude music, when there is some, opens the program (2026-10-04)
+  const pre = m.prelude || {};
+  if (pre.who || pre.song) {
+    blocks.unshift({ cat: "prelude", html: [pre.who
+      ? centred("Prelude Music", esc(pre.who), pre.song ? `“${esc(pre.song)}”` : "")
+      : centred("Prelude Music", `“${esc(pre.song)}”`)] });
   }
   const rows = blocks.map((b) => `<div class="grp grp-${b.cat}">${b.html.join("")}</div>`);
 
