@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1791165915";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1791165915";
+import { db } from "./firebase-init.js?v=1791165975";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1791165975";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1791165915";
-import { HYMNS } from "./hymns.js?v=1791165915";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1791165915";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1791165975";
+import { HYMNS } from "./hymns.js?v=1791165975";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1791165975";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -946,7 +946,7 @@ function statusChips(m, date) {
 
   // hymn lines: a filled hymn counts as "confirmed" so the line gets a ✓
   // and the pill turns green once all three are chosen
-  const HYMN_TAGS = { openingHymn: "Open", sacramentHymn: "Sacrament", closingHymn: "Closing" };
+  const HYMN_TAGS = { openingHymn: "Opening Hymn", sacramentHymn: "Sacrament Hymn", closingHymn: "Closing Hymn" };
   const chips = [
     groupChip("Prayers", { t: "prayers" }, [
       { tag: "Open", name: inv?.name, org: inv?.org, confirmed: isConf(inv), confirmedBy: inv?.confirmedBy, k: "invocation", o: 0, inlineEdit: { t: "name", k: "invocation", o: 0 } },

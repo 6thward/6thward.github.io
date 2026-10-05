@@ -1687,3 +1687,5 @@ li:hover > .nt-assign, .rc-todo:hover .nt-assign, .nt-assign:focus { opacity: 1;
 .st-prelude-lbl { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); }
 .st-prelude-only .st-prelude-lbl { display: none; }
 .st-prelude-ro { font-size: .82rem; }
+/* Hymn lines: full titles ("Sacrament Hymn:") need a wider shared label column (2026-10-04) */
+.st-line.st-line-light .st-li-tag { flex: 0 0 7.6rem; }
