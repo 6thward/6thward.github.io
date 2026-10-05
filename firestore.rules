@@ -272,6 +272,10 @@ service cloud.firestore {
     // bishop's notes for one person. Never public — same people as the rest of this page.
     match /srCases/{id} {
       allow read, write: if srManages();
+      // files attached to a card (an invoice, a statement), stored as chunks
+      match /chunks/{cid} {
+        allow read, write: if srManages();
+      }
     }
     match /selfReliance/{sid} {
       allow create: if srLinkOk(request.resource.data.link)

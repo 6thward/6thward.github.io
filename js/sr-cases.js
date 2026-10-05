@@ -2,19 +2,23 @@
 // self-reliance specialist's form responses (imported from the spreadsheet's CSV
 // export) plus the specialist's write-up, the request, and the bishop's notes.
 //   srCases/{id} { key, name, spouse, email, status, requested, writeup, writeupBy,
-//                  writeupAt, decision, notes, responses[{ id, at, raw{}, amounts{}, exact{}, edited{} }] }
+//                  writeupAt, decision, notes, files[], responses[{ id, at, raw{}, amounts{}, exact{}, edited{} }] }
+//   srCases/{id}/chunks/…  the attached files themselves (invoices, statements) — see files.js
 // Same privacy as the rest of this page: only the bishop and people given Self-Reliance.
-import { db } from "./firebase-init.js?v=1791212856";
-import { ctx, can } from "./app.js?v=1791212856";
+import { db } from "./firebase-init.js?v=1791213282";
+import { ctx, can } from "./app.js?v=1791213282";
 import {
   collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1791212856";
+import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791213282";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1791213282";
 import {
   INC, EXP, QA, parseCsv, mapResponses, personKey, respTotals, fmtUsd, isBlank, writeupSections,
-} from "./sr-import.js?v=1791212856";
+} from "./sr-import.js?v=1791213282";
 
 let mount = null, cases = [], started = false, openId = null, openRi = null;
+const thumbs = new Map(); // file id -> object URL, so an attached image shows right on the card
+const isImage = (f) => /^image\//.test(f.type || "") || /\.(png|jpe?g|gif|webp)$/i.test(f.name || "");
 const filter = { q: "", status: "" };
 const STATUS = [["new", "New"], ["reviewing", "Reviewing"], ["helping", "Helping"], ["closed", "Closed"]];
 const STATUS_PILL = { new: "pill-inprogress", reviewing: "pill-pending", helping: "pill-approved", closed: "pill-muted" };
@@ -86,7 +90,7 @@ function renderGrid() {
     const ex = wuExcerpt(c.writeup);
     return `<div class="src-card" data-id="${c.id}" tabindex="0">
       <div class="src-card-top"><b class="src-name">${esc(c.name || "—")}</b><span class="pill ${STATUS_PILL[st] || ""}">${esc(STATUS.find(([k]) => k === st)?.[1] || st)}</span></div>
-      <div class="row-sub">${c.spouse ? `& ${esc(c.spouse)} · ` : ""}${r ? `plan ${esc(fmtDay(r.at))}` : "no plan on file"}${n > 1 ? ` · ${n} plans` : ""}</div>
+      <div class="row-sub">${c.spouse ? `& ${esc(c.spouse)} · ` : ""}${r ? `plan ${esc(fmtDay(r.at))}` : "no plan on file"}${n > 1 ? ` · ${n} plans` : ""}${(c.files || []).length ? ` · 📎 ${(c.files || []).length}` : ""}</div>
       ${r && !isBlank(r.raw?.needs) ? `<div class="src-need"><span>Needs</span>${esc(r.raw.needs)}</div>` : ""}
       ${c.requested ? `<div class="src-need src-req"><span>Requested</span>${esc(c.requested)}</div>` : ""}
       ${t ? tiles(t, true) : ""}
@@ -164,6 +168,14 @@ function detailHtml(c, ri) {
             <textarea id="srd-writeup" class="src-ta src-ta-tall" placeholder="Paste the self-reliance specialist's write-up here. Section titles on their own line (Current Financial Situation, Conclusion…) become headings.">${esc(c.writeup || "")}</textarea>
             <div class="src-wu-save"><input id="srd-wu-by" class="src-in" placeholder="Written by (specialist's name)" value="${esc(c.writeupBy || "")}" autocomplete="off"><button class="btn btn-primary btn-sm" id="srd-wu-save" type="button">Save write-up</button></div>
           </div>` : ""}</div>
+        <div class="src-sec"><h4>Attachments ${ed ? `<button class="btn btn-sm btn-ghost" id="srd-attach" type="button" title="Attach an invoice, statement, PDF or image">📎 Add file</button>` : ""}</h4>
+          ${(c.files || []).length ? `<div class="src-files">${(c.files || []).map((f) => `<div class="src-file" data-file="${esc(f.id)}" title="Open ${esc(f.name)}">
+              ${isImage(f) ? `<img class="src-thumb" data-thumb="${esc(f.id)}" alt="${esc(f.name)}"${thumbs.get(f.id) ? ` src="${thumbs.get(f.id)}"` : ""}>` : `<span class="src-file-ic">${fileIcon(f)}</span>`}
+              <span class="src-file-name">${esc(f.name)}</span><span class="row-sub">${fmtBytes(f.size)}</span>
+              ${ed ? `<button type="button" class="btn btn-sm btn-ghost" data-rmfile="${esc(f.id)}" title="Remove this file">✕</button>` : ""}
+            </div>`).join("")}</div>` : `<p class="row-sub" style="margin:0">None yet.</p>`}
+          <div class="src-upload row-sub" id="srd-upload" hidden></div>
+          ${ed ? `<input type="file" id="srd-file" accept="${ATTACH_ACCEPT}" multiple hidden>` : ""}</div>
         <div class="src-sec"><h4>Decision / help given</h4>
           ${ed ? `<textarea id="srd-decision" class="src-ta" placeholder="What was decided, what was provided and when">${esc(c.decision || "")}</textarea>` : `<p>${esc(c.decision || "—")}</p>`}</div>
         <div class="src-sec"><h4>Bishop’s notes</h4>
@@ -206,7 +218,38 @@ function drawOpen() {
   box.querySelector("#srd-close").addEventListener("click", () => { openId = null; closeModal(); });
   box.querySelector("#srd-print").addEventListener("click", () => printCase(c, rs[openRi]));
   box.querySelectorAll("[data-ri]").forEach((b) => b.addEventListener("click", () => { openRi = Number(b.dataset.ri); drawOpen(); }));
+  // attachments: click to open; images also show as a thumbnail
+  box.querySelectorAll(".src-file").forEach((el) => el.addEventListener("click", async (e) => {
+    if (e.target.closest("[data-rmfile]")) return;
+    const meta = (c.files || []).find((f) => f.id === el.dataset.file); if (!meta) return;
+    try { await openAttachment("srCases", meta); } catch (err) { toast(err.message || "Couldn't open that file"); }
+  }));
+  box.querySelectorAll("[data-thumb]").forEach(async (img) => {
+    const meta = (c.files || []).find((f) => f.id === img.dataset.thumb); if (!meta || thumbs.get(meta.id)) return;
+    try { const url = URL.createObjectURL(await fetchAttachment("srCases", meta)); thumbs.set(meta.id, url); if (img.isConnected) img.src = url; } catch {}
+  });
   if (!editor()) return;
+
+  const picker = box.querySelector("#srd-file"), upStatus = box.querySelector("#srd-upload");
+  box.querySelector("#srd-attach").addEventListener("click", () => { picker.value = ""; picker.click(); });
+  picker.addEventListener("change", async () => {
+    const chosen = [...picker.files]; if (!chosen.length) return;
+    const tooBig = chosen.filter((f) => f.size > MAX_ATTACH_BYTES);
+    if (tooBig.length) toast(`${tooBig[0].name} is over 10 MB — skipped`);
+    const added = [];
+    upStatus.hidden = false;
+    try {
+      for (const f of chosen.filter((x) => x.size <= MAX_ATTACH_BYTES)) added.push(await uploadAttachment("srCases", c.id, f, (pct) => { upStatus.textContent = `Uploading ${f.name} — ${Math.round(pct * 100)}%`; }));
+      if (added.length) await save({ files: [...(c.files || []), ...added] }, added.length === 1 ? "Attached" : `${added.length} files attached`);
+    } catch (e) { toast("Upload failed: " + (e.code || e.message)); }
+    upStatus.hidden = true;
+  });
+  box.querySelectorAll("[data-rmfile]").forEach((b) => b.addEventListener("click", async () => {
+    const meta = (c.files || []).find((f) => f.id === b.dataset.rmfile); if (!meta) return;
+    if (!confirm(`Remove “${meta.name}” from this card?`)) return;
+    await save({ files: (c.files || []).filter((f) => f.id !== meta.id) }, "Removed");
+    deleteAttachment("srCases", meta).catch(() => {});
+  }));
 
   box.querySelector("#srd-status").addEventListener("change", (e) => save({ status: e.target.value }, "Saved"));
   [["#srd-requested", "requested"], ["#srd-decision", "decision"], ["#srd-notes", "notes"]].forEach(([sel, key]) => {
@@ -223,7 +266,7 @@ function drawOpen() {
   });
   box.querySelector("#srd-delete").addEventListener("click", async () => {
     if (!confirm(`Delete ${c.name}'s card, including the plan answers, write-up and notes? This can't be undone.`)) return;
-    try { await deleteDoc(ref); openId = null; closeModal(); toast("Card deleted"); } catch (e) { toast("Couldn't delete: " + (e.code || e.message)); }
+    try { for (const f of c.files || []) await deleteAttachment("srCases", f); await deleteDoc(ref); openId = null; closeModal(); toast("Card deleted"); } catch (e) { toast("Couldn't delete: " + (e.code || e.message)); }
   });
   // correct an amount: click it, type the number (blank = unknown)
   const r = rs[openRi];

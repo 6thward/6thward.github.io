@@ -141,7 +141,8 @@ export function writeupSections(text) {
   lines.forEach((l, i) => {
     if (!l) return;
     const next = lines.slice(i + 1).find((x) => x);
-    const heading = l.length <= 70 && !/[.!?:;,]$/.test(l) && l.split(/\s+/).length <= 9 && next && next.length > l.length;
+    // a title line: short, starts with a capital, no closing punctuation, not a bullet, and something follows it
+    const heading = l.length <= 70 && /^[A-Z]/.test(l) && !/[.!?:;,]$/.test(l) && l.split(/\s+/).length <= 10 && !!next;
     if (heading) { if (cur.title || cur.paras.length) out.push(cur); cur = { title: l, paras: [] }; }
     else cur.paras.push(l);
   });

@@ -1767,3 +1767,11 @@ li:hover > .nt-assign, .rc-todo:hover .nt-assign, .nt-assign:focus { opacity: 1;
 .src-writeup p { margin: 0 0 .55rem; font-size: .93rem; line-height: 1.5; } .src-writeup p:last-child { margin-bottom: 0; }
 .src-imp td, .src-imp th { padding: .4rem .5rem; }
 @media (max-width: 860px) { .src-d-cols { grid-template-columns: 1fr; } .src-money { grid-template-columns: 1fr; } .src-bar-actions { margin-left: 0; } }
+/* Self-Reliance cards: attachments (2026-10-05) */
+.src-files { display: flex; flex-direction: column; gap: .4rem; }
+.src-file { display: flex; align-items: center; gap: .55rem; background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: .35rem .5rem; cursor: pointer; }
+.src-file:hover { border-color: var(--brand); }
+.src-thumb { width: 3.2rem; height: 3.2rem; object-fit: cover; object-position: top; border-radius: 7px; background: #eef1f4; flex: none; }
+.src-file-ic { font-size: 1.3rem; width: 3.2rem; text-align: center; flex: none; }
+.src-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: .9rem; }
+.src-upload { margin-top: .4rem; }
