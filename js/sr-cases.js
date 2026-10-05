@@ -5,16 +5,16 @@
 //                  writeupAt, decision, notes, files[], responses[{ id, at, raw{}, amounts{}, exact{}, edited{} }] }
 //   srCases/{id}/chunks/…  the attached files themselves (invoices, statements) — see files.js
 // Same privacy as the rest of this page: only the bishop and people given Self-Reliance.
-import { db } from "./firebase-init.js?v=1791213282";
-import { ctx, can } from "./app.js?v=1791213282";
+import { db } from "./firebase-init.js?v=1791213416";
+import { ctx, can } from "./app.js?v=1791213416";
 import {
   collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791213282";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1791213282";
+import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791213416";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1791213416";
 import {
   INC, EXP, QA, parseCsv, mapResponses, personKey, respTotals, fmtUsd, isBlank, writeupSections,
-} from "./sr-import.js?v=1791213282";
+} from "./sr-import.js?v=1791213416";
 
 let mount = null, cases = [], started = false, openId = null, openRi = null;
 const thumbs = new Map(); // file id -> object URL, so an attached image shows right on the card
@@ -65,7 +65,8 @@ export function initCases(el) {
 function wuExcerpt(text) {
   const secs = writeupSections(text);
   if (!secs.length) return "";
-  const pick = secs.find((s) => /conclusion|summary|recommend/i.test(s.title)) || secs[0];
+  // the card front quotes the bottom line: Conclusion, else an "Overall…" or Recommendation section, else the opening
+  const pick = [/conclusion|summary/i, /overall/i, /recommend/i].map((re) => secs.find((x) => re.test(x.title) && x.paras.length)).find(Boolean) || secs.find((x) => x.paras.length) || secs[0];
   return pick.paras[0] || pick.title;
 }
 function tiles(t, small) {
