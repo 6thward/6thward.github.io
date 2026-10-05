@@ -11,7 +11,7 @@
 //   selfReliance/{sid}                 the answers + a list of files
 //   selfReliance/{sid}/chunks/{f}_{i}  { f: fileId, i: index, d: Bytes }
 //   srLinks/{token}                    a form link that is allowed to submit
-import { db } from "./firebase-init.js?v=1791162507";
+import { db } from "./firebase-init.js?v=1791165558";
 import {
   doc, collection, getDocs, setDoc, Bytes,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";

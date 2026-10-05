@@ -1681,3 +1681,9 @@ li:hover > .nt-assign, .rc-todo:hover .nt-assign, .nt-assign:focus { opacity: 1;
 .td-srow-blocked .td-stime { font-weight: 500; color: #a7b0bd; text-decoration: line-through; }
 .td-blk { color: #a7b0bd; } .td-blk:hover { color: var(--danger); }
 .td-sched-cols .td-blk, .td-sched-cols [data-block] { padding: .1rem .3rem; font-size: .78rem; }
+/* Prelude music inside the Music Number box (2026-10-04) */
+.st-prelude { align-self: stretch; display: flex; flex-direction: column; gap: .25rem; margin-top: .3rem; padding-top: .35rem; border-top: 1px dashed rgba(31,39,51,.18); }
+.st-prelude-only .st-prelude { margin-top: 0; padding-top: 0; border-top: none; }
+.st-prelude-lbl { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); }
+.st-prelude-only .st-prelude-lbl { display: none; }
+.st-prelude-ro { font-size: .82rem; }

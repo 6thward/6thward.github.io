@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1791162507";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1791162507";
+import { db } from "./firebase-init.js?v=1791165558";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1791165558";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1791162507";
-import { HYMNS } from "./hymns.js?v=1791162507";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1791162507";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1791165558";
+import { HYMNS } from "./hymns.js?v=1791165558";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1791165558";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -498,6 +498,7 @@ function agendaText(m, date) {
   if (m.conducting) L.push(`Conducting: ${m.conducting}`);
   if (m.chorister) L.push(`Music conductor: ${m.chorister}`);
   if (m.organist) L.push(`Organist: ${m.organist}`);
+  if (m.prelude && (m.prelude.who || m.prelude.song)) L.push(`Prelude music: ${[m.prelude.who, m.prelude.song].filter(Boolean).join(" — ")}`);
   L.push("");
   (m.items || []).forEach((it) => {
     const k = it.kind;
@@ -982,6 +983,17 @@ function statusChips(m, date) {
   // Speakers box entirely (m.hide.music / m.hide.youth); a small dashed chip
   // at the end of the row brings one back.
   const hide = (m && m.hide) || {};
+  // Prelude music (2026-10-04): who is playing / singing before the meeting, and the piece.
+  // Lives in the Music Number box; on a Sunday without that box it gets a small pill of its own.
+  const prelude = (m && m.prelude) || {};
+  const hasPrelude = !!(prelude.who || prelude.song);
+  const preludeBlock = can
+    ? `<span class="st-prelude"><span class="st-prelude-lbl">Prelude music</span>
+        <span class="st-music-field"><textarea class="st-in-title st-music-in st-music-ta" data-prelude="who" placeholder="Who — a person or group" rows="1" autocomplete="off">${esc(prelude.who || "")}</textarea></span>
+        <span class="st-music-field"><textarea class="st-in-title st-music-in st-music-ta" data-prelude="song" placeholder="Song / piece" rows="1" autocomplete="off">${esc(prelude.song || "")}</textarea></span>
+      </span>`
+    : hasPrelude ? `<span class="st-prelude"><span class="st-prelude-lbl">Prelude music</span><span class="st-prelude-ro"><b>${esc(prelude.who || "")}</b>${prelude.who && prelude.song ? " — " : ""}${esc(prelude.song || "")}</span></span>` : "";
+  let preludeShown = false;
   const xBtn = (key, what) => can ? `<span class="st-x" data-hide="${key}" title="Remove the ${what} box from this Sunday">✕</span>` : "";
   if (hide.music) {
     // nothing — restore chip added below
@@ -1010,7 +1022,9 @@ function statusChips(m, date) {
       <select class="st-mtype" data-mtype title="Type"><option value="none"${mode === "none" ? " selected" : ""}>— none —</option>${INTER_MODES.map(([k, l]) => `<option value="${k}"${mode === k ? " selected" : ""}>${l}</option>`).join("")}</select>
       ${field ? `<span class="st-music-field">${field}${conf}</span>` : ""}
       ${placePill}
+      ${preludeBlock}
     </span>`);
+    preludeShown = true;
   } else if (slotMusical) {
     chips.push(chip("Music Number", slotMusical.who, { t: "inter" }, isConf(slotMusical), slotMusical.confirmedBy, null, slotMusical.hymn || "", { k: "musical", o: 0 }, placePill));
   } else if (slotChoir) {
@@ -1021,6 +1035,11 @@ function statusChips(m, date) {
   } else if (type !== "fast") {
     // Fast & Testimony has no intermediate slot — skip the empty pill there
     chips.push(`<span class="st st-off${can ? " st-click" : ""}"${can ? ` data-qe='{"t":"inter"}' title="Click to add"` : ""}><span class="st-head">Music Number</span></span>`);
+  }
+
+  // no Music Number box this Sunday (fast Sunday, removed, or a read-only viewer): prelude gets its own pill
+  if (!preludeShown && preludeBlock && !NO_MEETING(type)) {
+    chips.push(`<span class="st st-inter st-prelude-only ${hasPrelude ? "st-ok" : "st-off"}"><span class="st-head">Prelude Music</span>${preludeBlock}</span>`);
   }
 
   // Youth pill = primary + youth speakers; Speakers pill = the adult speakers.
@@ -1293,6 +1312,24 @@ function renderCards(wrap) {
       const date = sel.closest("[data-date]").dataset.date;
       patchMeeting(date, (mm) => setInterSlot(mm, sel.value, {}, ""));
     });
+  });
+  // prelude music: who + song, saved on Enter / blur, Esc reverts
+  wrap.querySelectorAll("[data-prelude]").forEach((inp) => {
+    ["click", "mousedown", "dragstart"].forEach((ev) => inp.addEventListener(ev, (e) => e.stopPropagation()));
+    const grow = () => { inp.style.height = "auto"; inp.style.height = inp.scrollHeight + "px"; }; // long names wrap onto a 2nd line
+    inp.addEventListener("input", grow); grow(); requestAnimationFrame(grow);
+    const date = inp.closest("[data-date]").dataset.date, key = inp.dataset.prelude, initial = inp.value;
+    let done = false;
+    const commit = () => {
+      if (done) return; done = true;
+      if (inp.value.trim() === initial.trim()) return;
+      patchMeeting(date, (mm) => { mm.prelude = { ...(mm.prelude || {}), [key]: inp.value.trim() }; });
+    };
+    inp.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") { ev.preventDefault(); commit(); inp.blur(); }
+      if (ev.key === "Escape") { ev.preventDefault(); done = true; inp.value = initial; inp.blur(); }
+    });
+    inp.addEventListener("blur", () => setTimeout(commit, 80));
   });
   wrap.querySelectorAll("[data-mfield]").forEach((inp) => {
     ["click", "mousedown", "dragstart"].forEach((ev) => inp.addEventListener(ev, (e) => e.stopPropagation()));
@@ -2360,6 +2397,7 @@ function renderAgendaView(m, canEdit = false) {
     m.conducting ? row("Conducting", esc(m.conducting)) : "",
     row("Music conductor", m.chorister ? esc(m.chorister) : `<span class="row-sub">—</span>`),
     row("Organist", m.organist ? esc(m.organist) : `<span class="row-sub">—</span>`),
+    m.prelude && (m.prelude.who || m.prelude.song) ? row("Prelude music", esc([m.prelude.who, m.prelude.song].filter(Boolean).join(" — "))) : "",
     `<div class="ag-head-break"></div>`,
   ].join("");
   const items = (m.items || []).map((it, itemIdx) => {
