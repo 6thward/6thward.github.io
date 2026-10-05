@@ -1,14 +1,14 @@
 // Public Self-Reliance Plan form (2026-09-27): selfreliance.html?k=TOKEN
 // No sign-in. The link's token must be an active srLinks doc; the answers
 // are written once and can't be read back by the public.
-import { db } from "./firebase-init.js?v=1791165769";
+import { db } from "./firebase-init.js?v=1791165915";
 import {
   doc, getDoc, setDoc, updateDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import {
   INCOME, EXPENSES, OTHER_EXPENSE_ROWS, REDUCE_ROWS, PLAN_ROWS, FILE_KINDS,
   MAX_FILES_PER_KIND, MAX_FILE_BYTES, ACCEPT, money, fmtMoney, fmtBytes, totals, newId, uploadFile, chunkCount,
-} from "./sr-shared.js?v=1791165769";
+} from "./sr-shared.js?v=1791165915";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const DRAFT_KEY = "sr-draft";
