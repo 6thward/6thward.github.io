@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1791165975";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1791165975";
+import { db } from "./firebase-init.js?v=1791166119";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1791166119";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1791165975";
-import { HYMNS } from "./hymns.js?v=1791165975";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1791165975";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1791166119";
+import { HYMNS } from "./hymns.js?v=1791166119";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1791166119";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -1020,6 +1020,7 @@ function statusChips(m, date) {
     chips.push(`<span class="st st-inter ${cls}${dragAttr ? " st-drag" : ""}"${dragAttr}>
       <span class="st-head st-click" data-qe='{"t":"inter"}' title="Click for the full editor">Music Number${xBtn("music", "Music Number")}</span>
       ${preludeBlock}
+      <span class="st-prelude-lbl st-sub-lbl">Special Musical Number</span>
       <select class="st-mtype" data-mtype title="Type"><option value="none"${mode === "none" ? " selected" : ""}>— none —</option>${INTER_MODES.map(([k, l]) => `<option value="${k}"${mode === k ? " selected" : ""}>${l}</option>`).join("")}</select>
       ${field ? `<span class="st-music-field">${field}${conf}</span>` : ""}
       ${placePill}

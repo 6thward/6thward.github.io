@@ -3,7 +3,7 @@
 //   <parent path>/chunks/{fileId}_{i}   { f: fileId, i, d: Bytes }
 // and the item that owns it keeps the metadata:
 //   { id, name, size, type, chunks, at }   (at = the parent doc id holding the chunks)
-import { db } from "./firebase-init.js?v=1791165975";
+import { db } from "./firebase-init.js?v=1791166119";
 import {
   doc, collection, getDocs, setDoc, deleteDoc, Bytes,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
