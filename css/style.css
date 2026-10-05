@@ -1575,7 +1575,7 @@ li:hover > .nt-assign, .rc-todo:hover .nt-assign, .nt-assign:focus { opacity: 1;
 .wc-follow-person li.done { text-decoration: line-through; color: var(--ink-soft); }
 /* Tithing declaration sign-ups — bishop's side, inside the Bishop page (2026-10-04) */
 .panel-actions { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
-#bp-tithing > .card + .card { margin-top: .8rem; }
+#td-root > .card + .card { margin-top: .8rem; }
 .td-share { display: flex; gap: 1.2rem; align-items: flex-start; }
 .td-share-main { flex: 1; min-width: 0; }
 .td-link-row { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; }

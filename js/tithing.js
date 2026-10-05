@@ -1,16 +1,16 @@
-// Tithing declaration sign-ups (2026-10-04) — the bishop's side, inside the
-// Bishop page (confidential.js): set when you're available, share the link / QR code, and see
+// Tithing declaration sign-ups (2026-10-04) — the bishop's side, its own page
+// ("Tithing Declaration" tab, area key "tithing"): set when you're available, share the link / QR code, and see
 // who signed up. The public page is tithing.html (js/tithing-form.js).
-import { db } from "./firebase-init.js?v=1791158802";
-import { ctx, can } from "./app.js?v=1791158802";
+import { db } from "./firebase-init.js?v=1791162379";
+import { ctx, can } from "./app.js?v=1791162379";
 import {
   collection, doc, onSnapshot, setDoc, updateDoc, writeBatch, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast } from "./ui.js?v=1791158802";
+import { openModal, closeModal, toast } from "./ui.js?v=1791162379";
 import {
   GROUPS, PLACES, SLOT_LENGTHS, esc, toMin, fmtClock, fmtLongDay, fmtShortDay, slotsOf, slotMap,
   sortWindows, overlaps, newToken, parseSlotId, todayIso, addDays, hhmm,
-} from "./tithing-shared.js?v=1791158802";
+} from "./tithing-shared.js?v=1791162379";
 
 let mount = null, season = null, signups = [], unsubSignups = null, started = false, dirty = false;
 let qrCache = { url: "", data: "" }, qrLib = null;
@@ -25,6 +25,22 @@ const mdDay = (iso) => { const d = new Date(iso + "T12:00:00"); return `${d.toLo
 const seasonRef = () => doc(db, "tithing", season.token);
 const linkUrl = () => new URL("tithing.html?k=" + season.token, location.href).href;
 const rangeText = (w) => `${fmtClock(toMin(w.start))} – ${fmtClock(toMin(w.end))}`;
+
+// the page shell: a heading, then everything else is drawn by initTithing
+export function initTithingPage() {
+  const panel = document.getElementById("panel-tithing");
+  if (!panel || panel.dataset.ready) return;
+  panel.dataset.ready = "1";
+  panel.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2>Tithing Declaration</h2>
+        <p class="panel-sub">Set when you're available, share the link or QR code, and members sign up for a time.</p>
+      </div>
+    </div>
+    <div id="td-root"></div>`;
+  initTithing(panel.querySelector("#td-root"));
+}
 
 export function initTithing(el) {
   mount = el;
@@ -78,7 +94,7 @@ function render() {
   const a = document.activeElement;
   if (a && mount.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) { dirty = true; return; }
   dirty = false;
-  const editor = can("confidential", "edit");
+  const editor = can("tithing", "edit");
 
   if (!season) {
     mount.innerHTML = `

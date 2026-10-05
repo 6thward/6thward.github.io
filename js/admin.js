@@ -15,13 +15,13 @@
 // whose profile doc carries `alias: <googleUid>` plus a mirror of the name /
 // organization / calling / pages, so the rules see the same access either
 // way. The table shows one row; the mirror is kept in step on every save.
-import { db } from "./firebase-init.js?v=1791158802";
-import { ctx, AREAS, normalizePerms } from "./app.js?v=1791158802";
+import { db } from "./firebase-init.js?v=1791162379";
+import { ctx, AREAS, normalizePerms } from "./app.js?v=1791162379";
 import {
   collection, onSnapshot, updateDoc, setDoc, deleteDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1791158802";
-import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1791158802";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1791162379";
+import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1791162379";
 
 let sort = { key: "created", dir: 1 }; // default: oldest at the top; click a header for A→Z / Z→A (2026-09-19)
 let users = [];   // profiles (alias PIN docs are folded into their Google row)
@@ -83,7 +83,7 @@ export function initAdmin() {
 function permsOf(u) {
   if (u.role === "bishop" || (u.email && u.email === "jordanchri@gmail.com")) return Object.fromEntries(AREAS.map((a) => [a.key, "edit"]));
   if (u.perms && Object.keys(u.perms).length) return normalizePerms(u.perms);
-  if (u.role === "bishopric") return normalizePerms(Object.fromEntries(AREAS.map((a) => [a.key, a.key === "confidential" || a.key === "selfreliance" || a.key === "users" ? "" : "edit"])));
+  if (u.role === "bishopric") return normalizePerms(Object.fromEntries(AREAS.map((a) => [a.key, a.key === "confidential" || a.key === "selfreliance" || a.key === "tithing" || a.key === "users" ? "" : "edit"])));
   if (u.role === "member") return normalizePerms({ sacrament: "edit", calendar: "edit", tasks: "edit" });
   return normalizePerms({});
 }
