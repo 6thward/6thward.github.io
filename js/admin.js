@@ -15,13 +15,13 @@
 // whose profile doc carries `alias: <googleUid>` plus a mirror of the name /
 // organization / calling / pages, so the rules see the same access either
 // way. The table shows one row; the mirror is kept in step on every save.
-import { db } from "./firebase-init.js?v=1791167826";
-import { ctx, AREAS, normalizePerms } from "./app.js?v=1791167826";
+import { db } from "./firebase-init.js?v=1791171944";
+import { ctx, AREAS, normalizePerms } from "./app.js?v=1791171944";
 import {
   collection, onSnapshot, updateDoc, setDoc, deleteDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1791167826";
-import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1791167826";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1791171944";
+import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1791171944";
 
 let sort = { key: "created", dir: 1 }; // default: oldest at the top; click a header for A→Z / Z→A (2026-09-19)
 let users = [];   // profiles (alias PIN docs are folded into their Google row)
@@ -147,7 +147,20 @@ function render() {
     th.querySelector(".us-sort-ic").textContent = th.dataset.sort === sort.key ? (sort.dir === 1 ? " ▲" : " ▼") : "";
   });
   if (!rows.length) { tbody.innerHTML = `<tr><td colspan="${showLastUsed() ? 6 : 5}" class="empty-note">Nobody yet — use “+ Add user”.</td></tr>`; return; }
-  tbody.innerHTML = rows.map((u) => {
+  // grouped by organization (2026-10-04): Bishopric first, then A→Z, people with none last;
+  // the column sort still orders people inside each group
+  const cols = showLastUsed() ? 6 : 5;
+  const orgOf = (u) => (u.organization || "").trim() || (isBishopUser(u) ? "Bishopric" : "");
+  const groups = new Map(); // lowercased org -> { label, list }
+  rows.forEach((u) => {
+    const label = orgOf(u), k = label.toLowerCase();
+    if (!groups.has(k)) groups.set(k, { label, list: [] });
+    groups.get(k).list.push(u);
+  });
+  const rank = (k) => (k === "bishopric" ? 0 : k === "" ? 2 : 1);
+  const orgDir = sort.key === "organization" ? sort.dir : 1;
+  const ordered = [...groups.entries()].sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b) * orgDir).map(([, g]) => g);
+  const rowHtml = (u) => {
     const id = u.invite ? "inv:" + u.email : u.uid;
     const me = u.uid === ctx.uid;
     return `
@@ -167,7 +180,10 @@ function render() {
           : `<button class="btn btn-sm btn-ghost btn-danger" data-revoke="${esc(id)}">Revoke</button>`}
       </td>
     </tr>`;
-  }).join("");
+  };
+  tbody.innerHTML = ordered.map((g) => `
+    <tr class="us-group"><td colspan="${cols}"><span class="us-group-name">${esc(g.label || "No organization")}</span><span class="us-group-n">${g.list.length}</span></td></tr>
+    ${g.list.map(rowHtml).join("")}`).join("");
   const find = (id) => id.startsWith("inv:") ? invites.find((i) => i.email === id.slice(4)) : users.find((u) => u.uid === id);
   tbody.querySelectorAll("[data-edit]").forEach((b) => b.addEventListener("click", () => editUser(find(b.dataset.edit))));
   tbody.querySelectorAll("[data-invite]").forEach((b) => b.addEventListener("click", () => inviteMessage(find(b.dataset.invite))));

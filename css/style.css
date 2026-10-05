@@ -1700,3 +1700,8 @@ li:hover > .nt-assign, .rc-todo:hover .nt-assign, .nt-assign:focus { opacity: 1;
 .st-sec.st-sec-main { flex: 1; }
 .st-sec .st-prelude { margin: 0; padding: 0; border: none; }
 .st-sec .st-prelude-lbl { color: inherit; opacity: .85; }
+/* Users: grouped by organization with section headers (2026-10-04) */
+#users-table tr.us-group td { padding: 1.1rem .6rem .35rem; border-bottom: 2px solid var(--brand); background: transparent; }
+#users-table tbody tr.us-group:first-child td { padding-top: .5rem; }
+.us-group-name { font-size: .8rem; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; color: var(--brand); }
+.us-group-n { margin-left: .5rem; font-size: .72rem; font-weight: 700; color: var(--brand); background: var(--brand-soft); border-radius: 99px; padding: .05rem .5rem; }
