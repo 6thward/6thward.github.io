@@ -1653,3 +1653,16 @@ li:hover > .nt-assign, .rc-todo:hover .nt-assign, .nt-assign:focus { opacity: 1;
 .td-sched-cols .td-x, .td-sched-cols [data-addname] { padding: .1rem .3rem; font-size: .78rem; }
 .td-sched-cols .td-grip { width: .8rem; }
 .td-sched-cols .td-tag { margin-left: 0; font-size: .66rem; }
+/* Tithing "Repeat on": tick the weeks that get the same hours (2026-10-04) */
+.td-rep-wrap { display: flex; flex-direction: column; gap: .2rem; position: relative; }
+.td-rep-lbl { font-size: .74rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); }
+.td-rep > summary { list-style: none; cursor: pointer; font-size: .92rem; font-weight: 500; color: var(--ink); padding: .4rem 1.6rem .4rem .55rem; border: 1px solid var(--line); border-radius: 8px; background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%235b6675' stroke-width='1.6'/%3E%3C/svg%3E") no-repeat right .55rem center; min-width: 8.5rem; white-space: nowrap; }
+.td-rep > summary::-webkit-details-marker { display: none; }
+.td-rep[open] > summary { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.td-rep-pop { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; min-width: 13rem; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 30px rgba(31,39,51,.2); padding: .45rem; display: grid; grid-template-columns: 1fr 1fr; gap: .1rem .3rem; }
+.td-rep-head { grid-column: 1 / -1; display: flex; align-items: center; gap: .4rem; padding: .1rem .3rem .35rem; border-bottom: 1px solid var(--line); margin-bottom: .25rem; font-size: .85rem; }
+.td-rep-head b { margin-right: auto; }
+.td-rep-head button { border: none; background: none; color: var(--brand); font: inherit; font-size: .8rem; font-weight: 600; cursor: pointer; padding: .1rem .3rem; }
+.td-add label.td-rep-opt { flex-direction: row; align-items: center; gap: .4rem; font-size: .92rem; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--ink); padding: .3rem .4rem; border-radius: 7px; cursor: pointer; white-space: nowrap; }
+.td-add label.td-rep-opt:hover { background: var(--brand-soft); }
+.td-add label.td-rep-opt input { width: 1rem; height: 1rem; padding: 0; }

@@ -1,16 +1,16 @@
 // Tithing declaration sign-ups (2026-10-04) — the bishop's side, inside the
 // Bishop page (confidential.js): set when you're available, share the link / QR code, and see
 // who signed up. The public page is tithing.html (js/tithing-form.js).
-import { db } from "./firebase-init.js?v=1791158176";
-import { ctx, can } from "./app.js?v=1791158176";
+import { db } from "./firebase-init.js?v=1791158714";
+import { ctx, can } from "./app.js?v=1791158714";
 import {
   collection, doc, onSnapshot, setDoc, updateDoc, writeBatch, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast } from "./ui.js?v=1791158176";
+import { openModal, closeModal, toast } from "./ui.js?v=1791158714";
 import {
   GROUPS, PLACES, SLOT_LENGTHS, esc, toMin, fmtClock, fmtLongDay, fmtShortDay, slotsOf, slotMap,
   sortWindows, overlaps, newToken, parseSlotId, todayIso, addDays,
-} from "./tithing-shared.js?v=1791158176";
+} from "./tithing-shared.js?v=1791158714";
 
 let mount = null, season = null, signups = [], unsubSignups = null, started = false, dirty = false;
 let qrCache = { url: "", data: "" }, qrLib = null;
@@ -18,7 +18,9 @@ let schedView = "cols"; // schedule: every day side by side in columns, or one l
 let listFilter = "all"; // the year list: all | attended | pending | noshow
 const STATUS = { attended: "Attended", noshow: "Didn't come" };
 // the "add a time period" form keeps its values between adds (handy for several Sundays in a row)
-const form = { date: "", start: "14:00", end: "16:00", len: 15, place: "office", group: "", weeks: 1 };
+const form = { date: "", start: "14:00", end: "16:00", len: 15, place: "office", group: "", repeat: [], repOpen: false };
+const REPEAT_WEEKS = 12; // how many following weeks the "Repeat on" list offers
+const mdDay = (iso) => { const d = new Date(iso + "T12:00:00"); return `${d.toLocaleDateString("en-US", { weekday: "short" })} ${d.getMonth() + 1}/${d.getDate()}`; };
 
 const seasonRef = () => doc(db, "tithing", season.token);
 const linkUrl = () => new URL("tithing.html?k=" + season.token, location.href).href;
@@ -30,6 +32,7 @@ export function initTithing(el) {
   started = true;
   mount.innerHTML = `<div class="empty-note">Loading…</div>`;
   mount.addEventListener("focusout", () => setTimeout(() => { if (dirty) render(); }, 60));
+  document.addEventListener("click", (e) => { const d = mount.querySelector("#tdf-rep[open]"); if (d && !d.contains(e.target)) { d.open = false; form.repOpen = false; } });
   onSnapshot(collection(db, "tithing"), (qs) => {
     const all = qs.docs.map((d) => ({ token: d.id, ...d.data() })).sort((a, b) => String(b.created || "").localeCompare(String(a.created || "")));
     const next = all[0] || null;
@@ -134,7 +137,7 @@ function render() {
       <label>Each visit<select id="tdf-len">${SLOT_LENGTHS.map((n) => opt(n, n + " minutes", form.len)).join("")}</select></label>
       <label>Where<select id="tdf-place">${Object.entries(PLACES).map(([k, p]) => opt(k, p.icon + " " + p.label, form.place)).join("")}</select></label>
       <label>Set aside for<select id="tdf-group">${opt("", "Anyone", form.group)}${Object.entries(GROUPS).map(([k, g]) => opt(k, g.label, form.group)).join("")}</select></label>
-      <label title="Add the same hours on the following weeks too">Repeat<select id="tdf-weeks">${[1, 2, 3, 4, 5, 6].map((n) => opt(n, n === 1 ? "Just this day" : n + " weeks in a row", form.weeks)).join("")}</select></label>
+      <div class="td-rep-wrap" title="Add the same hours on other weeks too"><span class="td-rep-lbl">Repeat on</span><details class="td-rep" id="tdf-rep"${form.repOpen ? " open" : ""}></details></div>
       <button class="btn btn-primary" id="tdf-add" type="button">+ Add</button>
     </div>` : "";
   const winRow = (w) => {
@@ -317,15 +320,37 @@ function render() {
   const read = () => {
     form.date = mount.querySelector("#tdf-date").value; form.start = mount.querySelector("#tdf-start").value; form.end = mount.querySelector("#tdf-end").value;
     form.len = Number(mount.querySelector("#tdf-len").value); form.place = mount.querySelector("#tdf-place").value;
-    form.group = mount.querySelector("#tdf-group").value; form.weeks = Number(mount.querySelector("#tdf-weeks").value) || 1;
+    form.group = mount.querySelector("#tdf-group").value;
   };
-  mount.querySelectorAll(".td-add input, .td-add select").forEach((i) => i.addEventListener("change", read));
+  mount.querySelectorAll(".td-add > label input, .td-add > label select").forEach((i) => i.addEventListener("change", read));
+
+  // "Repeat on": tick the following weeks (same weekday) that get the same hours
+  const repBox = mount.querySelector("#tdf-rep");
+  const drawRep = () => {
+    const base = form.date || today;
+    const dates = Array.from({ length: REPEAT_WEEKS }, (_, i) => addDays(base, 7 * (i + 1)));
+    form.repeat = form.repeat.filter((d) => dates.includes(d));
+    const n = form.repeat.length;
+    repBox.innerHTML = `<summary>${n ? form.repeat.slice(0, 3).map((d) => mdDay(d).split(" ")[1]).join(", ") + (n > 3 ? ` +${n - 3}` : "") : "Just this day"}</summary>
+      <div class="td-rep-pop">
+        <div class="td-rep-head"><b>Same hours also on</b><button type="button" data-repall="1">All</button><button type="button" data-repall="0">None</button></div>
+        ${dates.map((d) => `<label class="td-rep-opt"><input type="checkbox" data-rep="${d}"${form.repeat.includes(d) ? " checked" : ""}> ${esc(mdDay(d))}</label>`).join("")}
+      </div>`;
+    repBox.querySelectorAll("[data-rep]").forEach((cb) => cb.addEventListener("change", () => {
+      form.repeat = cb.checked ? [...new Set([...form.repeat, cb.dataset.rep])].sort() : form.repeat.filter((d) => d !== cb.dataset.rep);
+      drawRep();
+    }));
+    repBox.querySelectorAll("[data-repall]").forEach((b) => b.addEventListener("click", () => { form.repeat = b.dataset.repall === "1" ? dates : []; drawRep(); }));
+  };
+  drawRep();
+  repBox.addEventListener("toggle", () => { form.repOpen = repBox.open; });
+  mount.querySelector("#tdf-date").addEventListener("change", () => { form.repeat = []; drawRep(); }); // a new day means a new list of weeks
   mount.querySelector("#tdf-add").addEventListener("click", async () => {
     read();
     if (!form.date) return toast("Pick a day");
     if (!form.start || !form.end || toMin(form.end) <= toMin(form.start)) return toast("The end time needs to be after the start");
     if (toMin(form.end) - toMin(form.start) < form.len) return toast(`That's shorter than one ${form.len}-minute visit`);
-    const adds = Array.from({ length: form.weeks }, (_, i) => ({ id: "w" + Math.random().toString(36).slice(2, 9), date: addDays(form.date, 7 * i), start: form.start, end: form.end, len: form.len, place: form.place, group: form.group }));
+    const adds = [form.date, ...form.repeat].sort().map((date) => ({ id: "w" + Math.random().toString(36).slice(2, 9), date, start: form.start, end: form.end, len: form.len, place: form.place, group: form.group }));
     const cur = season.windows || [];
     const clash = adds.find((n) => cur.some((w) => overlaps(n, w)));
     if (clash) { const w = cur.find((x) => overlaps(clash, x)); return toast(`${fmtShortDay(clash.date)} overlaps a block you already have (${rangeText(w)})`); }
@@ -333,6 +358,7 @@ function render() {
       await saveWindows([...cur, ...adds]);
       toast(adds.length > 1 ? `Added ${adds.length} days` : "Added");
       form.date = addDays(adds[adds.length - 1].date, 7); // ready for the next week
+      form.repeat = []; form.repOpen = false;
       render();
     } catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
   });

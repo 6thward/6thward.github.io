@@ -6,7 +6,7 @@
 //   **words**               → bold;  "Lead-in: rest" → the lead-in is bold
 //   {@Name}                 → that line is assigned to Name (shown as a pill)   (2026-10-04)
 // The text is stored exactly as typed, so it stays readable anywhere.
-import { esc } from "./ui.js?v=1791158176";
+import { esc } from "./ui.js?v=1791158714";
 
 const MAX_LEVEL = 3;
 const levelOf = (indent) => Math.min(MAX_LEVEL, Math.floor(String(indent || "").replace(/\t/g, "  ").length / 2));
