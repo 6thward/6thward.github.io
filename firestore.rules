@@ -268,6 +268,11 @@ service cloud.firestore {
       allow list: if srManages();     // tokens can't be enumerated by the public
       allow write: if srManages();
     }
+    // Member cards (2026-10-05): the specialist's form responses + write-up + the
+    // bishop's notes for one person. Never public — same people as the rest of this page.
+    match /srCases/{id} {
+      allow read, write: if srManages();
+    }
     match /selfReliance/{sid} {
       allow create: if srLinkOk(request.resource.data.link)
         && request.resource.data.complete == false

@@ -1,15 +1,16 @@
 // Self-Reliance page (2026-09-27) — who has sent in a Self-Reliance Plan, and
 // what they answered. Only the bishop and people given this page can open
 // it; the rules enforce that, not just the menu.
-import { db } from "./firebase-init.js?v=1791171944";
-import { ctx, can } from "./app.js?v=1791171944";
+import { db } from "./firebase-init.js?v=1791212856";
+import { ctx, can } from "./app.js?v=1791212856";
 import {
   collection, onSnapshot, doc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1791171944";
+import { initCases } from "./sr-cases.js?v=1791212856";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1791212856";
 import {
   INCOME, EXPENSES, FILE_KINDS, fmtMoney, fmtBytes, money, totals, newId, formLink, fetchFile,
-} from "./sr-shared.js?v=1791171944";
+} from "./sr-shared.js?v=1791212856";
 
 let plans = [];
 let links = [];
@@ -28,12 +29,18 @@ export function initSelfReliance() {
     <div class="panel-head">
       <div>
         <h2>Self-Reliance</h2>
-        <p class="panel-sub">Plans people have sent in. Send the form link to anyone — they don't need to sign in.</p>
+        <p class="panel-sub" id="sr-sub"></p>
       </div>
-      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+        <div class="view-toggle" id="sr-view">
+          <button class="chip" data-view="cards" type="button">Member cards</button>
+          <button class="chip" data-view="plans" type="button">Plans sent in</button>
+        </div>
         <button class="btn btn-primary" id="sr-link-btn">🔗 Form link</button>
       </div>
     </div>
+    <div id="sr-cards-view"></div>
+    <div id="sr-plans-view" class="hidden">
     <div class="card sr-filters">
       <select id="sr-f-status"><option value="">All</option><option value="new">New</option><option value="reviewed">Reviewed</option><option value="incomplete">Upload didn't finish</option></select>
       <input id="sr-f-q" placeholder="Search a name…" autocomplete="off">
@@ -46,7 +53,25 @@ export function initSelfReliance() {
           <tbody id="sr-rows"></tbody>
         </table>
       </div>
+    </div>
     </div>`;
+  // Member cards (the specialist's reports) ⇄ plans sent in through this app's own form (2026-10-05)
+  const showView = (view) => {
+    const cards = view !== "plans";
+    panel.querySelectorAll("#sr-view .chip").forEach((c) => c.classList.toggle("active", c.dataset.view === (cards ? "cards" : "plans")));
+    panel.querySelector("#sr-cards-view").classList.toggle("hidden", !cards);
+    panel.querySelector("#sr-plans-view").classList.toggle("hidden", cards);
+    panel.querySelector("#sr-link-btn").classList.toggle("hidden", cards);
+    panel.querySelector("#sr-sub").textContent = cards
+      ? "One card per person: their Self-Reliance Plan answers, the specialist's write-up, the request, and your notes."
+      : "Plans people have sent in. Send the form link to anyone — they don't need to sign in.";
+    if (cards) initCases(panel.querySelector("#sr-cards-view"));
+    try { localStorage.setItem("sw-sr-view", cards ? "cards" : "plans"); } catch {}
+  };
+  panel.querySelectorAll("#sr-view [data-view]").forEach((b) => b.addEventListener("click", () => showView(b.dataset.view)));
+  let startView = "cards";
+  try { if (localStorage.getItem("sw-sr-view") === "plans") startView = "plans"; } catch {}
+  showView(startView);
   panel.querySelector("#sr-link-btn").addEventListener("click", openLinks);
   panel.querySelector("#sr-f-status").addEventListener("change", (e) => { filter.status = e.target.value; render(); });
   panel.querySelector("#sr-f-q").addEventListener("input", (e) => { filter.q = e.target.value; render(); });
