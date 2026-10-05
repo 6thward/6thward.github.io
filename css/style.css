@@ -1797,3 +1797,12 @@ li:hover > .nt-assign, .rc-todo:hover .nt-assign, .nt-assign:focus { opacity: 1;
 .src-note-meta label { display: flex; flex-direction: column; gap: .15rem; font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); }
 .src-note-meta input { font: inherit; font-size: .9rem; font-weight: 500; text-transform: none; letter-spacing: 0; padding: .3rem .45rem; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
 .src-wu.src-wu-sum > span { color: #8a6500; }
+/* Self-Reliance cards: Open / Closed (2026-10-05) */
+.src-st { border: none; font: inherit; font-size: .74rem; font-weight: 700; cursor: default; }
+button.src-st { cursor: pointer; } button.src-st:hover { filter: brightness(.93); box-shadow: 0 0 0 2px rgba(31,39,51,.08); }
+.src-st-open { background: #dff3e6; color: #22693f; }
+.src-st-closed { background: #e6e9ed; color: #5b6675; }
+.src-card.src-card-closed { background: #f6f7f9; } .src-card.src-card-closed .src-name { color: var(--ink-soft); }
+.src-card.src-card-closed .src-tiles, .src-card.src-card-closed .src-need, .src-card.src-card-closed .src-wu { opacity: .7; }
+.src-d-tools select.src-st-sel.src-st-open { background-color: #dff3e6; color: #22693f; border-color: #b9dfc7; }
+.src-d-tools select.src-st-sel.src-st-closed { background-color: #e6e9ed; color: #5b6675; }

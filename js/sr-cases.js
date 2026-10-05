@@ -7,24 +7,26 @@
 //   summary  — the leader's own few lines, shown first on the card (bullets / to-dos / bold like council notes)
 //   log[]    — dated notes { id, at, by, text, editedAt }; the old single `notes` text shows as an undated note
 // Same privacy as the rest of this page: only the bishop and people given Self-Reliance.
-import { db } from "./firebase-init.js?v=1791219614";
-import { ctx, can } from "./app.js?v=1791219614";
+import { db } from "./firebase-init.js?v=1791220462";
+import { ctx, can } from "./app.js?v=1791220462";
 import {
   collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791219614";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine } from "./notes.js?v=1791219614";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1791219614";
+import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791220462";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine } from "./notes.js?v=1791220462";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1791220462";
 import {
   INC, EXP, QA, parseCsv, mapResponses, personKey, respTotals, fmtUsd, isBlank, writeupSections,
-} from "./sr-import.js?v=1791219614";
+} from "./sr-import.js?v=1791220462";
 
 let mount = null, cases = [], started = false, openId = null, openRi = null;
 const thumbs = new Map(); // file id -> object URL, so an attached image shows right on the card
 const isImage = (f) => /^image\//.test(f.type || "") || /\.(png|jpe?g|gif|webp)$/i.test(f.name || "");
-const filter = { q: "", status: "" };
-const STATUS = [["new", "New"], ["reviewing", "Reviewing"], ["helping", "Helping"], ["closed", "Closed"]];
-const STATUS_PILL = { new: "pill-inprogress", reviewing: "pill-pending", helping: "pill-approved", closed: "pill-muted" };
+const filter = { q: "", status: "open" }; // closed cards drop off the list until you ask for them
+// Open or Closed (2026-10-05). Anything saved under the earlier New / Reviewing / Helping counts as Open.
+const STATUS = [["open", "Open"], ["closed", "Closed"]];
+const STATUS_PILL = { open: "src-st-open", closed: "src-st-closed" };
+const statusOf = (c) => (c.status === "closed" ? "closed" : "open");
 
 const fmtDay = (iso) => { const d = iso ? new Date(iso) : null; return d && !isNaN(d) ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : ""; };
 const sorted = (c) => [...(c.responses || [])].sort((a, b) => String(a.at || "").localeCompare(String(b.at || "")));
@@ -38,7 +40,7 @@ export function initCases(el) {
   mount.innerHTML = `
     <div class="card src-bar">
       <input id="src-q" placeholder="Search a name…" autocomplete="off">
-      <select id="src-status"><option value="">Everyone</option>${STATUS.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>
+      <select id="src-status" title="Show open cards, closed ones, or everyone"></select>
       <span class="row-sub" id="src-count"></span>
       <span class="src-bar-actions">
         ${editor() ? `<button class="btn btn-primary" id="src-import" type="button" title="Upload the CSV export of the self-reliance specialist's form responses">⬆ Import responses (CSV)</button>
@@ -88,18 +90,24 @@ function tiles(t, small) {
 function renderGrid() {
   const grid = mount?.querySelector("#src-grid"); if (!grid) return;
   const q = filter.q.trim().toLowerCase();
-  const rows = cases.filter((c) => (!filter.status || (c.status || "new") === filter.status) && (!q || `${c.name || ""} ${c.spouse || ""}`.toLowerCase().includes(q)))
-    .sort((a, b) => String(latest(b)?.at || b.created || "").localeCompare(String(latest(a)?.at || a.created || "")));
-  mount.querySelector("#src-count").textContent = cases.length ? `${rows.length} of ${cases.length}` : "";
+  const nOpen = cases.filter((c) => statusOf(c) === "open").length, nClosed = cases.length - nOpen;
+  const sel = mount.querySelector("#src-status");
+  sel.innerHTML = [["open", `Open (${nOpen})`], ["closed", `Closed (${nClosed})`], ["", `Everyone (${cases.length})`]].map(([k, l]) => `<option value="${k}"${filter.status === k ? " selected" : ""}>${l}</option>`).join("");
+  const rows = cases.filter((c) => (!filter.status || statusOf(c) === filter.status) && (!q || `${c.name || ""} ${c.spouse || ""}`.toLowerCase().includes(q)))
+    .sort((a, b) => (statusOf(a) === "closed") - (statusOf(b) === "closed") // open first when both are showing
+      || String(latest(b)?.at || b.created || "").localeCompare(String(latest(a)?.at || a.created || "")));
+  mount.querySelector("#src-count").textContent = "";
   if (!rows.length) {
-    grid.innerHTML = `<div class="card empty-note" style="grid-column:1/-1">${cases.length ? "Nobody matches." : `No cards yet.${editor() ? " Import the specialist's form responses (the spreadsheet's <b>File → Download → CSV</b>) to build them, or add one by hand." : ""}`}</div>`;
+    grid.innerHTML = `<div class="card empty-note" style="grid-column:1/-1">${cases.length ? (q ? "Nobody matches." : filter.status === "open" ? `No open cards.${nClosed ? ` ${nClosed} closed — choose “Closed” above to see ${nClosed === 1 ? "it" : "them"}.` : ""}` : "No closed cards.") : `No cards yet.${editor() ? " Import the specialist's form responses (the spreadsheet's <b>File → Download → CSV</b>) to build them, or add one by hand." : ""}`}</div>`;
     return;
   }
   grid.innerHTML = rows.map((c) => {
-    const r = latest(c), t = r ? respTotals(r) : null, n = (c.responses || []).length, st = c.status || "new";
+    const r = latest(c), t = r ? respTotals(r) : null, n = (c.responses || []).length, st = statusOf(c);
     const ex = wuExcerpt(c.writeup);
-    return `<div class="src-card" data-id="${c.id}" tabindex="0">
-      <div class="src-card-top"><b class="src-name">${esc(c.name || "—")}</b><span class="pill ${STATUS_PILL[st] || ""}">${esc(STATUS.find(([k]) => k === st)?.[1] || st)}</span></div>
+    return `<div class="src-card${st === "closed" ? " src-card-closed" : ""}" data-id="${c.id}" tabindex="0">
+      <div class="src-card-top"><b class="src-name">${esc(c.name || "—")}</b>${editor()
+        ? `<button type="button" class="pill src-st ${STATUS_PILL[st]}" data-toggle="${c.id}" title="${st === "closed" ? `Closed${c.closedAt ? " " + fmtDay(c.closedAt) : ""} — click to reopen` : "Open — click to close"}">${st === "closed" ? "Closed" : "Open"}</button>`
+        : `<span class="pill src-st ${STATUS_PILL[st]}">${st === "closed" ? "Closed" : "Open"}</span>`}</div>
       <div class="row-sub">${c.spouse ? `& ${esc(c.spouse)} · ` : ""}${r ? `plan ${esc(fmtDay(r.at))}` : "no plan on file"}${n > 1 ? ` · ${n} plans` : ""}${(c.files || []).length ? ` · 📎 ${(c.files || []).length}` : ""}</div>
       ${r && !isBlank(r.raw?.needs) ? `<div class="src-need"><span>Needs</span>${esc(r.raw.needs)}</div>` : ""}
       ${c.requested ? `<div class="src-need src-req"><span>Requested</span>${esc(c.requested)}</div>` : ""}
@@ -109,6 +117,16 @@ function renderGrid() {
         : `<div class="src-wu${ex ? "" : " src-wu-none"}">${ex ? `<span>Specialist’s write-up</span>${esc(ex)}` : "No write-up yet"}</div>`}
     </div>`;
   }).join("");
+  // Open ⇄ Closed right on the card
+  grid.querySelectorAll("[data-toggle]").forEach((b) => b.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    const c = cases.find((x) => x.id === b.dataset.toggle); if (!c) return;
+    const closing = statusOf(c) === "open";
+    try {
+      await updateDoc(doc(db, "srCases", c.id), { status: closing ? "closed" : "open", closedAt: closing ? new Date().toISOString() : "", updatedAt: serverTimestamp() });
+      toast(closing ? `${c.name} — closed` : `${c.name} — reopened`);
+    } catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
+  }));
   grid.querySelectorAll(".src-card").forEach((el) => {
     const go = () => openCase(el.dataset.id);
     el.addEventListener("click", go);
@@ -154,13 +172,13 @@ function writeupHtml(text) {
   return writeupSections(text).map((s) => `${s.title ? `<h5>${esc(s.title)}</h5>` : ""}${s.paras.map((p) => `<p>${esc(p)}</p>`).join("")}`).join("");
 }
 function detailHtml(c, ri) {
-  const rs = sorted(c), r = rs[ri] || null, st = c.status || "new", ed = editor();
+  const rs = sorted(c), r = rs[ri] || null, st = statusOf(c), ed = editor();
   return `
     <div class="src-d-head">
       <div><h3>${esc(c.name || "—")}</h3>
         <div class="row-sub">${[c.spouse ? "& " + esc(c.spouse) : "", c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : ""].filter(Boolean).join(" · ")}</div></div>
       <div class="src-d-tools">
-        ${ed ? `<select id="srd-status" title="Where this stands">${STATUS.map(([k, l]) => `<option value="${k}"${k === st ? " selected" : ""}>${l}</option>`).join("")}</select>` : `<span class="pill ${STATUS_PILL[st] || ""}">${esc(STATUS.find(([k]) => k === st)?.[1] || st)}</span>`}
+        ${ed ? `<select id="srd-status" class="src-st-sel ${STATUS_PILL[st]}" title="${st === "closed" && c.closedAt ? "Closed " + esc(fmtDay(c.closedAt)) : "Open or closed"}">${STATUS.map(([k, l]) => `<option value="${k}"${k === st ? " selected" : ""}>${l}</option>`).join("")}</select>` : `<span class="pill src-st ${STATUS_PILL[st]}">${esc(STATUS.find(([k]) => k === st)?.[1] || st)}</span>`}
         <button class="btn btn-sm" id="srd-print" type="button">🖨 Print</button>
       </div>
     </div>
@@ -278,7 +296,7 @@ function drawOpen() {
     deleteAttachment("srCases", meta).catch(() => {});
   }));
 
-  box.querySelector("#srd-status").addEventListener("change", (e) => save({ status: e.target.value }, "Saved"));
+  box.querySelector("#srd-status").addEventListener("change", (e) => save({ status: e.target.value, closedAt: e.target.value === "closed" ? new Date().toISOString() : "" }, e.target.value === "closed" ? "Closed" : "Reopened"));
   // --- summary and notes: formatted text that edits in place (bullets, to-dos, bold, highlights) ---
   const noteById = (id) => logOf(c).find((n) => n.id === id);
   // an old undated note is kept: it becomes a regular entry in the log the first time anything is saved
@@ -402,7 +420,7 @@ function newCase() {
     const name = el.querySelector("#srn-name").value.trim(), email = el.querySelector("#srn-email").value.trim().toLowerCase();
     if (!name) return el.querySelector("#srn-name").focus();
     try {
-      const ref = await addDoc(collection(db, "srCases"), { key: personKey(name, email), name, spouse: el.querySelector("#srn-spouse").value.trim(), email, status: "new", requested: "", writeup: "", decision: "", notes: "", responses: [], created: new Date().toISOString(), createdBy: ctx.name || "", createdAt: serverTimestamp() });
+      const ref = await addDoc(collection(db, "srCases"), { key: personKey(name, email), name, spouse: el.querySelector("#srn-spouse").value.trim(), email, status: "open", requested: "", writeup: "", decision: "", notes: "", responses: [], created: new Date().toISOString(), createdBy: ctx.name || "", createdAt: serverTimestamp() });
       closeModal(); setTimeout(() => openCase(ref.id), 250);
     } catch (e) { toast("Couldn't create: " + (e.code || e.message)); }
   });
@@ -441,7 +459,7 @@ function importCsv(text) {
       const batch = writeBatch(db);
       todo.forEach((p) => {
         if (p.cur) batch.update(doc(db, "srCases", p.cur.id), { responses: [...(p.cur.responses || []), ...p.fresh], spouse: p.cur.spouse || p.spouse || "", email: p.cur.email || p.email || "", key: p.key, updatedAt: serverTimestamp() });
-        else batch.set(doc(collection(db, "srCases")), { key: p.key, name: p.name, spouse: p.spouse || "", email: p.email || "", status: "new", requested: "", writeup: "", decision: "", notes: "", responses: p.resps, created: new Date().toISOString(), createdBy: ctx.name || "", createdAt: serverTimestamp() });
+        else batch.set(doc(collection(db, "srCases")), { key: p.key, name: p.name, spouse: p.spouse || "", email: p.email || "", status: "open", requested: "", writeup: "", decision: "", notes: "", responses: p.resps, created: new Date().toISOString(), createdBy: ctx.name || "", createdAt: serverTimestamp() });
       });
       await batch.commit();
       closeModal(); toast(`Imported ${todo.length} ${todo.length === 1 ? "person" : "people"}`);
