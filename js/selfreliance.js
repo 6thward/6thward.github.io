@@ -1,16 +1,16 @@
 // Self-Reliance page (2026-09-27) — who has sent in a Self-Reliance Plan, and
 // what they answered. Only the bishop and people given this page can open
 // it; the rules enforce that, not just the menu.
-import { db } from "./firebase-init.js?v=1791220462";
-import { ctx, can } from "./app.js?v=1791220462";
+import { db } from "./firebase-init.js?v=1791220898";
+import { ctx, can } from "./app.js?v=1791220898";
 import {
   collection, onSnapshot, doc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { initCases } from "./sr-cases.js?v=1791220462";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1791220462";
+import { initCases } from "./sr-cases.js?v=1791220898";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1791220898";
 import {
   INCOME, EXPENSES, FILE_KINDS, fmtMoney, fmtBytes, money, totals, newId, formLink, fetchFile,
-} from "./sr-shared.js?v=1791220462";
+} from "./sr-shared.js?v=1791220898";
 
 let plans = [];
 let links = [];

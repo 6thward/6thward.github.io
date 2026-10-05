@@ -4,22 +4,26 @@
 //   srCases/{id} { key, name, spouse, email, status, requested, writeup, writeupBy,
 //                  writeupAt, decision, notes, files[], responses[{ id, at, raw{}, amounts{}, exact{}, edited{} }] }
 //   srCases/{id}/chunks/…  the attached files themselves (invoices, statements) — see files.js
+//   budgets[] — the specialist's budget sheet(s): { title, income[{label, amount, note}], expenses[…], note };
+//               the first is the current budget, the rest are "what if" versions compared against it
 //   summary  — the leader's own few lines, shown first on the card (bullets / to-dos / bold like council notes)
 //   log[]    — dated notes { id, at, by, text, editedAt }; the old single `notes` text shows as an undated note
 // Same privacy as the rest of this page: only the bishop and people given Self-Reliance.
-import { db } from "./firebase-init.js?v=1791220462";
-import { ctx, can } from "./app.js?v=1791220462";
+import { db } from "./firebase-init.js?v=1791220898";
+import { ctx, can } from "./app.js?v=1791220898";
 import {
   collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791220462";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine } from "./notes.js?v=1791220462";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1791220462";
+import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791220898";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine } from "./notes.js?v=1791220898";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1791220898";
 import {
   INC, EXP, QA, parseCsv, mapResponses, personKey, respTotals, fmtUsd, isBlank, writeupSections,
-} from "./sr-import.js?v=1791220462";
+  parseBudgetCsv, parseMoney, budgetTotals, fmtUsdC,
+} from "./sr-import.js?v=1791220898";
 
 let mount = null, cases = [], started = false, openId = null, openRi = null;
+let openBi = 0, budgetEditing = false; // which budget is showing on the open card, and whether it's being edited
 const thumbs = new Map(); // file id -> object URL, so an attached image shows right on the card
 const isImage = (f) => /^image\//.test(f.type || "") || /\.(png|jpe?g|gif|webp)$/i.test(f.name || "");
 const filter = { q: "", status: "open" }; // closed cards drop off the list until you ask for them
@@ -102,7 +106,8 @@ function renderGrid() {
     return;
   }
   grid.innerHTML = rows.map((c) => {
-    const r = latest(c), t = r ? respTotals(r) : null, n = (c.responses || []).length, st = statusOf(c);
+    const r = latest(c), bud = (c.budgets || [])[0], n = (c.responses || []).length, st = statusOf(c);
+    const t = bud ? budgetTotals(bud) : r ? respTotals(r) : null; // the specialist's worked-out budget beats what the form said
     const ex = wuExcerpt(c.writeup);
     return `<div class="src-card${st === "closed" ? " src-card-closed" : ""}" data-id="${c.id}" tabindex="0">
       <div class="src-card-top"><b class="src-name">${esc(c.name || "—")}</b>${editor()
@@ -112,6 +117,7 @@ function renderGrid() {
       ${r && !isBlank(r.raw?.needs) ? `<div class="src-need"><span>Needs</span>${esc(r.raw.needs)}</div>` : ""}
       ${c.requested ? `<div class="src-need src-req"><span>Requested</span>${esc(c.requested)}</div>` : ""}
       ${t ? tiles(t, true) : ""}
+      ${bud ? `<div class="src-tiles-cap">specialist’s budget${(c.budgets || []).length > 1 ? ` · ${(c.budgets || []).length - 1} what-if${(c.budgets || []).length > 2 ? "s" : ""}` : ""}</div>` : ""}
       ${(c.summary || "").trim()
         ? `<div class="src-wu src-wu-sum"><span>Summary</span>${esc(plainText(c.summary))}</div>`
         : `<div class="src-wu${ex ? "" : " src-wu-none"}">${ex ? `<span>Specialist’s write-up</span>${esc(ex)}` : "No write-up yet"}</div>`}
@@ -168,6 +174,53 @@ function planHtml(c, r) {
     <div class="src-sec"><h4>In their words</h4>${qa || `<p class="row-sub">No written answers.</p>`}
       ${skipped.length ? `<p class="src-hint">Left blank: ${skipped.map(esc).join(" · ")}</p>` : ""}</div>`;
 }
+// ---------- the specialist's budget(s) ----------
+const lineKeys = (lines) => { const seen = {}; return (lines || []).map((l) => { const k = String(l.label || "").trim().toLowerCase(); seen[k] = (seen[k] || 0) + 1; return [k + "#" + seen[k], l]; }); };
+function budgetHtml(c) {
+  const bs = c.budgets || [], ed = editor();
+  const actions = ed ? `<span class="src-h-actions"><button class="btn btn-sm btn-ghost" id="srb-import" type="button" title="Upload the specialist's budget sheet for this person (the tab's CSV download)">⬆ Import</button><button class="btn btn-sm btn-ghost" id="srb-add" type="button" title="${bs.length ? "Start a what-if from the budget that's showing" : "Type a budget in by hand"}">+ ${bs.length ? "What-if" : "Add"}</button></span><input type="file" id="srb-file" accept=".csv,text/csv" hidden>` : "";
+  if (!bs.length) return ed ? `<div class="src-sec src-budget"><h4>Budget <span class="row-sub">from the specialist</span>${actions}</h4><p class="row-sub" style="margin:0">No budget on file. Import the specialist's budget sheet for this person, or add one by hand.</p></div>` : "";
+  const bi = Math.min(openBi, bs.length - 1), b = bs[bi], base = bs[0];
+  if (budgetEditing && ed) return budgetEditHtml(b);
+  const t = budgetTotals(b);
+  const chips = bs.length > 1 ? `<div class="src-scens">${bs.map((x, i) => { const n = budgetTotals(x).net; return `<button type="button" class="src-scen${i === bi ? " on" : ""}" data-bi="${i}"><span>${esc(x.title || "Budget " + (i + 1))}</span><b class="${n < 0 ? "neg" : "pos"}">${fmtUsdC(n)}</b></button>`; }).join("")}</div>` : "";
+  const lines = (kind) => {
+    const baseMap = new Map(lineKeys(base[kind])), mine = lineKeys(b[kind]);
+    const max = Math.max(1, ...(b[kind] || []).map((l) => Number(l.amount) || 0));
+    const rows = mine.map(([k, l]) => {
+      let tag = "";
+      if (bi > 0) {
+        if (!baseMap.has(k)) tag = `<i class="src-chg src-chg-new">new</i>`;
+        else if ((baseMap.get(k).amount ?? null) !== (l.amount ?? null)) tag = `<i class="src-chg">was ${fmtUsdC(baseMap.get(k).amount)}</i>`;
+      }
+      return `<div class="src-line${l.amount == null ? " src-line-cut" : ""}"><div class="src-line-top"><span>${esc(l.label)}${l.note ? ` <em class="src-lnote">${esc(l.note)}</em>` : ""}</span><span class="src-amt">${tag}${l.amount == null ? "cut" : fmtUsdC(l.amount)}</span></div>${kind === "expenses" ? `<div class="src-bar-track"><div class="src-bar-fill" style="width:${Math.round(((Number(l.amount) || 0) / max) * 100)}%"></div></div>` : ""}</div>`;
+    }).join("");
+    const have = new Set(mine.map(([k]) => k));
+    const gone = bi > 0 ? lineKeys(base[kind]).filter(([k]) => !have.has(k)).map(([, l]) => `${esc(l.label)} (${fmtUsdC(l.amount)})`) : [];
+    return (rows || `<p class="row-sub" style="margin:0">—</p>`) + (gone.length ? `<p class="src-hint">Not in this version: ${gone.join(" · ")}</p>` : "");
+  };
+  return `<div class="src-sec src-budget">
+    <h4>Budget <span class="row-sub">from the specialist</span>${actions}</h4>
+    ${chips}
+    <div class="src-budget-title"><b>${esc(b.title || "Budget")}</b>${bi > 0 ? `<span class="row-sub">changes shown against “${esc(base.title || "Current")}”</span>` : ""}${ed ? `<button class="btn btn-sm btn-ghost" id="srb-edit" type="button">✎ Edit</button>` : ""}</div>
+    ${tiles(t)}
+    <div class="src-money"><div><h5>Income</h5>${lines("income")}</div><div><h5>Expenses</h5>${lines("expenses")}</div></div>
+    ${b.note ? `<p class="src-hint">${esc(b.note)}</p>` : ""}
+  </div>`;
+}
+function budgetEditHtml(b) {
+  const row = (l) => `<div class="srb-row"><input class="srb-l" value="${esc(l.label || "")}" placeholder="Item" autocomplete="off"><input class="srb-a" inputmode="decimal" value="${l.amount == null ? "" : esc(l.amount)}" placeholder="$" autocomplete="off"><input class="srb-n" value="${esc(l.note || "")}" placeholder="note" autocomplete="off"><button type="button" class="btn btn-sm btn-ghost srb-x" title="Remove this line">✕</button></div>`;
+  return `<div class="src-sec src-budget src-budget-editing">
+    <h4>Edit budget</h4>
+    <label class="srb-field">Name<input id="srb-title" value="${esc(b.title || "")}" placeholder="e.g. Current, What if the kids pay rent" autocomplete="off"></label>
+    <h5>Income</h5><div id="srb-income">${(b.income || []).map(row).join("")}</div><button class="btn btn-sm btn-ghost" data-addline="income" type="button">+ income line</button>
+    <h5>Expenses</h5><div id="srb-expenses">${(b.expenses || []).map(row).join("")}</div><button class="btn btn-sm btn-ghost" data-addline="expenses" type="button">+ expense line</button>
+    <label class="srb-field">Note<input id="srb-note" value="${esc(b.note || "")}" placeholder="optional" autocomplete="off"></label>
+    <p class="src-hint">Leave an amount blank to show the line as “cut”. Totals are added up for you.</p>
+    <div class="srb-actions"><button class="btn btn-sm btn-ghost btn-danger" id="srb-del" type="button">Delete this budget</button><span></span><button class="btn btn-sm" id="srb-cancel" type="button">Cancel</button><button class="btn btn-primary btn-sm" id="srb-save" type="button">Save budget</button></div>
+  </div>`;
+}
+
 function writeupHtml(text) {
   return writeupSections(text).map((s) => `${s.title ? `<h5>${esc(s.title)}</h5>` : ""}${s.paras.map((p) => `<p>${esc(p)}</p>`).join("")}`).join("");
 }
@@ -190,6 +243,7 @@ function detailHtml(c, ri) {
     </div>
     <div class="src-d-cols">
       <div class="src-col">
+        ${budgetHtml(c)}
         ${rs.length > 1 ? `<div class="src-tabs">${rs.map((x, i) => `<button type="button" class="chip${i === ri ? " active" : ""}" data-ri="${i}">Plan ${esc(fmtDay(x.at))}${i === rs.length - 1 ? " · latest" : ""}</button>`).join("")}</div>` : ""}
         ${r ? `${rs.length <= 1 ? `<p class="row-sub" style="margin:0 0 .5rem">Self-Reliance Plan sent ${esc(fmtDay(r.at))}</p>` : ""}${planHtml(c, r)}` : `<div class="empty-note">No Self-Reliance Plan on file for this person yet. Import the specialist's responses to add it.</div>`}
       </div>
@@ -234,6 +288,7 @@ function openCase(id, ri) {
   const c = cases.find((x) => x.id === id); if (!c) return;
   openId = id;
   openRi = ri ?? Math.max(0, sorted(c).length - 1);
+  openBi = 0; budgetEditing = false;
   const el = openModal(`<div id="srd"></div>`);
   el.classList.add("modal-wide", "src-modal");
   drawOpen();
@@ -244,7 +299,7 @@ function refreshOpen() {
   const a = document.activeElement;
   if (a && box.contains(a) && /^(INPUT|TEXTAREA)$/.test(a.tagName)) return;
   if (!cases.some((x) => x.id === openId)) { closeModal(); openId = null; return; }
-  if (box.querySelector(".src-rich-editor")) return;                                   // a summary / note is being written
+  if (box.querySelector(".src-rich-editor") || box.querySelector(".src-budget-editing")) return; // a summary / note / budget is being written
   const cur = cases.find((x) => x.id === openId), wu = box.querySelector("#srd-writeup");
   if (wu && wu.value.trim() !== (cur.writeup || "").trim()) return;                      // unsaved write-up edits
   drawOpen();
@@ -263,6 +318,7 @@ function drawOpen() {
   box.querySelector("#srd-close").addEventListener("click", () => { openId = null; closeModal(); });
   box.querySelector("#srd-print").addEventListener("click", () => printCase(c, rs[openRi]));
   box.querySelectorAll("[data-ri]").forEach((b) => b.addEventListener("click", () => { openRi = Number(b.dataset.ri); drawOpen(); }));
+  box.querySelectorAll("[data-bi]").forEach((b) => b.addEventListener("click", () => { openBi = Number(b.dataset.bi); drawOpen(); }));
   // attachments: click to open; images also show as a thumbnail
   box.querySelectorAll(".src-file").forEach((el) => el.addEventListener("click", async (e) => {
     if (e.target.closest("[data-rmfile]")) return;
@@ -297,6 +353,51 @@ function drawOpen() {
   }));
 
   box.querySelector("#srd-status").addEventListener("change", (e) => save({ status: e.target.value, closedAt: e.target.value === "closed" ? new Date().toISOString() : "" }, e.target.value === "closed" ? "Closed" : "Reopened"));
+  // --- budgets: import the specialist's sheet, add a what-if, edit lines ---
+  const budgets = c.budgets || [];
+  box.querySelector("#srb-edit")?.addEventListener("click", () => { budgetEditing = true; drawOpen(); });
+  box.querySelector("#srb-add")?.addEventListener("click", async () => {
+    const cur = budgets[Math.min(openBi, budgets.length - 1)];
+    const fresh = cur ? { title: "What if?", income: (cur.income || []).map((l) => ({ ...l })), expenses: (cur.expenses || []).map((l) => ({ ...l })), note: "" }
+      : { title: "Current", income: [{ label: "", amount: null, note: "" }], expenses: ["Tithing", "Food", "Housing", "Utilities", "Medical", "Transportation"].map((label) => ({ label, amount: null, note: "" })), note: "" };
+    await save({ budgets: [...budgets, fresh] });
+    openBi = budgets.length; budgetEditing = true; drawOpen();
+  });
+  const bFile = box.querySelector("#srb-file");
+  box.querySelector("#srb-import")?.addEventListener("click", () => { bFile.value = ""; bFile.click(); });
+  bFile?.addEventListener("change", async () => {
+    const f = bFile.files[0]; if (!f) return;
+    let found = [];
+    try { found = parseBudgetCsv(await f.text()); } catch (e) { return toast("Couldn't read that file: " + (e.message || e)); }
+    if (!found.length) return toast("No budget found in that file — it should have an “Income” section and an “Expenses” section");
+    const off = found.filter((b) => { const t = budgetTotals(b); return ["income", "expenses", "net"].some((k) => b.sheet[k] != null && Math.abs(b.sheet[k] - t[k]) > 0.005); });
+    const list = found.map((b) => `• ${b.title}: left over ${fmtUsdC(budgetTotals(b).net)}`).join("\n");
+    if (!confirm(`Found ${found.length} budget${found.length === 1 ? "" : "s"} in ${f.name}:\n\n${list}\n\n${budgets.length ? `This REPLACES the ${budgets.length} budget${budgets.length === 1 ? "" : "s"} now on ${c.name}'s card.` : `Add ${found.length === 1 ? "it" : "them"} to ${c.name}'s card?`}${off.length ? `\n\nNote: my totals for “${off.map((b) => b.title).join("”, “")}” don't match the sheet's own totals — worth a look after importing.` : ""}`)) return;
+    openBi = 0; budgetEditing = false;
+    await save({ budgets: found.map(({ sheet, ...b }) => b), budgetAt: new Date().toISOString() }, found.length === 1 ? "Budget imported" : `${found.length} budgets imported`);
+  });
+  if (box.querySelector(".src-budget-editing")) {
+    const bi = Math.min(openBi, budgets.length - 1);
+    const blank = () => { const d = document.createElement("div"); d.innerHTML = `<div class="srb-row"><input class="srb-l" placeholder="Item" autocomplete="off"><input class="srb-a" inputmode="decimal" placeholder="$" autocomplete="off"><input class="srb-n" placeholder="note" autocomplete="off"><button type="button" class="btn btn-sm btn-ghost srb-x" title="Remove this line">✕</button></div>`; return d.firstChild; };
+    const wireX = (root) => root.querySelectorAll(".srb-x").forEach((x) => { x.onclick = () => x.closest(".srb-row").remove(); });
+    wireX(box);
+    box.querySelectorAll("[data-addline]").forEach((b) => b.addEventListener("click", () => { const r = blank(); box.querySelector("#srb-" + b.dataset.addline).appendChild(r); wireX(r.parentElement); r.querySelector(".srb-l").focus(); }));
+    const read = (id) => [...box.querySelectorAll(`#${id} .srb-row`)].map((r) => ({ label: r.querySelector(".srb-l").value.trim(), amount: parseMoney(r.querySelector(".srb-a").value), note: r.querySelector(".srb-n").value.trim() })).filter((l) => l.label || l.amount != null);
+    box.querySelector("#srb-cancel").addEventListener("click", () => { budgetEditing = false; drawOpen(); });
+    box.querySelector("#srb-save").addEventListener("click", async () => {
+      const next = budgets.map((b, i) => (i === bi ? { title: box.querySelector("#srb-title").value.trim() || (i === 0 ? "Current" : "What if?"), income: read("srb-income"), expenses: read("srb-expenses"), note: box.querySelector("#srb-note").value.trim() } : b));
+      budgetEditing = false;
+      await save({ budgets: next }, "Budget saved");
+      drawOpen();
+    });
+    box.querySelector("#srb-del").addEventListener("click", async () => {
+      if (!confirm(`Delete the “${budgets[bi]?.title || "budget"}” budget from this card?`)) return;
+      budgetEditing = false; openBi = 0;
+      await save({ budgets: budgets.filter((_, i) => i !== bi) }, "Budget deleted");
+      drawOpen();
+    });
+  }
+
   // --- summary and notes: formatted text that edits in place (bullets, to-dos, bold, highlights) ---
   const noteById = (id) => logOf(c).find((n) => n.id === id);
   // an old undated note is kept: it becomes a regular entry in the log the first time anything is saved
@@ -488,6 +589,10 @@ function printCase(c, r) {
     <p class="sub">${[c.spouse ? "& " + esc(c.spouse) : "", r ? "Self-Reliance Plan " + esc(fmtDay(r.at)) : "", "printed " + new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })].filter(Boolean).join(" · ")}</p>
     ${(c.summary || "").trim() ? `<h2>Summary</h2>${String(c.summary).split("\n").map((l) => l.trim()).filter(Boolean).map((l) => `<p>${/^(\s*)([-•*]|\[( |x|X)\])/.test(l) ? "• " : ""}${esc(plainLine(l))}</p>`).join("")}` : ""}
     ${c.requested ? `<h2>Request</h2><p>${esc(c.requested)}</p>` : ""}
+    ${(c.budgets || []).map((b, i) => { const bt = budgetTotals(b); const rowsOf = (ls) => (ls || []).map((l) => `<tr><td>${esc(l.label)}${l.note ? `<div class="raw">${esc(l.note)}</div>` : ""}</td><td class="n">${l.amount == null ? "cut" : fmtUsdC(l.amount)}</td></tr>`).join("");
+      return `<h2>${i === 0 ? "Budget from the specialist" : "What-if"}: ${esc(b.title || "")}</h2>
+        <div class="tiles"><div><span>Income</span><b>${fmtUsdC(bt.income)}</b></div><div><span>Expenses</span><b>${fmtUsdC(bt.expenses)}</b></div><div><span>Left over each month</span><b>${fmtUsdC(bt.net)}</b></div></div>
+        ${i === 0 || (c.budgets || []).length <= 2 ? `<div class="cols"><div><h3>Income</h3><table>${rowsOf(b.income)}</table></div><div><h3>Expenses</h3><table>${rowsOf(b.expenses)}</table></div></div>` : ""}`; }).join("")}
     ${r ? `<h2>What they need</h2><p>${esc(r.raw?.needs || "—")}</p>
       <h2>Monthly picture (as reported)</h2>
       <div class="tiles"><div><span>Income</span><b>${fmtUsd(t.income)}</b></div><div><span>Expenses</span><b>${fmtUsd(t.expenses)}</b></div><div><span>Left over each month</span><b>${fmtUsd(t.net)}</b></div></div>

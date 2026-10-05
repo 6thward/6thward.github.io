@@ -149,3 +149,66 @@ export function writeupSections(text) {
   if (cur.title || cur.paras.length) out.push(cur);
   return out;
 }
+
+// ---------- the specialist's budget sheets (2026-10-05) ----------
+// One CSV per person (a tab of the responses spreadsheet). A sheet holds one or more
+// budgets side by side: each starts at a cell that says "Income", with its title in the
+// row above ("what if?", "If you always get the days you want"…), then label / amount /
+// note columns, an "Expenses" row, "Total" rows and a "Net" row.
+export function parseMoney(v) {
+  const raw = String(v ?? "").trim();
+  if (raw === "") return null;
+  const neg = /\(.*\d.*\)/.test(raw) || /^-\s*\$?\s*\d/.test(raw) || /^\$\s*-\s*\d/.test(raw); // "$ (1,273.81)" is how the sheet writes a negative
+  const t = raw.replace(/[()$,\s]/g, "");
+  if (t === "-" || t === "—" || t === "") return 0;          // "$ -" is how the sheet writes zero
+  const n = Number(t.replace(/^-/, ""));
+  return isFinite(n) ? (neg ? -n : n) : null;
+}
+export function parseBudgetCsv(text) {
+  const rows = [], src = String(text || "").replace(/^\uFEFF/, "");
+  { // keep every row and cell position (parseCsv drops blank rows, which is fine here too, but positions matter)
+    let row = [], cur = "", q = false;
+    for (let i = 0; i < src.length; i++) {
+      const c = src[i];
+      if (q) { if (c === '"') { if (src[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+      else if (c === '"') q = true;
+      else if (c === ",") { row.push(cur); cur = ""; }
+      else if (c === "\n") { row.push(cur); rows.push(row); row = []; cur = ""; }
+      else if (c !== "\r") cur += c;
+    }
+    if (cur !== "" || row.length) { row.push(cur); rows.push(row); }
+  }
+  const cell = (r, c) => String(rows[r]?.[c] ?? "").trim();
+  const anchors = [];
+  rows.forEach((row, r) => row.forEach((v, c) => { if (/^income$/i.test(String(v).trim())) anchors.push({ r, c }); }));
+  anchors.sort((a, b) => a.c - b.c || a.r - b.r);
+  const out = [];
+  anchors.forEach((a, ai) => {
+    const nextCol = anchors.find((x) => x.c > a.c)?.c ?? Infinity;
+    // title: whatever is written above the "Income" cell, across this budget's columns
+    let title = "";
+    if (a.r > 0) { const parts = []; for (let c = a.c; c < Math.min(nextCol, a.c + 5); c++) { const v = cell(a.r - 1, c); if (v) parts.push(v); } title = parts.join(" ").replace(/\s+/g, " ").replace(/[:\s]+$/, "").trim(); }
+    const b = { title: title ? title.charAt(0).toUpperCase() + title.slice(1) : (ai === 0 ? "Current" : "Budget " + (ai + 1)), income: [], expenses: [], note: "", sheet: {} };
+    let state = "income";
+    for (let r = a.r + 1; r < rows.length; r++) {
+      const label = cell(r, a.c), amt = cell(r, a.c + 1), note = a.c + 2 < nextCol ? cell(r, a.c + 2) : "";
+      const low = label.toLowerCase();
+      if (!label && !amt) continue;
+      if (low === "expenses") { state = "expenses"; continue; }
+      if (low === "income") continue;
+      if (low === "net") { b.sheet.net = parseMoney(amt); break; }
+      if (low === "total") { b.sheet[state] = parseMoney(amt); continue; }
+      if (/total/.test(low)) { b.note = [b.note, `${label}: ${amt.trim()}`].filter(Boolean).join(" · ").replace(/\$\s+/g, "$"); continue; } // e.g. "Tithable Total"
+      b[state].push({ label: label || "(unnamed)", amount: parseMoney(amt), note: note.replace(/^\((.*)\)$/, "$1") });
+    }
+    if (b.income.length || b.expenses.length) out.push(b);
+  });
+  return out;
+}
+export const budgetTotals = (b) => {
+  const sum = (lines) => Math.round((lines || []).reduce((t, l) => t + (Number(l.amount) || 0), 0) * 100) / 100;
+  const income = sum(b?.income), expenses = sum(b?.expenses);
+  return { income, expenses, net: Math.round((income - expenses) * 100) / 100 };
+};
+// dollars with cents only when there are cents: $1,700 · $133.57 · −$1,273.81
+export const fmtUsdC = (n) => (n == null ? "—" : (n < 0 ? "−" : "") + "$" + Math.abs(n).toLocaleString("en-US", Number.isInteger(n) ? {} : { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
