@@ -1691,3 +1691,12 @@ li:hover > .nt-assign, .rc-todo:hover .nt-assign, .nt-assign:focus { opacity: 1;
 .st-line.st-line-light .st-li-tag { flex: 0 0 7.6rem; }
 .st-inter .st-sub-lbl { align-self: center; text-align: center; }
 .st-prelude .st-prelude-lbl { text-align: center; }
+/* Other Music: one box, prelude and the musical number each carry their own colour (2026-10-04) */
+.st.st-split { background: #edf0f3; color: var(--ink); padding-bottom: 0; gap: 0; }
+.st.st-split > .st-head { margin-bottom: 0; }
+.st.st-split > .st-head + * { margin-top: 0 !important; }
+.st-sec { align-self: stretch; margin: 0 -.3rem; padding: .4rem .35rem .45rem; display: flex; flex-direction: column; align-items: center; gap: .3rem; }
+.st-sec + .st-sec { border-top: 2px solid #fff; }
+.st-sec.st-sec-main { flex: 1; }
+.st-sec .st-prelude { margin: 0; padding: 0; border: none; }
+.st-sec .st-prelude-lbl { color: inherit; opacity: .85; }

@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1791166140";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1791166140";
+import { db } from "./firebase-init.js?v=1791167826";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1791167826";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1791166140";
-import { HYMNS } from "./hymns.js?v=1791166140";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1791166140";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1791167826";
+import { HYMNS } from "./hymns.js?v=1791167826";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1791167826";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -1017,13 +1017,17 @@ function statusChips(m, date) {
     const conf = slotIt && slotIt.kind !== "intermediateHymn" && filled
       ? `<span class="st-li-ic st-confirm-dot${isConf(slotIt) ? "" : " st-unconf"}" data-confirm='${JSON.stringify({ k: slotIt.kind, o: 0 })}' title="${isConf(slotIt) ? "Confirmed — click if this still needs confirming" : "Not confirmed yet — click once it's confirmed"}">${isConf(slotIt) ? "✓" : "!"}</span>`
       : "";
-    chips.push(`<span class="st st-inter ${cls}${dragAttr ? " st-drag" : ""}"${dragAttr}>
+    // one box, two parts that colour on their own (2026-10-04): prelude is green once it has
+    // something in it (grey when empty — it's optional); the musical number keeps its red / amber / green
+    chips.push(`<span class="st st-inter st-split${dragAttr ? " st-drag" : ""}"${dragAttr}>
       <span class="st-head st-click" data-qe='{"t":"inter"}' title="Click for the full editor">Other Music${xBtn("music", "Other Music")}</span>
-      ${preludeBlock}
+      <span class="st-sec ${hasPrelude ? "st-ok" : "st-off"}">${preludeBlock}</span>
+      <span class="st-sec st-sec-main ${cls}">
       <span class="st-prelude-lbl st-sub-lbl">Special Musical Number</span>
       <select class="st-mtype" data-mtype title="Type"><option value="none"${mode === "none" ? " selected" : ""}>— none —</option>${INTER_MODES.map(([k, l]) => `<option value="${k}"${mode === k ? " selected" : ""}>${l}</option>`).join("")}</select>
       ${field ? `<span class="st-music-field">${field}${conf}</span>` : ""}
       ${placePill}
+      </span>
     </span>`);
     preludeShown = true;
   } else if (slotMusical) {
