@@ -1,16 +1,16 @@
 // Tithing declaration sign-ups (2026-10-04) — the bishop's side, inside the
 // Bishop page (confidential.js): set when you're available, share the link / QR code, and see
 // who signed up. The public page is tithing.html (js/tithing-form.js).
-import { db } from "./firebase-init.js?v=1791158714";
-import { ctx, can } from "./app.js?v=1791158714";
+import { db } from "./firebase-init.js?v=1791158802";
+import { ctx, can } from "./app.js?v=1791158802";
 import {
   collection, doc, onSnapshot, setDoc, updateDoc, writeBatch, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast } from "./ui.js?v=1791158714";
+import { openModal, closeModal, toast } from "./ui.js?v=1791158802";
 import {
   GROUPS, PLACES, SLOT_LENGTHS, esc, toMin, fmtClock, fmtLongDay, fmtShortDay, slotsOf, slotMap,
-  sortWindows, overlaps, newToken, parseSlotId, todayIso, addDays,
-} from "./tithing-shared.js?v=1791158714";
+  sortWindows, overlaps, newToken, parseSlotId, todayIso, addDays, hhmm,
+} from "./tithing-shared.js?v=1791158802";
 
 let mount = null, season = null, signups = [], unsubSignups = null, started = false, dirty = false;
 let qrCache = { url: "", data: "" }, qrLib = null;
@@ -151,7 +151,8 @@ function render() {
       <span class="pill td-pill-place td-place-${esc(w.place || "office")}">${PLACES[w.place]?.icon || "🏛"} ${esc(PLACES[w.place]?.label || PLACES.office.label)}</span>
       ${g ? `<span class="pill td-pill-${g.cls}">${esc(g.label)}</span>` : ""}
       <span class="row-sub td-win-count">${took} of ${list.length} taken</span>
-      ${editor ? `<button class="btn btn-sm btn-ghost td-x" data-rmwin="${esc(w.id)}" title="Remove this time period">✕</button>` : ""}
+      ${editor ? `<button class="btn btn-sm" data-divide="${esc(w.id)}" type="button" title="Split this block into periods with different visit lengths (15 / 10 minutes), or set part of it aside for a group">✂ Divide</button>
+      <button class="btn btn-sm btn-ghost td-x" data-rmwin="${esc(w.id)}" title="Remove this time period">✕</button>` : ""}
     </div>`;
   };
   const futureW = windows.filter((w) => w.date >= today), pastW = windows.filter((w) => w.date < today);
@@ -363,6 +364,11 @@ function render() {
     } catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
   });
 
+  mount.querySelectorAll("[data-divide]").forEach((b) => b.addEventListener("click", () => {
+    const w = (season.windows || []).find((x) => x.id === b.dataset.divide);
+    if (w) divideWindow(w, slots.filter((x) => x.win === w.id && byId[x.id]).length);
+  }));
+
   mount.querySelectorAll("[data-rmwin]").forEach((b) => b.addEventListener("click", async () => {
     const w = (season.windows || []).find((x) => x.id === b.dataset.rmwin); if (!w) return;
     const took = slots.filter((s) => s.win === w.id && byId[s.id]).length;
@@ -409,6 +415,64 @@ function render() {
     el.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); save(); } });
     setTimeout(() => el.querySelector("#tda-name").focus(), 50);
   }));
+}
+
+// ---- divide one block into periods (2026-10-04) ----
+// e.g. 11:00–4:00 → 11:00–1:00 in 15-minute visits, then 1:00–4:00 in 10-minute visits.
+// Each period is saved as its own block, so it can also be set aside for a group.
+function divideWindow(w, took) {
+  let parts = [{ end: w.end, len: Number(w.len) || 15, group: w.group || "" }]; // each period runs from the one before it to its own end
+  const opt = (v, l, cur) => `<option value="${esc(v)}"${String(cur) === String(v) ? " selected" : ""}>${esc(l)}</option>`;
+  const el = openModal(`
+    <h3 style="margin-bottom:.3rem">${esc(fmtLongDay(w.date))}</h3>
+    <p class="row-sub" style="margin:0 0 .8rem">${rangeText(w)} · ${PLACES[w.place]?.icon || ""} ${esc(PLACES[w.place]?.label || PLACES.office.label)}. Split it into periods — each can have its own visit length and be set aside for a group.</p>
+    <div class="tdd-head"><span>From</span><span>Until</span><span>Each visit</span><span>Set aside for</span><span></span></div>
+    <div id="tdd-parts"></div>
+    <button class="btn btn-sm" id="tdd-add" type="button" style="margin-top:.6rem">✂ Split the last period</button>
+    ${took ? `<p class="row-sub" style="margin:.7rem 0 0">⚠ ${took} ${took === 1 ? "person has" : "people have"} already signed up in this block. Their times are kept; any that no longer line up are marked “outside your times” on the schedule.</p>` : ""}
+    <p class="tdd-err hidden" id="tdd-err"></p>
+    <div class="modal-actions"><button class="btn" id="tdd-cancel" type="button">Cancel</button><button class="btn btn-primary" id="tdd-save" type="button">Save</button></div>`);
+  el.classList.add("td-divide");
+  const box = el.querySelector("#tdd-parts"), errEl = el.querySelector("#tdd-err");
+  const showErr = (m) => { errEl.textContent = m; errEl.classList.toggle("hidden", !m); };
+  const startOf = (i) => (i === 0 ? w.start : parts[i - 1].end);
+  const draw = () => {
+    box.innerHTML = parts.map((p, i) => {
+      const last = i === parts.length - 1, mins = toMin(p.end) - toMin(startOf(i)), n = mins > 0 ? Math.floor(mins / p.len) : 0;
+      return `<div class="tdd-row">
+        <span class="tdd-from">${fmtClock(toMin(startOf(i)))}</span>
+        ${last ? `<span class="tdd-end">${fmtClock(toMin(p.end))}</span>` : `<input type="time" step="300" data-end="${i}" value="${esc(p.end)}">`}
+        <select data-len="${i}">${SLOT_LENGTHS.map((x) => opt(x, x + " minutes", p.len)).join("")}</select>
+        <select data-group="${i}">${opt("", "Anyone", p.group)}${Object.entries(GROUPS).map(([k, g]) => opt(k, g.label, p.group)).join("")}</select>
+        <span class="tdd-n">${n} ${n === 1 ? "visit" : "visits"}${i > 0 ? ` <button type="button" class="btn btn-sm btn-ghost" data-merge="${i}" title="Remove this split (joins it to the period above)">✕</button>` : ""}</span>
+      </div>`;
+    }).join("");
+    box.querySelectorAll("[data-end]").forEach((x) => x.addEventListener("change", () => { parts[+x.dataset.end].end = x.value; showErr(""); draw(); }));
+    box.querySelectorAll("[data-len]").forEach((x) => x.addEventListener("change", () => { parts[+x.dataset.len].len = Number(x.value); draw(); }));
+    box.querySelectorAll("[data-group]").forEach((x) => x.addEventListener("change", () => { parts[+x.dataset.group].group = x.value; }));
+    box.querySelectorAll("[data-merge]").forEach((x) => x.addEventListener("click", () => { const i = +x.dataset.merge; parts[i - 1].end = parts[i].end; parts.splice(i, 1); showErr(""); draw(); }));
+  };
+  el.querySelector("#tdd-add").addEventListener("click", () => {
+    const i = parts.length - 1, p = parts[i], from = toMin(startOf(i)), to = toMin(p.end);
+    const half = Math.floor((to - from) / 2 / p.len) * p.len; // split on a visit boundary near the middle
+    if (half < p.len || to - (from + half) < 10) return showErr("That period is too short to split again.");
+    parts.splice(i, 0, { end: hhmm(from + half), len: p.len, group: p.group });
+    showErr(""); draw();
+  });
+  el.querySelector("#tdd-cancel").addEventListener("click", closeModal);
+  el.querySelector("#tdd-save").addEventListener("click", async () => {
+    for (let i = 0; i < parts.length; i++) {
+      const mins = toMin(parts[i].end) - toMin(startOf(i));
+      if (!parts[i].end || mins <= 0) return showErr(`Period ${i + 1} needs to end after it starts (${fmtClock(toMin(startOf(i)))}) and before the block ends.`);
+      if (mins < parts[i].len) return showErr(`Period ${i + 1} is shorter than one ${parts[i].len}-minute visit.`);
+    }
+    const made = parts.map((p, i) => ({ id: i === 0 ? w.id : "w" + Math.random().toString(36).slice(2, 9), date: w.date, start: startOf(i), end: p.end, len: p.len, place: w.place || "office", group: p.group }));
+    try {
+      await saveWindows([...(season.windows || []).filter((x) => x.id !== w.id), ...made]);
+      closeModal(); toast(made.length > 1 ? `Saved as ${made.length} periods` : "Saved");
+    } catch (err) { showErr("Couldn't save: " + (err.code || err.message)); }
+  });
+  draw();
 }
 
 // ---- printing ----

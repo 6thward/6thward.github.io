@@ -1,13 +1,13 @@
 // "Bishop" tab (was "Confidential") — the bishop, or someone he explicitly grants
 // the page. Enforced server-side by Firestore rules, not just by hiding the tab.
 // Two parts (2026-10-04): private notes, and tithing declaration sign-ups.
-import { initTithing } from "./tithing.js?v=1791158714";
-import { db } from "./firebase-init.js?v=1791158714";
+import { initTithing } from "./tithing.js?v=1791158802";
+import { db } from "./firebase-init.js?v=1791158802";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1791158714";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1791158802";
 
 let items = [];
 let showDone = false;
