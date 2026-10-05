@@ -1775,3 +1775,25 @@ li:hover > .nt-assign, .rc-todo:hover .nt-assign, .nt-assign:focus { opacity: 1;
 .src-file-ic { font-size: 1.3rem; width: 3.2rem; text-align: center; flex: none; }
 .src-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: .9rem; }
 .src-upload { margin-top: .4rem; }
+/* Self-Reliance cards: summary on top, dated notes, click-to-edit text (2026-10-05) */
+.src-summary { background: #fff8e1; border: 1px solid #f0dca0; border-radius: 12px; padding: .75rem .95rem .85rem; margin-bottom: 1rem; }
+.src-summary h4 { margin: 0 0 .35rem; font-size: .78rem; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; color: #8a6500; display: flex; align-items: center; gap: .5rem; }
+.src-summary h4 .btn { margin-left: auto; text-transform: none; letter-spacing: 0; }
+.src-summary .src-rich { font-size: 1.02rem; }
+.src-rich { line-height: 1.45; font-size: .95rem; border-radius: 8px; }
+.src-rich.src-rich-edit-ok, .src-writeup.src-rich-edit-ok { cursor: text; }
+.src-rich.src-rich-edit-ok:hover { background: rgba(31,78,121,.05); box-shadow: 0 0 0 4px rgba(31,78,121,.05); }
+.src-writeup.src-rich-edit-ok:hover { border-color: var(--brand); }
+.src-rich.src-rich-empty { color: #a08a4a; font-style: italic; cursor: pointer; }
+.src-rich-editor { margin: .2rem 0 .6rem; }
+.src-rich-editor .wc-tools { margin-bottom: .3rem; }
+.src-rich-actions { display: flex; justify-content: flex-end; gap: .4rem; margin-top: .4rem; }
+.src-note { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: .5rem .7rem .6rem; margin-bottom: .5rem; }
+.src-note-head { display: flex; align-items: center; gap: .15rem; font-size: .8rem; color: var(--ink-soft); margin-bottom: .25rem; }
+.src-note-head b { color: var(--ink); }
+.src-note-tools { margin-left: auto; display: inline-flex; gap: .1rem; }
+.src-note-tools .btn { padding: .05rem .35rem; }
+.src-note-meta { display: flex; gap: .6rem; flex-wrap: wrap; margin-bottom: .4rem; }
+.src-note-meta label { display: flex; flex-direction: column; gap: .15rem; font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); }
+.src-note-meta input { font: inherit; font-size: .9rem; font-weight: 500; text-transform: none; letter-spacing: 0; padding: .3rem .45rem; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.src-wu.src-wu-sum > span { color: #8a6500; }

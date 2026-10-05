@@ -4,17 +4,20 @@
 //   srCases/{id} { key, name, spouse, email, status, requested, writeup, writeupBy,
 //                  writeupAt, decision, notes, files[], responses[{ id, at, raw{}, amounts{}, exact{}, edited{} }] }
 //   srCases/{id}/chunks/…  the attached files themselves (invoices, statements) — see files.js
+//   summary  — the leader's own few lines, shown first on the card (bullets / to-dos / bold like council notes)
+//   log[]    — dated notes { id, at, by, text, editedAt }; the old single `notes` text shows as an undated note
 // Same privacy as the rest of this page: only the bishop and people given Self-Reliance.
-import { db } from "./firebase-init.js?v=1791213416";
-import { ctx, can } from "./app.js?v=1791213416";
+import { db } from "./firebase-init.js?v=1791219614";
+import { ctx, can } from "./app.js?v=1791219614";
 import {
   collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791213416";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1791213416";
+import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791219614";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine } from "./notes.js?v=1791219614";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1791219614";
 import {
   INC, EXP, QA, parseCsv, mapResponses, personKey, respTotals, fmtUsd, isBlank, writeupSections,
-} from "./sr-import.js?v=1791213416";
+} from "./sr-import.js?v=1791219614";
 
 let mount = null, cases = [], started = false, openId = null, openRi = null;
 const thumbs = new Map(); // file id -> object URL, so an attached image shows right on the card
@@ -61,6 +64,12 @@ export function initCases(el) {
   }, (err) => { mount.querySelector("#src-grid").innerHTML = `<div class="empty-note">Couldn't load: ${esc(err.code || err.message)}</div>`; });
 }
 
+// dated notes, newest first; a card from before the log existed may still carry one undated `notes` text
+const logOf = (c) => [...(c.log || []), ...((c.notes || "").trim() ? [{ id: "legacy", at: "", by: "", text: c.notes }] : [])]
+  .sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")));
+const plainText = (t) => String(t || "").split("\n").map(plainLine).filter(Boolean).join(" · ");
+const isoDate = (v) => { const d = v ? new Date(v) : new Date(); return isNaN(d) ? "" : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+
 // ---------- the cards ----------
 function wuExcerpt(text) {
   const secs = writeupSections(text);
@@ -95,7 +104,9 @@ function renderGrid() {
       ${r && !isBlank(r.raw?.needs) ? `<div class="src-need"><span>Needs</span>${esc(r.raw.needs)}</div>` : ""}
       ${c.requested ? `<div class="src-need src-req"><span>Requested</span>${esc(c.requested)}</div>` : ""}
       ${t ? tiles(t, true) : ""}
-      <div class="src-wu${ex ? "" : " src-wu-none"}">${ex ? `<span>Specialist’s write-up</span>${esc(ex)}` : "No write-up yet"}</div>
+      ${(c.summary || "").trim()
+        ? `<div class="src-wu src-wu-sum"><span>Summary</span>${esc(plainText(c.summary))}</div>`
+        : `<div class="src-wu${ex ? "" : " src-wu-none"}">${ex ? `<span>Specialist’s write-up</span>${esc(ex)}` : "No write-up yet"}</div>`}
     </div>`;
   }).join("");
   grid.querySelectorAll(".src-card").forEach((el) => {
@@ -153,6 +164,12 @@ function detailHtml(c, ri) {
         <button class="btn btn-sm" id="srd-print" type="button">🖨 Print</button>
       </div>
     </div>
+    <div class="src-summary">
+      <h4>Summary ${ed && (c.summary || "").trim() ? `<button class="btn btn-sm btn-ghost" data-richedit="summary" type="button">✎ Edit</button>` : ""}</h4>
+      ${(c.summary || "").trim()
+        ? `<div class="src-rich${ed ? " src-rich-edit-ok" : ""}" data-rich="summary">${notesHtml(c.summary, "summary", ed, (i) => `data-rtodo="summary|${i}"`)}</div>`
+        : ed ? `<div class="src-rich src-rich-empty src-rich-edit-ok" data-rich="summary">+ Add your summary — the few lines you want to see first when you open this card</div>` : `<p class="row-sub" style="margin:0">No summary yet.</p>`}
+    </div>
     <div class="src-d-cols">
       <div class="src-col">
         ${rs.length > 1 ? `<div class="src-tabs">${rs.map((x, i) => `<button type="button" class="chip${i === ri ? " active" : ""}" data-ri="${i}">Plan ${esc(fmtDay(x.at))}${i === rs.length - 1 ? " · latest" : ""}</button>`).join("")}</div>` : ""}
@@ -163,12 +180,19 @@ function detailHtml(c, ri) {
           ${ed ? `<input id="srd-requested" class="src-in" value="${esc(c.requested || "")}" placeholder="e.g. One month of rent ($1,950) + 1–2 food orders" autocomplete="off">` : `<p>${esc(c.requested || "—")}</p>`}</div>
         <div class="src-sec"><h4>Specialist’s write-up ${c.writeup && ed ? `<button class="btn btn-sm btn-ghost" id="srd-wu-edit" type="button">✎ Edit</button>` : ""}</h4>
           ${c.writeup
-            ? `<div class="src-writeup" id="srd-wu-view">${writeupHtml(c.writeup)}</div>${c.writeupBy || c.writeupAt ? `<p class="src-hint">${[c.writeupBy ? "By " + esc(c.writeupBy) : "", c.writeupAt ? "added " + esc(fmtDay(c.writeupAt)) : ""].filter(Boolean).join(" · ")}</p>` : ""}`
+            ? `<div class="src-writeup${ed ? " src-rich-edit-ok" : ""}" id="srd-wu-view"${ed ? ` title="Click to edit"` : ""}>${writeupHtml(c.writeup)}</div>${c.writeupBy || c.writeupAt ? `<p class="src-hint">${[c.writeupBy ? "By " + esc(c.writeupBy) : "", c.writeupAt ? "added " + esc(fmtDay(c.writeupAt)) : ""].filter(Boolean).join(" · ")}</p>` : ""}`
             : ed ? "" : `<p class="row-sub">No write-up yet.</p>`}
           ${ed ? `<div id="srd-wu-box"${c.writeup ? " hidden" : ""}>
             <textarea id="srd-writeup" class="src-ta src-ta-tall" placeholder="Paste the self-reliance specialist's write-up here. Section titles on their own line (Current Financial Situation, Conclusion…) become headings.">${esc(c.writeup || "")}</textarea>
-            <div class="src-wu-save"><input id="srd-wu-by" class="src-in" placeholder="Written by (specialist's name)" value="${esc(c.writeupBy || "")}" autocomplete="off"><button class="btn btn-primary btn-sm" id="srd-wu-save" type="button">Save write-up</button></div>
+            <div class="src-wu-save"><input id="srd-wu-by" class="src-in" placeholder="Written by (specialist's name)" value="${esc(c.writeupBy || "")}" autocomplete="off">${c.writeup ? `<button class="btn btn-sm" id="srd-wu-cancel" type="button">Cancel</button>` : ""}<button class="btn btn-primary btn-sm" id="srd-wu-save" type="button">Save write-up</button></div>
           </div>` : ""}</div>
+        <div class="src-sec"><h4>Notes ${ed ? `<button class="btn btn-sm btn-ghost" id="srd-note-add" type="button">+ Add note</button>` : ""}</h4>
+          <div id="srd-note-new"></div>
+          ${logOf(c).length ? logOf(c).map((n) => `<div class="src-note" data-note="${esc(n.id)}">
+              <div class="src-note-head"><b>${esc(fmtDay(n.at) || "Earlier note")}</b>${n.by ? `<span> · ${esc(n.by)}</span>` : ""}${n.editedAt ? `<span class="row-sub"> · edited</span>` : ""}
+                ${ed ? `<span class="src-note-tools"><button type="button" class="btn btn-sm btn-ghost" data-richedit="note:${esc(n.id)}" title="Edit this note">✎</button><button type="button" class="btn btn-sm btn-ghost" data-ndel="${esc(n.id)}" title="Delete this note">✕</button></span>` : ""}</div>
+              <div class="src-rich${ed ? " src-rich-edit-ok" : ""}" data-rich="note:${esc(n.id)}">${notesHtml(n.text, "note:" + n.id, ed, (i) => `data-rtodo="note:${esc(n.id)}|${i}"`)}</div>
+            </div>`).join("") : `<p class="row-sub" style="margin:0">No notes yet${ed ? " — add one after a visit, a phone call, or a new report from the specialist." : "."}</p>`}</div>
         <div class="src-sec"><h4>Attachments ${ed ? `<button class="btn btn-sm btn-ghost" id="srd-attach" type="button" title="Attach an invoice, statement, PDF or image">📎 Add file</button>` : ""}</h4>
           ${(c.files || []).length ? `<div class="src-files">${(c.files || []).map((f) => `<div class="src-file" data-file="${esc(f.id)}" title="Open ${esc(f.name)}">
               ${isImage(f) ? `<img class="src-thumb" data-thumb="${esc(f.id)}" alt="${esc(f.name)}"${thumbs.get(f.id) ? ` src="${thumbs.get(f.id)}"` : ""}>` : `<span class="src-file-ic">${fileIcon(f)}</span>`}
@@ -179,8 +203,7 @@ function detailHtml(c, ri) {
           ${ed ? `<input type="file" id="srd-file" accept="${ATTACH_ACCEPT}" multiple hidden>` : ""}</div>
         <div class="src-sec"><h4>Decision / help given</h4>
           ${ed ? `<textarea id="srd-decision" class="src-ta" placeholder="What was decided, what was provided and when">${esc(c.decision || "")}</textarea>` : `<p>${esc(c.decision || "—")}</p>`}</div>
-        <div class="src-sec"><h4>Bishop’s notes</h4>
-          ${ed ? `<textarea id="srd-notes" class="src-ta" placeholder="Private notes">${esc(c.notes || "")}</textarea>` : `<p>${esc(c.notes || "—")}</p>`}</div>
+
       </div>
     </div>
     <div class="modal-actions">
@@ -203,6 +226,9 @@ function refreshOpen() {
   const a = document.activeElement;
   if (a && box.contains(a) && /^(INPUT|TEXTAREA)$/.test(a.tagName)) return;
   if (!cases.some((x) => x.id === openId)) { closeModal(); openId = null; return; }
+  if (box.querySelector(".src-rich-editor")) return;                                   // a summary / note is being written
+  const cur = cases.find((x) => x.id === openId), wu = box.querySelector("#srd-writeup");
+  if (wu && wu.value.trim() !== (cur.writeup || "").trim()) return;                      // unsaved write-up edits
   drawOpen();
 }
 function drawOpen() {
@@ -253,16 +279,87 @@ function drawOpen() {
   }));
 
   box.querySelector("#srd-status").addEventListener("change", (e) => save({ status: e.target.value }, "Saved"));
-  [["#srd-requested", "requested"], ["#srd-decision", "decision"], ["#srd-notes", "notes"]].forEach(([sel, key]) => {
+  // --- summary and notes: formatted text that edits in place (bullets, to-dos, bold, highlights) ---
+  const noteById = (id) => logOf(c).find((n) => n.id === id);
+  // an old undated note is kept: it becomes a regular entry in the log the first time anything is saved
+  const saveLog = (next, msg) => save({ log: next.map((n) => (n.id === "legacy" ? { ...n, id: "n" + Date.now().toString(36) + "old" } : n)), notes: "" }, msg);
+  const editRich = (target, opts) => {
+    box.querySelector(".src-rich-editor")?.remove();
+    const wrap = document.createElement("div");
+    wrap.className = "src-rich-editor";
+    wrap.innerHTML = `${opts.meta ? `<div class="src-note-meta"><label>Date <input type="date" data-nd value="${esc(isoDate(opts.meta.at))}"></label><label>Written by <input data-nb value="${esc(opts.meta.by || "")}" placeholder="Name" autocomplete="off"></label></div>` : ""}
+      <div class="wc-tools">${toolbarHtml("Tab makes a sub-point · ⌘Enter saves")}</div>
+      <textarea class="src-ta" placeholder="${esc(opts.placeholder)}"></textarea>
+      <div class="src-rich-actions"><button class="btn btn-sm" data-x="cancel" type="button">Cancel</button><button class="btn btn-primary btn-sm" data-x="save" type="button">Save</button></div>`;
+    const ta = wrap.querySelector("textarea");
+    ta.value = opts.text || "";
+    wireToolbar(wrap, ta);
+    if (opts.replace) target.replaceWith(wrap); else target.appendChild(wrap);
+    const grow = () => { ta.style.height = "auto"; ta.style.height = Math.max(90, ta.scrollHeight + 2) + "px"; };
+    ta.addEventListener("input", grow); grow(); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+    const done = async (commit) => {
+      const val = ta.value.trim(), meta = opts.meta ? { date: wrap.querySelector("[data-nd]").value, by: wrap.querySelector("[data-nb]").value.trim() } : null;
+      wrap.remove();
+      if (commit) await opts.onSave(val, meta);
+      drawOpen();
+    };
+    wrap.querySelector('[data-x="save"]').addEventListener("click", () => done(true));
+    wrap.querySelector('[data-x="cancel"]').addEventListener("click", () => done(false));
+    ta.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { e.preventDefault(); done(false); }
+      else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); done(true); }
+      else handleNoteKeys(ta, e);
+    });
+  };
+  const openRich = (key) => {
+    const target = box.querySelector(`[data-rich="${key}"]`); if (!target) return;
+    if (key === "summary") return editRich(target, { replace: true, text: c.summary || "", placeholder: "The few lines you want to see first — where things stand, what was decided, what's next", onSave: (val) => save({ summary: val }, val ? "Summary saved" : "Summary removed") });
+    const n = noteById(key.slice(5)); if (!n) return;
+    editRich(target, { replace: true, text: n.text, meta: { at: n.at, by: n.by }, placeholder: "Note", onSave: (val, meta) => {
+      const at = meta.date ? (isoDate(n.at) === meta.date && n.at ? n.at : meta.date + "T12:00:00") : n.at || new Date().toISOString();
+      const next = val ? logOf(c).map((x) => (x.id === n.id ? { ...x, id: x.id === "legacy" ? "n" + Date.now().toString(36) : x.id, text: val, at, by: meta.by, editedAt: new Date().toISOString() } : x)) : logOf(c).filter((x) => x.id !== n.id);
+      return saveLog(next, val ? "Note saved" : "Note removed");
+    } });
+  };
+  box.querySelectorAll("[data-richedit]").forEach((b) => b.addEventListener("click", () => openRich(b.dataset.richedit)));
+  box.querySelectorAll(".src-rich-edit-ok[data-rich]").forEach((el) => el.addEventListener("click", (e) => {
+    if (e.target.closest("input, a, label")) return; // ticking a to-do isn't a request to edit
+    if (window.getSelection && String(window.getSelection())) return; // selecting text to copy isn't either
+    openRich(el.dataset.rich);
+  }));
+  box.querySelector("#srd-note-add").addEventListener("click", () => {
+    const slot = box.querySelector("#srd-note-new");
+    editRich(slot, { text: "", meta: { at: new Date().toISOString(), by: ctx.name || "" }, placeholder: "What happened, what was said, what's next…", onSave: (val, meta) => {
+      if (!val) return;
+      const today = isoDate();
+      const at = !meta.date || meta.date === today ? new Date().toISOString() : meta.date + "T12:00:00";
+      return saveLog([...logOf(c), { id: "n" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), at, by: meta.by, text: val }], "Note added");
+    } });
+  });
+  box.querySelectorAll("[data-ndel]").forEach((b) => b.addEventListener("click", async () => {
+    const n = noteById(b.dataset.ndel); if (!n) return;
+    if (!confirm(`Delete this note${n.at ? " from " + fmtDay(n.at) : ""}?`)) return;
+    await saveLog(logOf(c).filter((x) => x.id !== n.id), "Note deleted");
+  }));
+  // to-do boxes in the summary / a note tick in place
+  box.querySelectorAll("[data-rtodo]").forEach((cb) => cb.addEventListener("change", async () => {
+    const cut = cb.dataset.rtodo.lastIndexOf("|"), key = cb.dataset.rtodo.slice(0, cut), idx = Number(cb.dataset.rtodo.slice(cut + 1));
+    if (key === "summary") return save({ summary: toggleTodoLine(c.summary || "", idx) });
+    const n = noteById(key.slice(5)); if (!n) return;
+    await saveLog(logOf(c).map((x) => (x.id === n.id ? { ...x, id: x.id === "legacy" ? "n" + Date.now().toString(36) : x.id, text: toggleTodoLine(x.text, idx) } : x)));
+  }));
+
+  [["#srd-requested", "requested"], ["#srd-decision", "decision"]].forEach(([sel, key]) => {
     const inp = box.querySelector(sel);
     inp.addEventListener("change", () => { if (inp.value.trim() !== (c[key] || "")) save({ [key]: inp.value.trim() }, "Saved"); });
   });
-  box.querySelector("#srd-wu-edit")?.addEventListener("click", () => {
-    box.querySelector("#srd-wu-view").hidden = true; box.querySelector("#srd-wu-box").hidden = false; box.querySelector("#srd-writeup").focus();
-  });
+  const editWriteup = () => { box.querySelector("#srd-wu-view").hidden = true; box.querySelector("#srd-wu-box").hidden = false; box.querySelector("#srd-writeup").focus(); };
+  box.querySelector("#srd-wu-edit")?.addEventListener("click", editWriteup);
+  box.querySelector("#srd-wu-view")?.addEventListener("click", () => { if (!(window.getSelection && String(window.getSelection()))) editWriteup(); });
+  box.querySelector("#srd-wu-cancel")?.addEventListener("click", () => { box.querySelector("#srd-writeup").value = c.writeup || ""; drawOpen(); });
   box.querySelector("#srd-wu-save").addEventListener("click", async () => {
     const text = box.querySelector("#srd-writeup").value.trim();
-    await save({ writeup: text, writeupBy: box.querySelector("#srd-wu-by").value.trim(), writeupAt: text ? (c.writeup === text && c.writeupAt ? c.writeupAt : new Date().toISOString()) : "" }, text ? "Write-up saved" : "Write-up removed");
+    await save({ writeup: text, writeupBy: box.querySelector("#srd-wu-by").value.trim(), writeupAt: text ? (c.writeupAt || new Date().toISOString()) : "" }, text ? "Write-up saved" : "Write-up removed");
     document.activeElement?.blur(); refreshOpen();
   });
   box.querySelector("#srd-delete").addEventListener("click", async () => {
@@ -371,6 +468,7 @@ function printCase(c, r) {
   </style></head><body><div class="wrap">
     <h1>${esc(c.name || "")}</h1>
     <p class="sub">${[c.spouse ? "& " + esc(c.spouse) : "", r ? "Self-Reliance Plan " + esc(fmtDay(r.at)) : "", "printed " + new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })].filter(Boolean).join(" · ")}</p>
+    ${(c.summary || "").trim() ? `<h2>Summary</h2>${String(c.summary).split("\n").map((l) => l.trim()).filter(Boolean).map((l) => `<p>${/^(\s*)([-•*]|\[( |x|X)\])/.test(l) ? "• " : ""}${esc(plainLine(l))}</p>`).join("")}` : ""}
     ${c.requested ? `<h2>Request</h2><p>${esc(c.requested)}</p>` : ""}
     ${r ? `<h2>What they need</h2><p>${esc(r.raw?.needs || "—")}</p>
       <h2>Monthly picture (as reported)</h2>
