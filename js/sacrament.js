@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1791166119";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1791166119";
+import { db } from "./firebase-init.js?v=1791166140";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1791166140";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1791166119";
-import { HYMNS } from "./hymns.js?v=1791166119";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1791166119";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1791166140";
+import { HYMNS } from "./hymns.js?v=1791166140";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1791166140";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -1018,7 +1018,7 @@ function statusChips(m, date) {
       ? `<span class="st-li-ic st-confirm-dot${isConf(slotIt) ? "" : " st-unconf"}" data-confirm='${JSON.stringify({ k: slotIt.kind, o: 0 })}' title="${isConf(slotIt) ? "Confirmed — click if this still needs confirming" : "Not confirmed yet — click once it's confirmed"}">${isConf(slotIt) ? "✓" : "!"}</span>`
       : "";
     chips.push(`<span class="st st-inter ${cls}${dragAttr ? " st-drag" : ""}"${dragAttr}>
-      <span class="st-head st-click" data-qe='{"t":"inter"}' title="Click for the full editor">Music Number${xBtn("music", "Music Number")}</span>
+      <span class="st-head st-click" data-qe='{"t":"inter"}' title="Click for the full editor">Other Music${xBtn("music", "Other Music")}</span>
       ${preludeBlock}
       <span class="st-prelude-lbl st-sub-lbl">Special Musical Number</span>
       <select class="st-mtype" data-mtype title="Type"><option value="none"${mode === "none" ? " selected" : ""}>— none —</option>${INTER_MODES.map(([k, l]) => `<option value="${k}"${mode === k ? " selected" : ""}>${l}</option>`).join("")}</select>
@@ -1027,15 +1027,15 @@ function statusChips(m, date) {
     </span>`);
     preludeShown = true;
   } else if (slotMusical) {
-    chips.push(chip("Music Number", slotMusical.who, { t: "inter" }, isConf(slotMusical), slotMusical.confirmedBy, null, slotMusical.hymn || "", { k: "musical", o: 0 }, placePill));
+    chips.push(chip("Other Music", slotMusical.who, { t: "inter" }, isConf(slotMusical), slotMusical.confirmedBy, null, slotMusical.hymn || "", { k: "musical", o: 0 }, placePill));
   } else if (slotChoir) {
-    chips.push(chip("Music Number", slotChoir.youth ? "Youth Choir" : "Choir", { t: "inter" }, isConf(slotChoir), slotChoir.confirmedBy, null, slotChoir.hymn || "", { k: "choir", o: 0 }, placePill));
+    chips.push(chip("Other Music", slotChoir.youth ? "Youth Choir" : "Choir", { t: "inter" }, isConf(slotChoir), slotChoir.confirmedBy, null, slotChoir.hymn || "", { k: "choir", o: 0 }, placePill));
   } else if (slotInterHymn) {
     const hymnVal = [slotInterHymn.num ? "#" + slotInterHymn.num : "", slotInterHymn.title].filter(Boolean).join(" | ");
-    chips.push(chip("Music Number", hymnVal, { t: "inter" }, true, null, null, "", null, placePill));
+    chips.push(chip("Other Music", hymnVal, { t: "inter" }, true, null, null, "", null, placePill));
   } else if (type !== "fast") {
     // Fast & Testimony has no intermediate slot — skip the empty pill there
-    chips.push(`<span class="st st-off${can ? " st-click" : ""}"${can ? ` data-qe='{"t":"inter"}' title="Click to add"` : ""}><span class="st-head">Music Number</span></span>`);
+    chips.push(`<span class="st st-off${can ? " st-click" : ""}"${can ? ` data-qe='{"t":"inter"}' title="Click to add"` : ""}><span class="st-head">Other Music</span></span>`);
   }
 
   // no Music Number box this Sunday (fast Sunday, removed, or a read-only viewer): prelude gets its own pill
@@ -1064,7 +1064,7 @@ function statusChips(m, date) {
   // restore chips for boxes that were removed
   if (can && !NO_MEETING(type)) {
     const restore = [];
-    if (hide.music) restore.push(`<span class="st-restore" data-unhide="music" title="Bring the Music Number box back">+ Music Number</span>`);
+    if (hide.music) restore.push(`<span class="st-restore" data-unhide="music" title="Bring the Other Music box back">+ Other Music</span>`);
     if (hide.youth) restore.push(`<span class="st-restore" data-unhide="youth" title="Bring the Youth Speakers box back">+ Youth Speakers</span>`);
     if (!adultSpk.length && type !== "fast") restore.push(`<span class="st-restore" data-unhide="speakers" title="Add a Speakers box to this Sunday">+ Speakers</span>`); // e.g. a Primary Program that also has a speaker
     if (restore.length) chips.push(`<span class="st-restore-wrap">${restore.join("")}</span>`);
@@ -1227,7 +1227,7 @@ function renderCards(wrap) {
       const its = itemsFor(meetings[date], date);
       const has = key === "music" ? its.some((i) => SLOT_KINDS.includes(i.kind) && (i.num || i.title || i.who || i.hymn))
         : its.some((i) => (i.kind === "primarySpeaker" || i.kind === "youthSpeaker") && i.name);
-      if (has && !confirm(`Remove the ${key === "music" ? "Music Number" : "Youth Speakers"} box for this Sunday? What's in it will be cleared.`)) return;
+      if (has && !confirm(`Remove the ${key === "music" ? "Other Music" : "Youth Speakers"} box for this Sunday? What's in it will be cleared.`)) return;
       patchMeeting(date, (mm) => {
         mm.hide = { ...(mm.hide || {}), [key]: true };
         if (key === "music") setInterSlot(mm, "none", {}, "");
