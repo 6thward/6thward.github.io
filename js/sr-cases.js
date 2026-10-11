@@ -11,18 +11,18 @@
 //   summary  — the leader's own few lines, shown first on the card (bullets / to-dos / bold like council notes)
 //   log[]    — dated notes { id, at, by, text, editedAt }; the old single `notes` text shows as an undated note
 // Same privacy as the rest of this page: only the bishop and people given Self-Reliance.
-import { db } from "./firebase-init.js?v=1791747967";
-import { ctx, can } from "./app.js?v=1791747967";
+import { db } from "./firebase-init.js?v=1791748185";
+import { ctx, can } from "./app.js?v=1791748185";
 import {
   collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791747967";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine, inlineFmt } from "./notes.js?v=1791747967";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1791747967";
+import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791748185";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine, inlineFmt } from "./notes.js?v=1791748185";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1791748185";
 import {
   INC, EXP, QA, parseCsv, mapResponses, personKey, respTotals, fmtUsd, isBlank, writeupSections,
   parseBudgetCsv, parseMoney, budgetTotals, fmtUsdC,
-} from "./sr-import.js?v=1791747967";
+} from "./sr-import.js?v=1791748185";
 
 let mount = null, cases = [], started = false, openId = null, openRi = null;
 let openBi = 0, budgetEditing = false;
@@ -495,28 +495,45 @@ function drawOpen() {
     box.querySelector(".src-wu-editor")?.remove();
     const form = document.createElement("div");
     form.className = "src-wu-editor src-wu-card";
-    form.innerHTML = `<div class="src-note-meta"><label>Date <input type="date" data-wd value="${esc(isoDate(w?.at || new Date().toISOString()))}"></label><label>Written by <input data-wb value="${esc(w?.by || (writeupsOf(c)[0] || {}).by || "")}" placeholder="Specialist's name" autocomplete="off"></label></div>
-      <div class="wc-tools">${toolbarHtml("Section titles on their own line become headings · ⌘Enter saves")}</div>
+    // the entry keeps one id from the first keystroke, so auto-saves update it rather than add copies
+    const wid = w ? w.id : "w" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    const actions = (where) => `<div class="src-rich-actions src-wu-actions-${where}">${w && where === "bottom" ? `<button class="btn btn-sm btn-ghost btn-danger" data-x="delete" type="button">Delete</button>` : ""}<span class="src-wu-status" data-status></span><span style="flex:1"></span><button class="btn btn-sm" data-x="cancel" type="button">Close</button><button class="btn btn-primary btn-sm" data-x="save" type="button">Save</button></div>`;
+    form.innerHTML = `${actions("top")}<div class="src-note-meta"><label>Date <input type="date" data-wd value="${esc(isoDate(w?.at || new Date().toISOString()))}"></label><label>Written by <input data-wb value="${esc(w?.by || (writeupsOf(c)[0] || {}).by || "")}" placeholder="Specialist's name" autocomplete="off"></label></div>
+      <div class="wc-tools">${toolbarHtml("Section titles on their own line become headings · saves as you go")}</div>
       <textarea class="src-ta src-ta-tall" placeholder="Paste the self-reliance specialist's write-up here."></textarea>
-      <div class="src-rich-actions">${w ? `<button class="btn btn-sm btn-ghost btn-danger" data-x="delete" type="button">Delete</button>` : ""}<span style="flex:1"></span><button class="btn btn-sm" data-x="cancel" type="button">Cancel</button><button class="btn btn-primary btn-sm" data-x="save" type="button">Save write-up</button></div>`;
+      ${actions("bottom")}`;
     const ta = form.querySelector("textarea"); ta.value = w?.text || "";
     wireToolbar(form, ta);
     if (w) anchor.replaceWith(form); else anchor.appendChild(form);
     const grow = () => { ta.style.height = "auto"; ta.style.height = Math.max(160, ta.scrollHeight + 2) + "px"; };
-    ta.addEventListener("input", grow); grow(); (w ? ta : form.querySelector("[data-wb]")).focus();
-    const done = async (mode) => {
+    grow(); (w ? ta : form.querySelector("[data-wb]")).focus();
+    const status = (t) => form.querySelectorAll("[data-status]").forEach((el) => { el.textContent = t; });
+    let lastSaved = JSON.stringify({ text: w?.text || "", by: w?.by || "", date: isoDate(w?.at || "") }), timer = null, saving = null;
+    // write what's in the box to the card; the editor stays open (the card won't redraw under it)
+    const persist = async () => {
       const text = ta.value.trim(), date = form.querySelector("[data-wd]").value, by = form.querySelector("[data-wb]").value.trim();
-      if (mode === "save" && !text) { ta.focus(); return toast("Nothing to save yet"); }
+      const key = JSON.stringify({ text, by, date });
+      if (!text || key === lastSaved) return false;
+      if (saving) await saving;
+      const cur = cases.find((x) => x.id === openId) || c, list = writeupsOf(cur), have = list.find((x) => x.id === wid);
+      const at = date ? (have && isoDate(have.at) === date ? have.at : date + "T12:00:00") : (have?.at || new Date().toISOString());
+      const next = have ? list.map((x) => (x.id === wid ? { ...x, text, by, at, editedAt: new Date().toISOString() } : x)) : [...list, { id: wid, at, by, text }];
+      if (!have) wuOpen = new Set([wid]);
+      status("Saving…");
+      saving = saveWriteups(next).then(() => { lastSaved = key; status("Saved ✓"); }).catch(() => status("Couldn't save")).finally(() => { saving = null; });
+      await saving;
+      return true;
+    };
+    const queue = () => { clearTimeout(timer); status("…"); timer = setTimeout(persist, 1200); }; // auto-save shortly after typing stops
+    ta.addEventListener("input", () => { grow(); queue(); });
+    form.querySelectorAll("[data-wd], [data-wb]").forEach((inp) => inp.addEventListener("change", queue));
+    const done = async (mode) => {
+      clearTimeout(timer);
       if (mode === "delete" && !confirm("Delete this write-up? This can't be undone.")) return;
+      if (mode === "save" || mode === "cancel") { if (!ta.value.trim() && mode === "save") { ta.focus(); return toast("Nothing to save yet"); } await persist(); }
       form.remove(); wuEditing = null;
-      if (mode === "save") {
-        const at = date ? (w && isoDate(w.at) === date ? w.at : date + "T12:00:00") : (w?.at || new Date().toISOString());
-        const list = writeupsOf(c);
-        const next = w ? list.map((x) => (x.id === w.id ? { ...x, text, by, at, editedAt: new Date().toISOString() } : x))
-                       : [...list, { id: "w" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), at, by, text }];
-        if (!w) wuOpen = new Set([next[next.length - 1].id]);
-        await saveWriteups(next, "Write-up saved");
-      } else if (mode === "delete") await saveWriteups(writeupsOf(c).filter((x) => x.id !== w.id), "Write-up deleted");
+      if (mode === "save") toast("Write-up saved");
+      else if (mode === "delete") await saveWriteups(writeupsOf(cases.find((x) => x.id === openId) || c).filter((x) => x.id !== wid), "Write-up deleted");
       drawOpen();
     };
     form.querySelectorAll("[data-x]").forEach((b) => b.addEventListener("click", () => done(b.dataset.x)));

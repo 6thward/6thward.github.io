@@ -1896,3 +1896,5 @@ button.src-st { cursor: pointer; } button.src-st:hover { filter: brightness(.93)
 .src-wu-editor { padding: .6rem .7rem; }
 .src-wu-editor .wc-tools { margin: .4rem 0 .3rem; }
 .src-writeup .rc-list { margin: .2rem 0 .5rem; } .src-writeup .rc-todo { font-size: .93rem; }
+.src-wu-actions-top { margin: 0 0 .5rem; padding-bottom: .5rem; border-bottom: 1px solid var(--line); }
+.src-wu-status { font-size: .8rem; color: var(--ink-soft); }
