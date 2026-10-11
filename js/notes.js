@@ -8,7 +8,7 @@
 //   "## Name"               → a name card: the lines under it (until the next "## " or a "---" line)
 //                             sit inside a card headed by that name; cards in a row form a group (2026-10-11)
 // The text is stored exactly as typed, so it stays readable anywhere.
-import { esc } from "./ui.js?v=1791725341";
+import { esc } from "./ui.js?v=1791725469";
 
 const MAX_LEVEL = 3;
 const levelOf = (indent) => Math.min(MAX_LEVEL, Math.floor(String(indent || "").replace(/\t/g, "  ").length / 2));
@@ -92,7 +92,7 @@ export function notesHtml(text, key, editable, attrFn, opts) {
     if ((m = /^##\s+(.*)$/.exec(line))) { // a name card; consecutive cards share one row
       closeCard();
       if (!inCards) { html += `<div class="nt-cards">`; inCards = true; }
-      html += `<div class="nt-card"><div class="nt-card-name"${aline(i)}>${inlineFmt(m[1])}</div><div class="nt-card-body">`;
+      html += `<div class="nt-card" data-cardstart="${i}"><div class="nt-card-name"${aline(i)}>${inlineFmt(m[1])}</div><div class="nt-card-body">`;
       inCard = true;
       return;
     }

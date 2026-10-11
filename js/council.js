@@ -9,14 +9,14 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1791725341";
-import { ctx, can } from "./app.js?v=1791725341";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1791725341";
-import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791725341";
+import { db } from "./firebase-init.js?v=1791725469";
+import { ctx, can } from "./app.js?v=1791725469";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1791725469";
+import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791725469";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1791725341";
+import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1791725469";
 
 let cards = [];
 let councils = {};    // date -> doc
@@ -267,7 +267,9 @@ function render() {
   const rawNotes = new Map();
   const noteBlock = (key, text, placeholder) => {
     rawNotes.set(key, text || "");
-    return `<div class="wc-cnotes${text ? "" : " wc-cnotes-empty"}${editor ? " wc-cnotes-edit" : ""}" data-cnotes="${key}" title="${editor ? "Click to add notes" : ""}">${text ? notesHtml(text, key, editor, null, { assign: true }) : (editor ? placeholder : "")}</div>`;
+    // editors also get "+ name card": a card for one person, added and edited right in place (2026-10-11)
+    const addCard = editor && key !== "m" ? `<span class="nt-card-add" data-addcard="${key}" title="Add a card for one person — their name on top, notes underneath">+ name card</span>` : "";
+    return `<div class="wc-cnotes${text ? "" : " wc-cnotes-empty"}${editor ? " wc-cnotes-edit" : ""}" data-cnotes="${key}" title="${editor ? "Click to add notes" : ""}">${text ? notesHtml(text, key, editor, null, { assign: true }) : (editor ? placeholder : "")}${addCard}</div>`;
   };
   const row = (it, n) => {
     const title = it.kind === "board" ? it.t.title : it.x.title;
@@ -408,6 +410,61 @@ function render() {
       try { await saveCouncil(date, { order: keys }); } catch (err) { toast("Couldn't save the order: " + (err.code || err.message)); }
     });
   });
+
+  // a name card edits on its own, without opening the whole notes box: name + the lines under it
+  const cardRange = (lines, start) => { let end = start + 1; while (end < lines.length && !/^##\s/.test(lines[end]) && lines[end].trim() !== "---") end++; return end; };
+  const openCardEditor = (anchor, key, start) => {
+    const lines = (rawNotes.get(key) || "").split("\n"), isNew = start < 0;
+    const end = isNew ? -1 : cardRange(lines, start);
+    const name = isNew ? "" : lines[start].replace(/^##\s+/, ""), bodyText = isNew ? "- " : lines.slice(start + 1, end).join("\n");
+    const form = document.createElement("div");
+    form.className = "nt-card nt-card-edit";
+    form.innerHTML = `<input class="nt-card-name-in" placeholder="Name (or family)" autocomplete="off" value="${esc(name)}">
+      <textarea class="nt-card-body-in" placeholder="- notes about them" rows="3"></textarea>
+      <div class="nt-card-edit-actions">${isNew ? "" : `<button type="button" class="btn btn-sm btn-ghost btn-danger" data-x="remove" title="Remove this card">Remove</button>`}<span></span><button type="button" class="btn btn-sm" data-x="cancel">Cancel</button><button type="button" class="btn btn-primary btn-sm" data-x="save">Save</button></div>`;
+    const ta = form.querySelector("textarea"); ta.value = bodyText;
+    form.addEventListener("click", (e) => e.stopPropagation()); // don't open the big editor underneath
+    if (isNew) anchor.before(form); else anchor.replaceWith(form);
+    const nameIn = form.querySelector("input");
+    const grow = () => { ta.style.height = "auto"; ta.style.height = Math.max(60, ta.scrollHeight + 2) + "px"; };
+    ta.addEventListener("input", grow); grow();
+    nameIn.focus();
+    let done = false;
+    const finish = async (mode) => {
+      if (done) return; done = true;
+      try {
+        if (mode === "save") {
+          const n = nameIn.value.trim(), body = ta.value.replace(/\s+$/, "").split("\n").filter((l, i, a) => !(l.trim() === "-" && i === a.length - 1)); // drop an untouched "- "
+          if (!n) { done = false; nameIn.focus(); return toast("Give the card a name"); }
+          const next = isNew
+            ? [...lines.join("\n").replace(/\s+$/, "").split("\n").filter((l, i, a) => a.length > 1 || l), "## " + n, ...body]
+            : [...lines.slice(0, start), "## " + n, ...body, ...lines.slice(end)];
+          await saveNote(key, next.join("\n").trim()); toast("Saved");
+        } else if (mode === "remove") {
+          if (!confirm(`Remove the card for ${name || "this person"}?`)) { done = false; return; }
+          await saveNote(key, [...lines.slice(0, start), ...lines.slice(end)].join("\n").trim()); toast("Card removed");
+        }
+      } catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
+      render();
+    };
+    form.querySelectorAll("[data-x]").forEach((b) => b.addEventListener("click", () => finish(b.dataset.x)));
+    nameIn.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } if (e.key === "Escape") finish("cancel"); });
+    ta.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { e.preventDefault(); finish("cancel"); }
+      else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); finish("save"); }
+      else handleNoteKeys(ta, e);
+    });
+  };
+  body.querySelectorAll(".wc-cnotes-edit .nt-card").forEach((card) => card.addEventListener("click", (e) => {
+    if (e.target.closest("input, a, label, .nt-who, .nt-assign")) return;
+    e.stopPropagation();
+    openCardEditor(card, card.closest("[data-cnotes]").dataset.cnotes, Number(card.dataset.cardstart));
+  }));
+  body.querySelectorAll("[data-addcard]").forEach((b) => b.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (b.parentElement.querySelector(".nt-card-edit")) return;
+    openCardEditor(b, b.dataset.addcard, -1);
+  }));
 
   const saveNote = async (key, val) => {
     if (key === "m") await saveCouncil(date, { notes: val });

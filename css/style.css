@@ -1864,3 +1864,13 @@ button.src-st { cursor: pointer; } button.src-st:hover { filter: brightness(.93)
 .nt-card-body > .rc-list { margin: .1rem 0 0; padding-left: 1.1rem; }
 .nt-card-body .rc-gap { height: .3rem; }
 .nt-card-body > div:not(.rc-gap) { font-size: .92rem; }
+/* Name cards edited in place (2026-10-11) */
+.nt-card-add { display: inline-block; margin-top: .35rem; font-size: .8rem; font-weight: 600; color: #a7b0bd; border: 1px dashed rgba(31,39,51,.25); border-radius: 99px; padding: .1rem .6rem; cursor: pointer; }
+.nt-card-add:hover { color: var(--brand); border-color: var(--brand); }
+.wc-cnotes-edit .nt-card { cursor: pointer; }
+.wc-cnotes-edit .nt-card:hover { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.nt-card.nt-card-edit { cursor: default; display: flex; flex-direction: column; gap: .35rem; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.nt-card-name-in { font: inherit; font-weight: 700; padding: .3rem .45rem; border: 1px solid var(--line); border-radius: 8px; }
+.nt-card-body-in { font: inherit; font-size: .92rem; line-height: 1.4; padding: .35rem .45rem; border: 1px solid var(--line); border-radius: 8px; resize: none; overflow: hidden; }
+.nt-card-name-in:focus, .nt-card-body-in:focus { outline: none; border-color: var(--brand); }
+.nt-card-edit-actions { display: flex; gap: .3rem; align-items: center; } .nt-card-edit-actions span { flex: 1; }
