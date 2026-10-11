@@ -9,20 +9,21 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1791220898";
-import { ctx, can } from "./app.js?v=1791220898";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1791220898";
-import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791220898";
+import { db } from "./firebase-init.js?v=1791721542";
+import { ctx, can } from "./app.js?v=1791721542";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1791721542";
+import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791721542";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1791220898";
+import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1791721542";
 
 let cards = [];
 let councils = {};    // date -> doc
 let members = [];     // names of ward council members (Users tab → "Ward council member")
 // what a council member can be asked to do at a meeting (2026-10-04)
 const ASSIGN = [["openPrayer", "Opening prayer"], ["thought", "Scripture & thought"], ["training", "Handbook training"], ["closePrayer", "Closing prayer"]];
+let openNotesFor = null; // an item just added: its notes box opens as soon as it's drawn (2026-10-11)
 let schedule = [];    // council dates (Sundays) set by the bishopric — councils/_dates.dates; empty = every Sunday
 let date = "";        // selected meeting date (YYYY-MM-DD)
 let started = false;
@@ -365,7 +366,7 @@ function render() {
       <div class="wc-list">
         ${open.length ? open.map((it, i) => row(it, i + 1)).join("") : `<div class="empty-note" style="padding:.7rem">${next ? "Nothing on the agenda yet." : "No open items."}</div>`}
       </div>
-      ${editor ? `<div class="wc-add"><input class="wc-new" placeholder="+ Add an agenda item and press Enter" autocomplete="off"></div>` : ""}
+      ${editor ? `<div class="wc-add"><input class="wc-new" placeholder="+ Add an agenda item and press Enter — its notes open right after" autocomplete="off"></div>` : ""}
       ${done.length ? `<details class="wc-hist" open><summary>Discussed at this meeting (${done.length})</summary>${done.map((it, i) => row(it, open.length + i + 1)).join("")}</details>` : ""}
     </div>
     ${followCard}
@@ -486,15 +487,19 @@ function render() {
     ta.addEventListener("blur", () => setTimeout(() => finish(true), 80));
   }));
 
+  // an item that was just added: drop straight into its notes (Esc leaves them empty)
+  if (openNotesFor) { const el = body.querySelector(`[data-cnotes="${openNotesFor}"]`); openNotesFor = null; if (el) { el.click(); el.scrollIntoView({ block: "nearest" }); } }
+
   // add a free-form item
   const inp = body.querySelector(".wc-new");
   if (inp) {
     const add = async () => {
       const title = inp.value.trim(); if (!title) return;
       inp.value = "";
-      const extra = [...(cdoc.extra || []), { id: "a" + Math.random().toString(36).slice(2, 9), title, notes: "", discussed: false, createdAt: new Date().toISOString(), by: ctx.name || "", owner: ctx.name || "" }];
-      try { await saveCouncil(date, { extra }); } catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
-      setTimeout(() => body.querySelector(".wc-new")?.focus(), 60);
+      const id = "a" + Math.random().toString(36).slice(2, 9);
+      openNotesFor = "x:" + id; // type the title, press Enter, keep typing the notes
+      const extra = [...(cdoc.extra || []), { id, title, notes: "", discussed: false, createdAt: new Date().toISOString(), by: ctx.name || "", owner: ctx.name || "" }];
+      try { await saveCouncil(date, { extra }); } catch (e) { openNotesFor = null; toast("Couldn't save: " + (e.code || e.message)); }
     };
     inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); add(); } });
     inp.addEventListener("blur", () => { if (inp.value.trim()) add(); });

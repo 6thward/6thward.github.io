@@ -1,14 +1,21 @@
 // Calendar tab: month grid of ward meetings and the bishop's schedule.
-import { db } from "./firebase-init.js?v=1791220898";
-import { ctx, hasRole, can } from "./app.js?v=1791220898";
+// 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
+// Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
+// tithing availability + booked appointments show here as calendar items of their own.
+import { db } from "./firebase-init.js?v=1791721542";
+import { ctx, hasRole, can } from "./app.js?v=1791721542";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1791220898";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1791721542";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1791721542";
 
 let events = [];
 let viewYear, viewMonth; // 0-based month
 let started = false;
+let calView = "all";          // all | ward | bishop
+let season = null, signups = {}, unsubSignups = null; // tithing declaration (only loads for people who can see it)
+const calOf = (e) => (e.cal === "bishop" ? "bishop" : "ward");
 
 export function initCalendar() {
   if (started) return;
@@ -24,7 +31,14 @@ export function initCalendar() {
         <h2>Calendar</h2>
         <p class="panel-sub">Meetings, interviews, and ward events. Click a day to add.</p>
       </div>
-      <button class="btn btn-primary" id="btn-new-event">+ New event</button>
+      <div class="panel-actions">
+        <div class="view-toggle" id="cal-filter">
+          <button class="chip active" data-cal="all" type="button">All</button>
+          <button class="chip" data-cal="ward" type="button">Ward</button>
+          <button class="chip chip-bishop" data-cal="bishop" type="button" title="The bishop's own calendar — its events block tithing declaration times">Bishop</button>
+        </div>
+        <button class="btn btn-primary" id="btn-new-event">+ New event</button>
+      </div>
     </div>
     <div class="card">
       <div class="cal-head">
@@ -42,12 +56,58 @@ export function initCalendar() {
   panel.querySelector("#cal-prev").addEventListener("click", () => shiftMonth(-1));
   panel.querySelector("#cal-next").addEventListener("click", () => shiftMonth(1));
   panel.querySelector("#btn-new-event").addEventListener("click", () => editEvent(null, todayISO()));
+  panel.querySelectorAll("#cal-filter [data-cal]").forEach((b) => b.addEventListener("click", () => {
+    calView = b.dataset.cal;
+    panel.querySelectorAll("#cal-filter .chip").forEach((c) => c.classList.toggle("active", c === b));
+    render();
+  }));
 
   onSnapshot(collection(db, "events"), (qs) => {
     events = qs.docs.map((d) => ({ id: d.id, ...d.data() }));
     render();
   });
+  // tithing declaration sign-ups, for people allowed to see them (the rules say who)
+  onSnapshot(collection(db, "tithing"), (qs) => {
+    const all = qs.docs.map((d) => ({ token: d.id, ...d.data() })).sort((a, b) => String(b.created || "").localeCompare(String(a.created || "")));
+    const next = all[0] || null;
+    if ((next && next.token) !== (season && season.token)) {
+      if (unsubSignups) unsubSignups();
+      signups = {};
+      unsubSignups = next ? onSnapshot(collection(db, "tithing", next.token, "signups"), (s) => { signups = Object.fromEntries(s.docs.map((d) => [d.id, d.data()])); render(); }, () => {}) : null;
+    }
+    season = next;
+    render();
+  }, () => {});
   render();
+}
+
+// ---- tithing declaration on the calendar ----
+// one item per availability block: "Tithing declaration 2:00–4:00 PM · 3 of 8 booked"
+function tithingItems(date) {
+  if (!season) return [];
+  const slots = slotsOf(season.windows, offList(season)).filter((s) => s.date === date);
+  return (season.windows || []).filter((w) => w.date === date).map((w) => {
+    const mine = slots.filter((s) => s.win === w.id), booked = mine.filter((s) => signups[s.id]);
+    return { tithing: true, id: "t:" + w.id, date, startTime: w.start, endTime: w.end, cal: "bishop",
+      title: "Tithing declaration", sub: `${booked.length} of ${mine.filter((s) => !s.blocked || signups[s.id]).length} booked${w.place === "home" ? " · home visits" : ""}`,
+      booked: booked.map((s) => ({ min: s.min, name: signups[s.id].name })) };
+  });
+}
+const showIt = (e) => calView === "all" || calOf(e) === calView;
+// which booked appointments a bishop's event would sit on top of
+function clashes(date, start, end) {
+  if (!season) return [];
+  const a = start ? toMinutes(start) : 0, b = end ? toMinutes(end) : start ? a + 60 : 24 * 60;
+  return slotsOf(season.windows).filter((s) => s.date === date && signups[s.id] && s.min < b && a < s.min + s.len).map((s) => `${fmtClock(s.min)} ${signups[s.id].name}`);
+}
+const toMinutes = (hhmm) => { const [h, m] = String(hhmm).split(":").map(Number); return h * 60 + (m || 0); };
+// after the bishop's calendar changes, keep the sign-up page's busy times in step
+async function syncBusy(nextEvents) {
+  if (!season) return;
+  const busy = busyFromEvents(season.windows, nextEvents);
+  if (sameBusy(busy, season.busy)) return;
+  try { await updateDoc(doc(db, "tithing", season.token), { busy, slots: slotMap(season.windows, [...(season.blocked || []), ...Object.keys(busy)]), updatedAt: serverTimestamp() }); }
+  catch (e) { console.warn("[calendar] tithing busy sync", e); }
 }
 
 function shiftMonth(delta) {
@@ -71,7 +131,8 @@ function render() {
   const daysInPrev = new Date(viewYear, viewMonth, 0).getDate();
   const today = todayISO();
   const byDate = {};
-  events.forEach((e) => (byDate[e.date] = byDate[e.date] || []).push(e));
+  events.filter(showIt).forEach((e) => (byDate[e.date] = byDate[e.date] || []).push(e));
+  if (calView !== "ward" && season) (season.windows || []).forEach((w) => { if (!byDate[w.date] || !byDate[w.date].some((x) => x.tithing)) tithingItems(w.date).forEach((t) => (byDate[w.date] = byDate[w.date] || []).push(t)); });
   Object.values(byDate).forEach((l) => l.sort((a, b) => (a.startTime || "") < (b.startTime || "") ? -1 : 1));
 
   let html = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
@@ -99,7 +160,7 @@ function render() {
       <div class="cal-cell ${otherMonth ? "other-month" : ""} ${cellDate === today ? "today" : ""}" data-date="${cellDate}">
         <span class="cal-daynum">${displayNum}</span>
         ${evs.slice(0, 3).map((e) => `
-          <div class="cal-event ${isSunday ? "ev-sunday" : ""}" title="${esc(e.title)}">
+          <div class="cal-event ${isSunday ? "ev-sunday" : ""}${e.tithing ? " ev-tithing" : calOf(e) === "bishop" ? " ev-bishop" : ""}" title="${esc(e.title)}${e.sub ? " · " + esc(e.sub) : ""}">
             ${e.startTime ? fmtTime(e.startTime) + " " : ""}${esc(e.title)}
           </div>`).join("")}
         ${evs.length > 3 ? `<div class="cal-event">+${evs.length - 3} more</div>` : ""}
@@ -113,34 +174,42 @@ function render() {
   // Upcoming list (next 30 days)
   const horizon = new Date(); horizon.setDate(horizon.getDate() + 30);
   const horizonISO = iso(horizon.getFullYear(), horizon.getMonth(), horizon.getDate());
-  const up = events
+  const up = [...events.filter(showIt), ...(calView !== "ward" && season ? (season.windows || []).filter((w) => w.date >= today && w.date <= horizonISO).flatMap((w) => tithingItems(w.date).filter((t) => t.id === "t:" + w.id)) : [])]
     .filter((e) => e.date >= today && e.date <= horizonISO)
     .sort((a, b) => (a.date + (a.startTime || "")) < (b.date + (b.startTime || "")) ? -1 : 1);
   document.getElementById("upcoming-list").innerHTML = up.length
     ? up.map((e) => `
-      <div class="list-row" data-id="${e.id}">
+      <div class="list-row${e.tithing ? " list-row-tithing" : ""}" data-id="${e.id}">
         <div class="row-main">
-          <div class="row-title">${esc(e.title)}</div>
-          <div class="row-sub">${fmtDate(e.date)}${e.startTime ? " · " + fmtTime(e.startTime) : ""}${e.endTime ? "–" + fmtTime(e.endTime) : ""}${e.location ? " · " + esc(e.location) : ""}</div>
+          <div class="row-title">${e.tithing ? "🗓 " : calOf(e) === "bishop" ? `<span class="cal-tag cal-tag-bishop">Bishop</span> ` : ""}${esc(e.title)}</div>
+          <div class="row-sub">${fmtDate(e.date)}${e.startTime ? " · " + fmtTime(e.startTime) : ""}${e.endTime ? "–" + fmtTime(e.endTime) : ""}${e.location ? " · " + esc(e.location) : ""}${e.sub ? " · " + esc(e.sub) : ""}</div>
         </div>
       </div>`).join("")
     : `<div class="empty-note">Nothing on the calendar for the next 30 days.</div>`;
   document.querySelectorAll("#upcoming-list .list-row").forEach((row) =>
     row.addEventListener("click", () => {
+      if (row.dataset.id.startsWith("t:")) return dayView(up.find((x) => x.id === row.dataset.id)?.date);
       const e = events.find((x) => x.id === row.dataset.id);
       if (e) editEvent(e);
     }));
 }
 
 function dayView(date) {
-  const dayEvents = events.filter((e) => e.date === date)
+  if (!date) return;
+  const dayEvents = [...events.filter((e) => e.date === date && showIt(e)), ...(calView !== "ward" ? tithingItems(date) : [])]
     .sort((a, b) => (a.startTime || "") < (b.startTime || "") ? -1 : 1);
   const el = openModal(`
     <h3>${fmtDate(date, { year: true })}</h3>
-    ${dayEvents.length ? dayEvents.map((e) => `
+    ${dayEvents.length ? dayEvents.map((e) => e.tithing ? `
+      <div class="list-row list-row-tithing">
+        <div class="row-main">
+          <div class="row-title">🗓 ${esc(e.title)} <span class="row-sub">${fmtTime(e.startTime)}–${fmtTime(e.endTime)} · ${esc(e.sub)}</span></div>
+          ${e.booked.length ? `<div class="cal-booked">${e.booked.map((b) => `<span><b>${fmtClock(b.min)}</b> ${esc(b.name)}</span>`).join("")}</div>` : `<div class="row-sub">Nobody signed up yet.</div>`}
+        </div>
+      </div>` : `
       <div class="list-row" data-id="${e.id}">
         <div class="row-main">
-          <div class="row-title">${esc(e.title)}</div>
+          <div class="row-title">${calOf(e) === "bishop" ? `<span class="cal-tag cal-tag-bishop">Bishop</span> ` : ""}${esc(e.title)}</div>
           <div class="row-sub">${e.startTime ? fmtTime(e.startTime) : "All day"}${e.endTime ? "–" + fmtTime(e.endTime) : ""}${e.location ? " · " + esc(e.location) : ""}${e.notes ? " · " + esc(e.notes) : ""}</div>
         </div>
       </div>`).join("") : `<div class="empty-note">No events.</div>`}
@@ -152,7 +221,7 @@ function dayView(date) {
     </div>`);
   el.querySelector("#dv-close").addEventListener("click", closeModal);
   el.querySelector("#dv-add").addEventListener("click", () => editEvent(null, date));
-  el.querySelectorAll(".list-row").forEach((row) =>
+  el.querySelectorAll(".list-row[data-id]").forEach((row) =>
     row.addEventListener("click", () => {
       const e = events.find((x) => x.id === row.dataset.id);
       if (e) editEvent(e);
@@ -171,6 +240,9 @@ function editEvent(e, defaultDate) {
       <label class="field">Date
         <input type="date" id="ev-date" value="${e?.date || defaultDate || todayISO()}" ${canEdit ? "" : "disabled"}>
       </label>
+      <label class="field">Calendar
+        <select id="ev-cal" ${canEdit ? "" : "disabled"}><option value="ward"${calOf(e || {}) === "ward" && !(isNew && calView === "bishop") ? " selected" : ""}>Ward</option><option value="bishop"${calOf(e || {}) === "bishop" || (isNew && calView === "bishop") ? " selected" : ""}>Bishop</option></select>
+      </label>
       <label class="field">Location
         <input id="ev-location" value="${esc(e?.location || "")}" ${canEdit ? "" : "disabled"}>
       </label>
@@ -183,6 +255,7 @@ function editEvent(e, defaultDate) {
       <label class="field full">Notes
         <textarea id="ev-notes" ${canEdit ? "" : "disabled"}>${esc(e?.notes || "")}</textarea>
       </label>
+      <div class="full cal-clash hidden" id="ev-clash"></div>
     </div>
     <div class="modal-actions">
       ${!isNew && canEdit ? `<button class="btn btn-ghost btn-danger" id="ev-delete">Delete</button>` : ""}
@@ -192,10 +265,24 @@ function editEvent(e, defaultDate) {
       </div>
     </div>`);
   el.querySelector("#ev-cancel").addEventListener("click", closeModal);
+  // a bishop's event on top of tithing-declaration times: say so, and show who is already booked there
+  const clashNote = () => {
+    const box = el.querySelector("#ev-clash");
+    if (el.querySelector("#ev-cal").value !== "bishop" || !season) return box.classList.add("hidden");
+    const date = el.querySelector("#ev-date").value, start = el.querySelector("#ev-start").value, end = el.querySelector("#ev-end").value;
+    const open = slotsOf(season.windows, offList(season)).filter((s) => s.date === date && !s.blocked && !signups[s.id] && (!start || (toMinutes(start) < s.min + s.len && s.min < (end ? toMinutes(end) : toMinutes(start) + 60)))).length;
+    const hits = clashes(date, start, end);
+    if (!open && !hits.length) return box.classList.add("hidden");
+    box.classList.remove("hidden");
+    box.innerHTML = `${open ? `<div>📅 Blocks <b>${open}</b> open tithing declaration time${open === 1 ? "" : "s"} that day${start ? "" : " (all day)"}.</div>` : ""}${hits.length ? `<div class="cal-clash-hit">⚠ Already booked in this time: ${hits.map(esc).join(" · ")}. They stay on the schedule — move them from the Tithing Declaration page if needed.</div>` : ""}`;
+  };
+  ["#ev-cal", "#ev-date", "#ev-start", "#ev-end"].forEach((sel) => el.querySelector(sel).addEventListener("change", clashNote));
+  clashNote();
   el.querySelector("#ev-delete")?.addEventListener("click", async () => {
     if (!confirm("Delete this event?")) return;
     await deleteDoc(doc(db, "events", e.id));
     closeModal(); toast("Event deleted");
+    if (calOf(e) === "bishop") syncBusy(events.filter((x) => x.id !== e.id));
   });
   el.querySelector("#ev-save")?.addEventListener("click", async () => {
     const title = el.querySelector("#ev-title").value.trim();
@@ -207,6 +294,7 @@ function editEvent(e, defaultDate) {
       endTime: el.querySelector("#ev-end").value || null,
       location: el.querySelector("#ev-location").value.trim(),
       notes: el.querySelector("#ev-notes").value.trim(),
+      cal: el.querySelector("#ev-cal").value === "bishop" ? "bishop" : "ward",
       updatedAt: serverTimestamp(),
     };
     try {
@@ -218,6 +306,8 @@ function editEvent(e, defaultDate) {
         await updateDoc(doc(db, "events", e.id), data);
       }
       closeModal(); toast("Saved");
+      // the bishop's calendar decides which tithing times are open, so bring the sign-up page up to date
+      if (data.cal === "bishop" || (e && calOf(e) === "bishop")) syncBusy([...events.filter((x) => !e || x.id !== e.id), { ...data, id: e?.id || "new" }]);
     } catch (err) {
       toast("Couldn't save: " + (err.code || err.message));
     }

@@ -1833,3 +1833,14 @@ button.src-st { cursor: pointer; } button.src-st:hover { filter: brightness(.93)
 .srb-field { display: flex; flex-direction: column; gap: .15rem; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); margin-top: .6rem; }
 .srb-field input { text-transform: none; letter-spacing: 0; font-weight: 500; }
 .srb-actions { display: flex; align-items: center; gap: .4rem; margin-top: .7rem; } .srb-actions span { flex: 1; }
+/* Calendar: Ward / Bishop calendars + tithing declaration items (2026-10-11) */
+.chip.chip-bishop.active { background: #5b3a8e; border-color: #5b3a8e; }
+.cal-event.ev-bishop { background: #efe6fa; color: #4a2a7a; border-left: 3px solid #7a4fb5; }
+.cal-event.ev-tithing { background: #e0f2f1; color: #0f5c57; border-left: 3px solid #1f8a83; }
+.cal-tag { display: inline-block; font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; border-radius: 99px; padding: .05rem .45rem; vertical-align: middle; }
+.cal-tag-bishop { background: #efe6fa; color: #5b3a8e; }
+.list-row-tithing { background: #f0faf9; border-radius: 8px; }
+.cal-booked { display: flex; flex-wrap: wrap; gap: .3rem .8rem; font-size: .88rem; margin-top: .25rem; }
+.cal-clash { background: #fdf3da; border: 1px solid #f0dca0; border-radius: 10px; padding: .55rem .7rem; font-size: .9rem; display: flex; flex-direction: column; gap: .25rem; }
+.cal-clash-hit { color: #8a3b00; }
+.td-srow-busy .td-sname { color: #5b3a8e; }

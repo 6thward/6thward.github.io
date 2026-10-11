@@ -2,13 +2,13 @@
 // No sign-in. Anyone with the link sees the open times (never who took the
 // others), picks one, and leaves a name — plus a phone number if they'd like
 // a text reminder.
-import { db } from "./firebase-init.js?v=1791220898";
+import { db } from "./firebase-init.js?v=1791721542";
 import {
   doc, getDoc, collection, onSnapshot, writeBatch, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import {
-  GROUPS, PLACES, esc, fmtClock, fmtLongDay, slotsOf, sortWindows, parseSlotId, todayIso, nowMin,
-} from "./tithing-shared.js?v=1791220898";
+  GROUPS, PLACES, esc, fmtClock, fmtLongDay, slotsOf, sortWindows, parseSlotId, todayIso, nowMin, offList,
+} from "./tithing-shared.js?v=1791721542";
 
 export async function initTithingForm(mount, token) {
   const fail = (title, msg) => { mount.innerHTML = `<div class="td-card td-msg"><h2>${esc(title)}</h2><p>${esc(msg)}</p></div>`; };
@@ -24,7 +24,7 @@ export async function initTithingForm(mount, token) {
   const readMine = () => { try { return JSON.parse(localStorage.getItem(mineKey) || "null"); } catch { return null; } };
   const saveMine = (v) => { try { localStorage.setItem(mineKey, JSON.stringify(v)); } catch {} };
 
-  const slots = slotsOf(season.windows, season.blocked).filter((s) => !s.blocked); // blocked-out times simply aren't offered
+  const slots = slotsOf(season.windows, offList(season)).filter((s) => !s.blocked); // blocked-out or calendar-busy times simply aren't offered
   const winById = Object.fromEntries((season.windows || []).map((w) => [w.id, w]));
   let taken = new Map(); // slotId -> minutes
   let justBooked = null;

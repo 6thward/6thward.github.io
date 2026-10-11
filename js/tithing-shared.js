@@ -1,7 +1,9 @@
 // Tithing declaration sign-ups (2026-10-04) — pieces shared by the bishop's
 // view (the Tithing Declaration page) and the public sign-up page (tithing.html).
 //
-// tithing/{token}                 { open, ward, note, windows[], blocked[slotId], slots{ id: minutes }, created }
+// tithing/{token}                 { open, ward, note, windows[], blocked[slotId], busy{ slotId: event title }, slots{ id: minutes }, created }
+//   busy = sign-up times covered by something on the bishop's calendar (events with cal: "bishop"); kept in
+//   step by the app whenever his calendar or the availability changes, since the public page can't read events
 //   windows[]                     { id, date, start "HH:MM", end "HH:MM", len, place, group }
 // tithing/{token}/taken/{slotId}  { len, at }           — public: only WHICH times are gone
 // tithing/{token}/signups/{slotId}{ name, phone, address, at } — private: who took them
@@ -50,6 +52,22 @@ export function slotsOf(windows, blocked) {
 // { slotId: minutes } — the security rules check a sign-up against this
 // (blocked times are left out, so nobody can sign up for them)
 export const slotMap = (windows, blocked) => Object.fromEntries(slotsOf(windows, blocked).filter((s) => !s.blocked).map((s) => [s.id, s.len]));
+
+// which sign-up times the bishop's calendar covers: a timed event blocks the times it overlaps
+// (an event with no end is taken as an hour); an all-day event blocks that whole day
+export function busyFromEvents(windows, events) {
+  const out = {};
+  const evs = (events || []).filter((e) => e && e.cal === "bishop" && e.date);
+  if (!evs.length) return out;
+  slotsOf(windows).forEach((s) => {
+    const hit = evs.find((e) => e.date === s.date && (!e.startTime || (toMin(e.startTime) < s.min + s.len && s.min < (e.endTime ? toMin(e.endTime) : toMin(e.startTime) + 60))));
+    if (hit) out[s.id] = hit.title || "Bishop's calendar";
+  });
+  return out;
+}
+export const sameBusy = (a, b) => JSON.stringify(Object.entries(a || {}).sort()) === JSON.stringify(Object.entries(b || {}).sort());
+// everything that keeps a time off the sign-up page: blocked by hand + busy on the calendar
+export const offList = (season) => [...(season?.blocked || []), ...Object.keys(season?.busy || {})];
 
 export const newToken = () => {
   const a = new Uint8Array(15); crypto.getRandomValues(a);

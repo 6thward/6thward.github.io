@@ -1,18 +1,19 @@
 // Tithing declaration sign-ups (2026-10-04) — the bishop's side, its own page
 // ("Tithing Declaration" tab, area key "tithing"): set when you're available, share the link / QR code, and see
 // who signed up. The public page is tithing.html (js/tithing-form.js).
-import { db } from "./firebase-init.js?v=1791220898";
-import { ctx, can } from "./app.js?v=1791220898";
+import { db } from "./firebase-init.js?v=1791721542";
+import { ctx, can } from "./app.js?v=1791721542";
 import {
   collection, doc, onSnapshot, setDoc, updateDoc, writeBatch, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast } from "./ui.js?v=1791220898";
+import { openModal, closeModal, toast } from "./ui.js?v=1791721542";
 import {
   GROUPS, PLACES, SLOT_LENGTHS, esc, toMin, fmtClock, fmtLongDay, fmtShortDay, slotsOf, slotMap,
-  sortWindows, overlaps, newToken, parseSlotId, todayIso, addDays, hhmm,
-} from "./tithing-shared.js?v=1791220898";
+  sortWindows, overlaps, newToken, parseSlotId, todayIso, addDays, hhmm, busyFromEvents, sameBusy, offList,
+} from "./tithing-shared.js?v=1791721542";
 
 let mount = null, season = null, signups = [], unsubSignups = null, started = false, dirty = false;
+let events = null; // the ward calendar (events with cal: "bishop" block sign-up times); null until it loads
 let qrCache = { url: "", data: "" }, qrLib = null;
 let schedView = "cols"; // schedule: every day side by side in columns, or one long list with phone numbers
 let listFilter = "all"; // the year list: all | attended | pending | noshow
@@ -62,7 +63,10 @@ export function initTithing(el) {
     }
     season = next;
     render();
+    reconcileBusy();
   }, (e) => { mount.innerHTML = `<div class="empty-note">Couldn't load tithing declaration sign-ups (${esc(e.code || e.message)}).</div>`; });
+  // the bishop's calendar: someone without the Calendar page just keeps whatever busy times were last saved
+  onSnapshot(collection(db, "events"), (qs) => { events = qs.docs.map((d) => ({ id: d.id, ...d.data() })); render(); reconcileBusy(); }, () => {});
 }
 
 // ---- QR code (qrcodejs from cdnjs, loaded the first time it's needed) ----
@@ -84,8 +88,19 @@ async function qrDataUrl(url) {
   return data;
 }
 
+// the public doc's slot map leaves out hand-blocked times and anything on the bishop's calendar
+const busyFor = (windows) => (events ? busyFromEvents(windows, events) : season.busy || {});
 async function saveWindows(windows) {
-  await updateDoc(seasonRef(), { windows, slots: slotMap(windows, season.blocked), updatedAt: serverTimestamp() });
+  const busy = busyFor(windows);
+  await updateDoc(seasonRef(), { windows, busy, slots: slotMap(windows, [...(season.blocked || []), ...Object.keys(busy)]), updatedAt: serverTimestamp() });
+}
+// the bishop's calendar changed (or we just loaded): keep busy times in step
+async function reconcileBusy() {
+  if (!season || !events || !can("tithing", "edit")) return;
+  const busy = busyFromEvents(season.windows, events);
+  if (sameBusy(busy, season.busy)) return;
+  try { await updateDoc(seasonRef(), { busy, slots: slotMap(season.windows, [...(season.blocked || []), ...Object.keys(busy)]), updatedAt: serverTimestamp() }); }
+  catch (e) { console.warn("[tithing] busy sync", e); }
 }
 
 function render() {
@@ -113,7 +128,8 @@ function render() {
 
   const today = todayIso();
   const windows = sortWindows(season.windows);
-  const slots = slotsOf(windows, season.blocked);
+  const slots = slotsOf(windows, offList(season));
+  const busyOf = (id) => (season.busy || {})[id] || "";
   const byId = Object.fromEntries(signups.map((s) => [s.id, s]));
   const slotIds = new Set(slots.map((s) => s.id));
   const upcoming = slots.filter((s) => s.date >= today && !s.blocked);
@@ -166,7 +182,7 @@ function render() {
       <span class="pill td-pill-len">${Number(w.len) || 15} min</span>
       <span class="pill td-pill-place td-place-${esc(w.place || "office")}">${PLACES[w.place]?.icon || "🏛"} ${esc(PLACES[w.place]?.label || PLACES.office.label)}</span>
       ${g ? `<span class="pill td-pill-${g.cls}">${esc(g.label)}</span>` : ""}
-      <span class="row-sub td-win-count">${took} of ${list.length} taken${nOff ? ` · ${nOff} blocked out` : ""}</span>
+      <span class="row-sub td-win-count">${took} of ${list.length} taken${nOff ? ` · ${nOff} unavailable` : ""}</span>
       ${editor ? `<button class="btn btn-sm" data-divide="${esc(w.id)}" type="button" title="Split this block into periods with different visit lengths (15 / 10 minutes), or set part of it aside for a group">✂ Divide</button>
       <button class="btn btn-sm btn-ghost td-x" data-rmwin="${esc(w.id)}" title="Remove this time period">✕</button>` : ""}
     </div>`;
@@ -194,6 +210,7 @@ function render() {
       ${list.map((s) => {
         const su = byId[s.id], g = GROUPS[s.group];
         const tags = `${s.place === "home" ? `<span class="td-tag td-tag-home" title="Home visit">🏠</span>` : ""}${g ? `<span class="td-tag td-tag-${g.cls}" title="Set aside for ${esc(g.label.toLowerCase())}">${esc(g.label)}</span>` : ""}`;
+        if (!su && s.blocked && busyOf(s.id)) return `<div class="td-srow td-srow-blocked td-srow-busy" data-slot="${s.id}"><span class="td-grip td-grip-none"></span><span class="td-stime">${fmtClock(s.min)}</span><span class="td-sname row-sub" title="On the bishop's calendar — change or move that event on the Calendar page to free this time">📅 ${esc(busyOf(s.id))}</span></div>`;
         if (!su && s.blocked) return `<div class="td-srow td-srow-blocked" data-slot="${s.id}"><span class="td-grip td-grip-none"></span><span class="td-stime">${fmtClock(s.min)}</span><span class="td-sname row-sub">blocked out</span>${editor ? `<button class="btn btn-sm btn-ghost" data-block="${s.id}" data-on="0" type="button" title="Open this time back up for sign-ups">unblock</button>` : ""}</div>`;
         if (!su) return `<div class="td-srow td-srow-open" data-slot="${s.id}"><span class="td-grip td-grip-none"></span><span class="td-stime">${fmtClock(s.min)}</span><span class="td-sname row-sub">open ${tags}</span>${editor ? `<button class="btn btn-sm btn-ghost" data-addname="${s.id}" type="button" title="Put someone in this time yourself">+ add name</button><button class="btn btn-sm btn-ghost td-blk" data-block="${s.id}" data-on="1" type="button" title="Block out this time so nobody can sign up for it">⊘<span class="td-st-lbl"> block</span></button>` : ""}</div>`;
         const digits = String(su.phone || "").replace(/\D/g, "");
@@ -202,7 +219,7 @@ function render() {
         return `<div class="td-srow${su.status ? " td-st-" + esc(su.status) : ""}" data-slot="${s.id}">
           ${editor ? `<span class="td-grip" draggable="true" data-grip="${s.id}" title="Drag onto another time to move it (or onto someone to swap). Click for a list of open times.">⋮⋮</span>` : `<span class="td-grip td-grip-none"></span>`}
           <span class="td-stime">${fmtClock(s.min)}</span>
-          <span class="td-sname"${su.phone ? ` title="${esc(su.phone)}"` : ""}><b>${esc(su.name)}</b> ${tags}${s.orphan ? `<span class="td-tag td-tag-warn" title="This time is no longer in your availability">⚠ outside your times</span>` : ""}
+          <span class="td-sname"${su.phone ? ` title="${esc(su.phone)}"` : ""}><b>${esc(su.name)}</b> ${tags}${s.orphan ? `<span class="td-tag td-tag-warn" title="This time is no longer in your availability">⚠ outside your times</span>` : ""}${busyOf(s.id) ? `<span class="td-tag td-tag-warn" title="Something on the bishop's calendar overlaps this appointment">⚠ ${esc(busyOf(s.id))}</span>` : ""}
             ${su.address ? `<span class="row-sub td-saddr">${esc(su.address)}</span>` : ""}</span>
           ${su.phone ? `<span class="td-sphone"><a href="tel:${esc(tel)}">${esc(su.phone)}</a>${tel ? ` <a class="btn btn-sm" href="sms:${esc(tel)}?&body=${encodeURIComponent(msg)}" title="Opens a text message with the reminder already written">Text reminder</a>` : ""}</span>` : `<span class="td-sphone row-sub">no phone</span>`}
           ${editor ? `<span class="td-status" data-for="${s.id}">
@@ -385,7 +402,7 @@ function render() {
   mount.querySelectorAll("[data-block]").forEach((b) => b.addEventListener("click", async () => {
     const id = b.dataset.block, on = b.dataset.on === "1";
     const blocked = on ? [...new Set([...(season.blocked || []), id])] : (season.blocked || []).filter((x) => x !== id);
-    try { await updateDoc(seasonRef(), { blocked, slots: slotMap(season.windows, blocked), updatedAt: serverTimestamp() }); toast(on ? "Blocked out" : "Open again"); }
+    try { await updateDoc(seasonRef(), { blocked, slots: slotMap(season.windows, [...blocked, ...Object.keys(season.busy || {})]), updatedAt: serverTimestamp() }); toast(on ? "Blocked out" : "Open again"); }
     catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
   }));
 
@@ -559,12 +576,13 @@ function printList(people, years, stText) {
 }
 
 function printSchedule(rowsAll, byId) {
+  const busyOf = (id) => ((season && season.busy) || {})[id] || "";
   const days = [...new Set(rowsAll.map((s) => s.date))].filter((d) => d >= todayIso());
   printWindow("Tithing Declaration schedule", `
     <div class="sch"><h1>Tithing Declaration <span>${esc(season.ward || "6th Ward")}</span></h1>
     ${days.map((d) => `<h2>${esc(fmtLongDay(d))}</h2><table>${rowsAll.filter((s) => s.date === d).map((s) => {
       const su = byId[s.id], g = GROUPS[s.group];
-      return `<tr><td class="t">${fmtClock(s.min)}</td><td class="n">${su ? esc(su.name) : s.blocked ? "— blocked out —" : ""}${su && su.address ? `<div class="a">${esc(su.address)}</div>` : ""}</td><td class="p">${su ? esc(su.phone || "") : ""}</td><td class="w">${s.place === "home" ? "Home visit" : s.place ? "Office" : ""}${g ? " · " + esc(g.label) : ""}</td></tr>`;
+      return `<tr><td class="t">${fmtClock(s.min)}</td><td class="n">${su ? esc(su.name) : s.blocked ? (busyOf(s.id) ? "— " + esc(busyOf(s.id)) + " —" : "— blocked out —") : ""}${su && su.address ? `<div class="a">${esc(su.address)}</div>` : ""}</td><td class="p">${su ? esc(su.phone || "") : ""}</td><td class="w">${s.place === "home" ? "Home visit" : s.place ? "Office" : ""}${g ? " · " + esc(g.label) : ""}</td></tr>`;
     }).join("")}</table>`).join("")}</div>`, `
     @page { size: letter; margin: .5in; }
     .sch { padding: .1in; } .sch h1 { font-size: 18pt; margin: 0 0 .1in; } .sch h1 span { font-size: 11pt; font-weight: 400; color: #5b6675; margin-left: .5em; }
