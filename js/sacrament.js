@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1791722874";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1791722874";
+import { db } from "./firebase-init.js?v=1791723348";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1791723348";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1791722874";
-import { HYMNS } from "./hymns.js?v=1791722874";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1791722874";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1791723348";
+import { HYMNS } from "./hymns.js?v=1791723348";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1791723348";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -116,6 +116,7 @@ const MEETING_TYPES = [
   ["conference", "General Conference"],
   ["stakeconf", "Stake Conference"],
   ["wardconf", "Ward Conference"],
+  ["highcouncil", "High Council"],   // a high councilor speaks (2026-10-11); same agenda as a normal Sunday
   ["primary", "Primary Program"],
   ["christmas", "Christmas Program"],
   ["easter", "Easter Program"],
@@ -252,7 +253,7 @@ function wireCardDrag(wrap) {
 // compact labels for the table's Type column
 const SHORT_TYPE = {
   sacrament: "—", fast: "Fast & Testimony", conference: "Gen. Conference",
-  stakeconf: "Stake Conf.", wardconf: "Ward Conf.", primary: "Primary Prog.",
+  stakeconf: "Stake Conf.", wardconf: "Ward Conf.", highcouncil: "High Council", primary: "Primary Prog.",
   christmas: "Christmas", easter: "Easter", other: "Other",
 };
 // types with no ward sacrament meeting at all
@@ -1173,7 +1174,7 @@ function renderCards(wrap) {
             ${m?.theme
               ? `<span class="theme-tag${canEdit ? " st-click" : ""}"${canEdit ? ` data-qe='{"t":"theme"}' title="Click to edit the theme"` : ""}>“${themeHtml(m.theme)}”</span>`
               : (canEdit && !isConf ? `<span class="theme-tag theme-add" data-qe='{"t":"theme"}' title="Add a theme for this Sunday">+ theme</span>` : "")}
-            ${megaphone}${wbIcon}${hbIcon}${type !== "sacrament" || canEdit ? `<span class="pill head-pill type-pill type-${esc(type)} ${isConf ? "pill-conf" : type === "fast" ? "pill-fast" : type === "sacrament" ? "pill-type-plain" : "pill-approved"}${canEdit ? " st-click" : ""}"${canEdit ? ` data-type="${date}" title="Click to change the meeting type"` : ""}>${esc(typeLabel(m, date))}</span>` : ""}${nth === 5 ? `<span class="nth-pill nth-5 head-pill">5th Sunday</span>` : ""}${babies.map((b, bi) => `<span class="pill-baby-bold head-pill${canEdit ? " st-click" : ""}" ${canEdit ? `data-baby="${bi}" title="Click to edit"` : ""}>Blessing${b.name ? ": " + esc(b.name) : ""}${b.by ? ` <span class="pill-baby-by">by ${esc(b.by)}</span>` : ""}</span>`).join("")}
+            ${megaphone}${wbIcon}${hbIcon}${type !== "sacrament" || canEdit ? `<span class="pill head-pill type-pill type-${esc(type)} ${isConf ? "pill-conf" : type === "fast" ? "pill-fast" : type === "sacrament" ? "pill-type-plain" : "pill-approved"}${canEdit ? " st-click" : ""}"${canEdit ? ` data-type="${date}" title="Click to change the meeting type"` : ""}>${esc(typeLabel(m, date))}</span>` : ""}${type === "highcouncil" ? `<a class="pill head-pill hc-pill" href="${HC_URL}" target="_blank" rel="noopener" title="High council speaking assignments — stgeorgeeast.org">🔗 who's speaking</a>` : ""}${nth === 5 ? `<span class="nth-pill nth-5 head-pill">5th Sunday</span>` : ""}${babies.map((b, bi) => `<span class="pill-baby-bold head-pill${canEdit ? " st-click" : ""}" ${canEdit ? `data-baby="${bi}" title="Click to edit"` : ""}>Blessing${b.name ? ": " + esc(b.name) : ""}${b.by ? ` <span class="pill-baby-by">by ${esc(b.by)}</span>` : ""}</span>`).join("")}
           </h3>
           <div class="row-sub" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">${condChip}${isConf ? "<span>no sacrament meeting</span>" : ""}</div>
         </div>

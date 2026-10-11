@@ -1852,3 +1852,8 @@ button.src-st { cursor: pointer; } button.src-st:hover { filter: brightness(.93)
 .cal-standing-times { display: flex; gap: .6rem; flex-wrap: wrap; padding-left: 1.6rem; }
 .cal-standing-times label { display: flex; flex-direction: column; gap: .15rem; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); }
 .cal-standing-times input, .cal-standing-times select { font: inherit; font-size: .92rem; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--ink); padding: .35rem .5rem; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+/* High Council Sunday (2026-10-11) */
+.type-pill.type-highcouncil { background: #0f5c57; color: #fff; }
+.type-pill.type-highcouncil.st-click:hover { color: #fff; filter: brightness(1.15); border-color: transparent; }
+.hc-pill { background: #e0f2f1; color: #0f5c57; text-decoration: none; font-weight: 600; }
+.hc-pill:hover { background: #c8e8e6; }

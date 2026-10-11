@@ -1,22 +1,22 @@
 // App shell: auth flow (Google + PIN), permission gating, tab routing.
-import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1791722874";
+import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1791723348";
 import {
   signInWithPopup, signInWithEmailAndPassword, signOut, onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
   doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { initTasks } from "./tasks.js?v=1791722874";
-import { initSacrament, openMeetingLink } from "./sacrament.js?v=1791722874";
-import { initCalendar } from "./calendar.js?v=1791722874";
-import { initCallings } from "./callings.js?v=1791722874";
-import { initConfidential } from "./confidential.js?v=1791722874";
-import { initAdmin } from "./admin.js?v=1791722874";
-import { initBoard } from "./board.js?v=1791722874";
-import { initHomeSacrament } from "./home-sacrament.js?v=1791722874";
-import { initCouncil } from "./council.js?v=1791722874";
-import { initTithingPage } from "./tithing.js?v=1791722874";
-import { initSelfReliance } from "./selfreliance.js?v=1791722874";
+import { initTasks } from "./tasks.js?v=1791723348";
+import { initSacrament, openMeetingLink } from "./sacrament.js?v=1791723348";
+import { initCalendar } from "./calendar.js?v=1791723348";
+import { initCallings } from "./callings.js?v=1791723348";
+import { initConfidential } from "./confidential.js?v=1791723348";
+import { initAdmin } from "./admin.js?v=1791723348";
+import { initBoard } from "./board.js?v=1791723348";
+import { initHomeSacrament } from "./home-sacrament.js?v=1791723348";
+import { initCouncil } from "./council.js?v=1791723348";
+import { initTithingPage } from "./tithing.js?v=1791723348";
+import { initSelfReliance } from "./selfreliance.js?v=1791723348";
 
 const ROLE_RANK = { pending: 0, member: 1, bishopric: 2, bishop: 3 };
 
