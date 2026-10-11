@@ -11,25 +11,25 @@
 //   summary  — the leader's own few lines, shown first on the card (bullets / to-dos / bold like council notes)
 //   log[]    — dated notes { id, at, by, text, editedAt }; the old single `notes` text shows as an undated note
 // Same privacy as the rest of this page: only the bishop and people given Self-Reliance.
-import { db } from "./firebase-init.js?v=1791748185";
-import { ctx, can } from "./app.js?v=1791748185";
+import { db } from "./firebase-init.js?v=1791748757";
+import { ctx, can } from "./app.js?v=1791748757";
 import {
   collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791748185";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine, inlineFmt } from "./notes.js?v=1791748185";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1791748185";
+import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791748757";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine, inlineFmt } from "./notes.js?v=1791748757";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1791748757";
 import {
   INC, EXP, QA, parseCsv, mapResponses, personKey, respTotals, fmtUsd, isBlank, writeupSections,
   parseBudgetCsv, parseMoney, budgetTotals, fmtUsdC,
-} from "./sr-import.js?v=1791748185";
+} from "./sr-import.js?v=1791748757";
 
 let mount = null, cases = [], started = false, openId = null, openRi = null;
 let openBi = 0, budgetEditing = false;
 let wuOpen = new Set(), wuEditing = null; // which write-ups are unfolded on the open card; the one being edited ("new" for a fresh one) // which budget is showing on the open card, and whether it's being edited
 const thumbs = new Map(); // file id -> object URL, so an attached image shows right on the card
 const isImage = (f) => /^image\//.test(f.type || "") || /\.(png|jpe?g|gif|webp)$/i.test(f.name || "");
-const filter = { q: "", status: "open" }; // closed cards drop off the list until you ask for them
+const filter = { q: "" }; // open cards first; closed ones sit in their own section underneath (2026-10-11)
 // Open or Closed (2026-10-05). Anything saved under the earlier New / Reviewing / Helping counts as Open.
 const STATUS = [["open", "Open"], ["closed", "Closed"]];
 const STATUS_PILL = { open: "src-st-open", closed: "src-st-closed" };
@@ -47,7 +47,6 @@ export function initCases(el) {
   mount.innerHTML = `
     <div class="card src-bar">
       <input id="src-q" placeholder="Search a name…" autocomplete="off">
-      <select id="src-status" title="Show open cards, closed ones, or everyone"></select>
       <span class="row-sub" id="src-count"></span>
       <span class="src-bar-actions">
         ${editor() ? `<button class="btn btn-primary" id="src-import" type="button" title="Upload the CSV export of the self-reliance specialist's form responses">⬆ Import responses (CSV)</button>
@@ -57,7 +56,6 @@ export function initCases(el) {
     </div>
     <div class="src-grid" id="src-grid"><div class="empty-note">Loading…</div></div>`;
   mount.querySelector("#src-q").addEventListener("input", (e) => { filter.q = e.target.value; renderGrid(); });
-  mount.querySelector("#src-status").addEventListener("change", (e) => { filter.status = e.target.value; renderGrid(); });
   mount.querySelector("#src-import")?.addEventListener("click", () => mount.querySelector("#src-file").click());
   mount.querySelector("#src-file")?.addEventListener("change", async (e) => {
     const f = e.target.files[0]; e.target.value = "";
@@ -97,18 +95,18 @@ function tiles(t, small) {
 function renderGrid() {
   const grid = mount?.querySelector("#src-grid"); if (!grid) return;
   const q = filter.q.trim().toLowerCase();
-  const nOpen = cases.filter((c) => statusOf(c) === "open").length, nClosed = cases.length - nOpen;
-  const sel = mount.querySelector("#src-status");
-  sel.innerHTML = [["open", `Open (${nOpen})`], ["closed", `Closed (${nClosed})`], ["", `Everyone (${cases.length})`]].map(([k, l]) => `<option value="${k}"${filter.status === k ? " selected" : ""}>${l}</option>`).join("");
-  const rows = cases.filter((c) => (!filter.status || statusOf(c) === filter.status) && (!q || `${c.name || ""} ${c.spouse || ""}`.toLowerCase().includes(q)))
-    .sort((a, b) => (statusOf(a) === "closed") - (statusOf(b) === "closed") // open first when both are showing
-      || String(latest(b)?.at || b.created || "").localeCompare(String(latest(a)?.at || a.created || "")));
-  mount.querySelector("#src-count").textContent = "";
-  if (!rows.length) {
-    grid.innerHTML = `<div class="card empty-note" style="grid-column:1/-1">${cases.length ? (q ? "Nobody matches." : filter.status === "open" ? `No open cards.${nClosed ? ` ${nClosed} closed — choose “Closed” above to see ${nClosed === 1 ? "it" : "them"}.` : ""}` : "No closed cards.") : `No cards yet.${editor() ? " Import the specialist's form responses (the spreadsheet's <b>File → Download → CSV</b>) to build them, or add one by hand." : ""}`}</div>`;
+  const match = (c) => !q || `${c.name || ""} ${c.spouse || ""}`.toLowerCase().includes(q);
+  const byDate = (a, b) => String(latest(b)?.at || b.created || "").localeCompare(String(latest(a)?.at || a.created || ""));
+  const openRows = cases.filter((c) => statusOf(c) === "open" && match(c)).sort(byDate);
+  const closedRows = cases.filter((c) => statusOf(c) === "closed" && match(c)).sort((a, b) => String(b.closedAt || "").localeCompare(String(a.closedAt || "")) || byDate(a, b));
+  mount.querySelector("#src-count").textContent = cases.length ? `${openRows.length} open · ${closedRows.length} closed` : "";
+  if (!openRows.length && !closedRows.length) {
+    grid.innerHTML = `<div class="card empty-note">${cases.length ? "Nobody matches." : `No cards yet.${editor() ? " Import the specialist's form responses (the spreadsheet's <b>File → Download → CSV</b>) to build them, or add one by hand." : ""}`}</div>`;
     return;
   }
-  grid.innerHTML = rows.map((c) => {
+  const rows = [...openRows, ...closedRows];
+  const cardHtml = (c) => {
+
     const r = latest(c), bud = (c.budgets || [])[0], n = (c.responses || []).length, st = statusOf(c);
     const t = bud ? budgetTotals(bud) : r ? respTotals(r) : null; // the specialist's worked-out budget beats what the form said
     const ex = wuExcerpt((writeupsOf(c)[0] || {}).text);
@@ -125,7 +123,10 @@ function renderGrid() {
         ? `<div class="src-wu src-wu-sum"><span>Summary</span>${esc(plainText(c.summary))}</div>`
         : `<div class="src-wu${ex ? "" : " src-wu-none"}">${ex ? `<span>Specialist’s write-up</span>${esc(ex)}` : "No write-up yet"}</div>`}
     </div>`;
-  }).join("");
+  };
+  // open cards on top; closed ones keep their place in a section underneath
+  grid.innerHTML = `<div class="src-grid-inner">${openRows.length ? openRows.map(cardHtml).join("") : `<div class="card empty-note" style="grid-column:1/-1">No open cards${q ? " match" : ""}.</div>`}</div>`
+    + (closedRows.length ? `<h3 class="src-closed-head">Closed <span class="pill src-st src-st-closed">${closedRows.length}</span></h3><div class="src-grid-inner src-grid-closed">${closedRows.map(cardHtml).join("")}</div>` : "");
   // Open ⇄ Closed right on the card
   grid.querySelectorAll("[data-toggle]").forEach((b) => b.addEventListener("click", async (e) => {
     e.stopPropagation();

@@ -1710,7 +1710,9 @@ li:hover > .nt-assign, .rc-todo:hover .nt-assign, .nt-assign:focus { opacity: 1;
 .src-bar input, .src-bar select { font: inherit; padding: .45rem .6rem; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
 .src-bar #src-q { min-width: 12rem; }
 .src-bar-actions { margin-left: auto; display: flex; gap: .5rem; flex-wrap: wrap; }
-.src-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); gap: .8rem; margin-top: .8rem; }
+.src-grid { margin-top: .8rem; }
+.src-grid-inner { display: grid; grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); gap: .8rem; }
+.src-closed-head { display: flex; align-items: center; gap: .5rem; margin: 1.4rem 0 .6rem; font-size: 1rem; color: var(--ink-soft); }
 .src-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: .85rem .95rem .9rem; cursor: pointer; display: flex; flex-direction: column; gap: .45rem; transition: box-shadow .12s, border-color .12s; }
 .src-card:hover, .src-card:focus-visible { border-color: var(--brand); box-shadow: 0 6px 18px rgba(31,39,51,.1); outline: none; }
 .src-card-top { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
