@@ -1883,3 +1883,16 @@ button.src-st { cursor: pointer; } button.src-st:hover { filter: brightness(.93)
 .call-person:active { cursor: grabbing; }
 .call-person:hover { border-color: var(--brand); }
 .call-people-col .step-pills { margin-top: 0; padding-left: .4rem; }
+/* Self-Reliance: several dated write-ups, folded into pills (2026-10-11) */
+.src-wu-pill { display: flex; align-items: center; gap: .45rem; width: 100%; text-align: left; font: inherit; cursor: pointer; background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: .5rem .7rem; margin-bottom: .4rem; }
+.src-wu-pill:hover { border-color: var(--brand); }
+.src-wu-date { font-weight: 700; white-space: nowrap; } .src-wu-by { color: var(--ink-soft); white-space: nowrap; font-size: .88rem; }
+.src-wu-sum { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-soft); font-size: .9rem; }
+.src-wu-caret { color: #a7b0bd; font-size: .8rem; }
+.src-wu-card { background: #fff; border: 1px solid var(--line); border-radius: 10px; margin-bottom: .5rem; overflow: hidden; }
+.src-wu-head { display: flex; align-items: center; gap: .45rem; padding: .45rem .7rem; background: #f3f6fa; border-bottom: 1px solid var(--line); cursor: pointer; }
+.src-wu-tools { margin-left: auto; display: inline-flex; align-items: center; gap: .3rem; }
+.src-wu-card .src-writeup { border: none; border-radius: 0; max-height: 34rem; }
+.src-wu-editor { padding: .6rem .7rem; }
+.src-wu-editor .wc-tools { margin: .4rem 0 .3rem; }
+.src-writeup .rc-list { margin: .2rem 0 .5rem; } .src-writeup .rc-todo { font-size: .93rem; }

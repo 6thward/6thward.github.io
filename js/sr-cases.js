@@ -1,29 +1,32 @@
 // Self-Reliance member cards (2026-10-05). One card per person, built from the
 // self-reliance specialist's form responses (imported from the spreadsheet's CSV
 // export) plus the specialist's write-up, the request, and the bishop's notes.
-//   srCases/{id} { key, name, spouse, email, status, requested, writeup, writeupBy,
-//                  writeupAt, decision, notes, files[], responses[{ id, at, raw{}, amounts{}, exact{}, edited{} }] }
+//   srCases/{id} { key, name, spouse, email, status, requested, decision, notes, files[],
+//                  writeups[{ id, at, by, text }]   — the specialist's reports, any number, newest first;
+//                     (older cards carry one as writeup / writeupBy / writeupAt and are folded in on first save)
+//                  responses[{ id, raw{}, amounts{}, exact{}, edited{} }] }
 //   srCases/{id}/chunks/…  the attached files themselves (invoices, statements) — see files.js
 //   budgets[] — the specialist's budget sheet(s): { title, income[{label, amount, note}], expenses[…], note };
 //               the first is the current budget, the rest are "what if" versions compared against it
 //   summary  — the leader's own few lines, shown first on the card (bullets / to-dos / bold like council notes)
 //   log[]    — dated notes { id, at, by, text, editedAt }; the old single `notes` text shows as an undated note
 // Same privacy as the rest of this page: only the bishop and people given Self-Reliance.
-import { db } from "./firebase-init.js?v=1791726272";
-import { ctx, can } from "./app.js?v=1791726272";
+import { db } from "./firebase-init.js?v=1791747967";
+import { ctx, can } from "./app.js?v=1791747967";
 import {
   collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791726272";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine } from "./notes.js?v=1791726272";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1791726272";
+import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791747967";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine, inlineFmt } from "./notes.js?v=1791747967";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1791747967";
 import {
   INC, EXP, QA, parseCsv, mapResponses, personKey, respTotals, fmtUsd, isBlank, writeupSections,
   parseBudgetCsv, parseMoney, budgetTotals, fmtUsdC,
-} from "./sr-import.js?v=1791726272";
+} from "./sr-import.js?v=1791747967";
 
 let mount = null, cases = [], started = false, openId = null, openRi = null;
-let openBi = 0, budgetEditing = false; // which budget is showing on the open card, and whether it's being edited
+let openBi = 0, budgetEditing = false;
+let wuOpen = new Set(), wuEditing = null; // which write-ups are unfolded on the open card; the one being edited ("new" for a fresh one) // which budget is showing on the open card, and whether it's being edited
 const thumbs = new Map(); // file id -> object URL, so an attached image shows right on the card
 const isImage = (f) => /^image\//.test(f.type || "") || /\.(png|jpe?g|gif|webp)$/i.test(f.name || "");
 const filter = { q: "", status: "open" }; // closed cards drop off the list until you ask for them
@@ -108,7 +111,7 @@ function renderGrid() {
   grid.innerHTML = rows.map((c) => {
     const r = latest(c), bud = (c.budgets || [])[0], n = (c.responses || []).length, st = statusOf(c);
     const t = bud ? budgetTotals(bud) : r ? respTotals(r) : null; // the specialist's worked-out budget beats what the form said
-    const ex = wuExcerpt(c.writeup);
+    const ex = wuExcerpt((writeupsOf(c)[0] || {}).text);
     return `<div class="src-card${st === "closed" ? " src-card-closed" : ""}" data-id="${c.id}" tabindex="0">
       <div class="src-card-top"><b class="src-name">${esc(c.name || "—")}</b>${editor()
         ? `<button type="button" class="pill src-st ${STATUS_PILL[st]}" data-toggle="${c.id}" title="${st === "closed" ? `Closed${c.closedAt ? " " + fmtDay(c.closedAt) : ""} — click to reopen` : "Open — click to close"}">${st === "closed" ? "Closed" : "Open"}</button>`
@@ -221,9 +224,14 @@ function budgetEditHtml(b) {
   </div>`;
 }
 
+// headings from the text's own section titles; inside them bold / highlights / bullets like any notes
 function writeupHtml(text) {
-  return writeupSections(text).map((s) => `${s.title ? `<h5>${esc(s.title)}</h5>` : ""}${s.paras.map((p) => `<p>${esc(p)}</p>`).join("")}`).join("");
+  return writeupSections(text).map((s) => `${s.title ? `<h5>${inlineFmt(s.title)}</h5>` : ""}${notesHtml(s.paras.join("\n"), "wu", false)}`).join("");
 }
+// every write-up on the card, newest first (an older single write-up counts as one)
+const writeupsOf = (c) => [...(c.writeups || []), ...((c.writeup || "").trim() ? [{ id: "legacy", at: c.writeupAt || "", by: c.writeupBy || "", text: c.writeup }] : [])]
+  .sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")));
+const wuSummary = (w) => { const secs = writeupSections(w.text); const first = secs[0] || { title: "", paras: [] }; const line = first.title || plainLine(first.paras[0] || ""); return line.length > 110 ? line.slice(0, 108) + "…" : line; };
 function detailHtml(c, ri) {
   const rs = sorted(c), r = rs[ri] || null, st = statusOf(c), ed = editor();
   return `
@@ -250,14 +258,19 @@ function detailHtml(c, ri) {
       <div class="src-col src-col-leader">
         <div class="src-sec"><h4>Request</h4>
           ${ed ? `<input id="srd-requested" class="src-in" value="${esc(c.requested || "")}" placeholder="e.g. One month of rent ($1,950) + 1–2 food orders" autocomplete="off">` : `<p>${esc(c.requested || "—")}</p>`}</div>
-        <div class="src-sec"><h4>Specialist’s write-up ${c.writeup && ed ? `<button class="btn btn-sm btn-ghost" id="srd-wu-edit" type="button">✎ Edit</button>` : ""}</h4>
-          ${c.writeup
-            ? `<div class="src-writeup${ed ? " src-rich-edit-ok" : ""}" id="srd-wu-view"${ed ? ` title="Click to edit"` : ""}>${writeupHtml(c.writeup)}</div>${c.writeupBy || c.writeupAt ? `<p class="src-hint">${[c.writeupBy ? "By " + esc(c.writeupBy) : "", c.writeupAt ? "added " + esc(fmtDay(c.writeupAt)) : ""].filter(Boolean).join(" · ")}</p>` : ""}`
-            : ed ? "" : `<p class="row-sub">No write-up yet.</p>`}
-          ${ed ? `<div id="srd-wu-box"${c.writeup ? " hidden" : ""}>
-            <textarea id="srd-writeup" class="src-ta src-ta-tall" placeholder="Paste the self-reliance specialist's write-up here. Section titles on their own line (Current Financial Situation, Conclusion…) become headings.">${esc(c.writeup || "")}</textarea>
-            <div class="src-wu-save"><input id="srd-wu-by" class="src-in" placeholder="Written by (specialist's name)" value="${esc(c.writeupBy || "")}" autocomplete="off">${c.writeup ? `<button class="btn btn-sm" id="srd-wu-cancel" type="button">Cancel</button>` : ""}<button class="btn btn-primary btn-sm" id="srd-wu-save" type="button">Save write-up</button></div>
-          </div>` : ""}</div>
+        <div class="src-sec" id="srd-wus"><h4>Specialist’s write-ups ${ed ? `<button class="btn btn-sm btn-ghost" id="srd-wu-add" type="button">+ Add write-up</button>` : ""}</h4>
+          <div id="srd-wu-new"></div>
+          ${(() => { const list = writeupsOf(c); if (!list.length) return `<p class="row-sub" style="margin:0">No write-up yet${ed ? " — paste the specialist's report with “+ Add write-up”." : "."}</p>`;
+            return list.map((w, i) => {
+              const open = wuOpen.has(w.id) || (i === 0 && !wuOpen.has("~" + w.id) && ![...wuOpen].some((k) => !k.startsWith("~"))); // the newest unfolds by itself
+              const head = `<span class="src-wu-date">${esc(fmtDay(w.at) || "undated")}</span>${w.by ? `<span class="src-wu-by">· ${esc(w.by)}</span>` : ""}`;
+              return open
+                ? `<div class="src-wu-card" data-wuid="${esc(w.id)}">
+                    <div class="src-wu-head" data-wufold="${esc(w.id)}" title="Click to fold this write-up up">${head}<span class="src-wu-tools">${ed ? `<button type="button" class="btn btn-sm btn-ghost" data-wuedit="${esc(w.id)}">✎ Edit</button>` : ""}<span class="src-wu-caret">▴</span></span></div>
+                    <div class="src-writeup">${writeupHtml(w.text)}</div>
+                  </div>`
+                : `<button type="button" class="src-wu-pill" data-wuopen="${esc(w.id)}" title="Click to read">${head}<span class="src-wu-sum">${esc(wuSummary(w))}</span><span class="src-wu-caret">▾</span></button>`;
+            }).join(""); })()}</div>
         <div class="src-sec"><h4>Notes ${ed ? `<button class="btn btn-sm btn-ghost" id="srd-note-add" type="button">+ Add note</button>` : ""}</h4>
           <div id="srd-note-new"></div>
           ${logOf(c).length ? logOf(c).map((n) => `<div class="src-note" data-note="${esc(n.id)}">
@@ -288,7 +301,7 @@ function openCase(id, ri) {
   const c = cases.find((x) => x.id === id); if (!c) return;
   openId = id;
   openRi = ri ?? Math.max(0, sorted(c).length - 1);
-  openBi = 0; budgetEditing = false;
+  openBi = 0; budgetEditing = false; wuOpen = new Set(); wuEditing = null;
   const el = openModal(`<div id="srd"></div>`);
   el.classList.add("modal-wide", "src-modal");
   drawOpen();
@@ -300,8 +313,7 @@ function refreshOpen() {
   if (a && box.contains(a) && /^(INPUT|TEXTAREA)$/.test(a.tagName)) return;
   if (!cases.some((x) => x.id === openId)) { closeModal(); openId = null; return; }
   if (box.querySelector(".src-rich-editor") || box.querySelector(".src-budget-editing")) return; // a summary / note / budget is being written
-  const cur = cases.find((x) => x.id === openId), wu = box.querySelector("#srd-writeup");
-  if (wu && wu.value.trim() !== (cur.writeup || "").trim()) return;                      // unsaved write-up edits
+  if (box.querySelector(".src-wu-editor")) return;                                       // a write-up is being edited
   drawOpen();
 }
 function drawOpen() {
@@ -472,15 +484,46 @@ function drawOpen() {
     const inp = box.querySelector(sel);
     inp.addEventListener("change", () => { if (inp.value.trim() !== (c[key] || "")) save({ [key]: inp.value.trim() }, "Saved"); });
   });
-  const editWriteup = () => { box.querySelector("#srd-wu-view").hidden = true; box.querySelector("#srd-wu-box").hidden = false; box.querySelector("#srd-writeup").focus(); };
-  box.querySelector("#srd-wu-edit")?.addEventListener("click", editWriteup);
-  box.querySelector("#srd-wu-view")?.addEventListener("click", () => { if (!(window.getSelection && String(window.getSelection()))) editWriteup(); });
-  box.querySelector("#srd-wu-cancel")?.addEventListener("click", () => { box.querySelector("#srd-writeup").value = c.writeup || ""; drawOpen(); });
-  box.querySelector("#srd-wu-save").addEventListener("click", async () => {
-    const text = box.querySelector("#srd-writeup").value.trim();
-    await save({ writeup: text, writeupBy: box.querySelector("#srd-wu-by").value.trim(), writeupAt: text ? (c.writeupAt || new Date().toISOString()) : "" }, text ? "Write-up saved" : "Write-up removed");
-    document.activeElement?.blur(); refreshOpen();
-  });
+  // --- the specialist's write-ups: fold / unfold, add, edit (with the notes toolbar), delete ---
+  box.querySelectorAll("[data-wuopen]").forEach((b) => b.addEventListener("click", () => { wuOpen.add(b.dataset.wuopen); drawOpen(); }));
+  box.querySelectorAll("[data-wufold]").forEach((h) => h.addEventListener("click", (e) => {
+    if (e.target.closest("[data-wuedit]")) return;
+    const id = h.dataset.wufold; wuOpen.delete(id); wuOpen.add("~" + id); drawOpen(); // "~id" = folded on purpose, so the newest doesn't spring back open
+  }));
+  const saveWriteups = (next, msg) => save({ writeups: next.map((w) => (w.id === "legacy" ? { ...w, id: "w" + Date.now().toString(36) + "old" } : w)), writeup: "", writeupBy: "", writeupAt: "" }, msg);
+  const editWu = (anchor, w) => { // w = null for a new one
+    box.querySelector(".src-wu-editor")?.remove();
+    const form = document.createElement("div");
+    form.className = "src-wu-editor src-wu-card";
+    form.innerHTML = `<div class="src-note-meta"><label>Date <input type="date" data-wd value="${esc(isoDate(w?.at || new Date().toISOString()))}"></label><label>Written by <input data-wb value="${esc(w?.by || (writeupsOf(c)[0] || {}).by || "")}" placeholder="Specialist's name" autocomplete="off"></label></div>
+      <div class="wc-tools">${toolbarHtml("Section titles on their own line become headings · ⌘Enter saves")}</div>
+      <textarea class="src-ta src-ta-tall" placeholder="Paste the self-reliance specialist's write-up here."></textarea>
+      <div class="src-rich-actions">${w ? `<button class="btn btn-sm btn-ghost btn-danger" data-x="delete" type="button">Delete</button>` : ""}<span style="flex:1"></span><button class="btn btn-sm" data-x="cancel" type="button">Cancel</button><button class="btn btn-primary btn-sm" data-x="save" type="button">Save write-up</button></div>`;
+    const ta = form.querySelector("textarea"); ta.value = w?.text || "";
+    wireToolbar(form, ta);
+    if (w) anchor.replaceWith(form); else anchor.appendChild(form);
+    const grow = () => { ta.style.height = "auto"; ta.style.height = Math.max(160, ta.scrollHeight + 2) + "px"; };
+    ta.addEventListener("input", grow); grow(); (w ? ta : form.querySelector("[data-wb]")).focus();
+    const done = async (mode) => {
+      const text = ta.value.trim(), date = form.querySelector("[data-wd]").value, by = form.querySelector("[data-wb]").value.trim();
+      if (mode === "save" && !text) { ta.focus(); return toast("Nothing to save yet"); }
+      if (mode === "delete" && !confirm("Delete this write-up? This can't be undone.")) return;
+      form.remove(); wuEditing = null;
+      if (mode === "save") {
+        const at = date ? (w && isoDate(w.at) === date ? w.at : date + "T12:00:00") : (w?.at || new Date().toISOString());
+        const list = writeupsOf(c);
+        const next = w ? list.map((x) => (x.id === w.id ? { ...x, text, by, at, editedAt: new Date().toISOString() } : x))
+                       : [...list, { id: "w" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), at, by, text }];
+        if (!w) wuOpen = new Set([next[next.length - 1].id]);
+        await saveWriteups(next, "Write-up saved");
+      } else if (mode === "delete") await saveWriteups(writeupsOf(c).filter((x) => x.id !== w.id), "Write-up deleted");
+      drawOpen();
+    };
+    form.querySelectorAll("[data-x]").forEach((b) => b.addEventListener("click", () => done(b.dataset.x)));
+    ta.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.preventDefault(); done("cancel"); } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); done("save"); } else handleNoteKeys(ta, e); });
+  };
+  box.querySelector("#srd-wu-add")?.addEventListener("click", () => { wuEditing = "new"; editWu(box.querySelector("#srd-wu-new"), null); });
+  box.querySelectorAll("[data-wuedit]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); const w = writeupsOf(c).find((x) => x.id === b.dataset.wuedit); if (w) { wuEditing = w.id; editWu(b.closest(".src-wu-card"), w); } }));
   box.querySelector("#srd-delete").addEventListener("click", async () => {
     if (!confirm(`Delete ${c.name}'s card, including the plan answers, write-up and notes? This can't be undone.`)) return;
     try { for (const f of c.files || []) await deleteAttachment("srCases", f); await deleteDoc(ref); openId = null; closeModal(); toast("Card deleted"); } catch (e) { toast("Couldn't delete: " + (e.code || e.message)); }
@@ -598,7 +641,7 @@ function printCase(c, r) {
       <div class="tiles"><div><span>Income</span><b>${fmtUsd(t.income)}</b></div><div><span>Expenses</span><b>${fmtUsd(t.expenses)}</b></div><div><span>Left over each month</span><b>${fmtUsd(t.net)}</b></div></div>
       <div class="cols"><div><h3>Income</h3><table>${moneyRows(INC)}</table></div><div><h3>Expenses</h3><table>${moneyRows(EXP)}</table></div></div>
       <h2>In their words</h2><div class="qa">${QA.filter(([k]) => !isBlank(r.raw?.[k])).map(([k, l]) => `<span>${esc(l)}</span><p>${esc(r.raw[k])}</p>`).join("")}</div>` : ""}
-    ${c.writeup ? `<h2>Specialist’s write-up${c.writeupBy ? ` — ${esc(c.writeupBy)}` : ""}</h2>${writeupSections(c.writeup).map((s) => `${s.title ? `<h3>${esc(s.title)}</h3>` : ""}${s.paras.map((p) => `<p>${esc(p)}</p>`).join("")}`).join("")}` : ""}
+    ${writeupsOf(c).map((w) => `<h2>Specialist’s write-up — ${esc(fmtDay(w.at) || "undated")}${w.by ? `, ${esc(w.by)}` : ""}</h2>${writeupSections(w.text).map((s) => `${s.title ? `<h3>${esc(s.title)}</h3>` : ""}${s.paras.map((p) => `<p>${esc(plainLine(p))}</p>`).join("")}`).join("")}`).join("")}
     ${c.decision ? `<h2>Decision / help given</h2><p>${esc(c.decision)}</p>` : ""}
   </div><p class="noprint"><button onclick="print()" style="font:inherit;padding:.5rem 1.2rem">Print</button></p></body></html>`);
   w.document.close();
