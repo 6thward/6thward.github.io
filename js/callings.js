@@ -5,13 +5,13 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1791725469";
+import { db } from "./firebase-init.js?v=1791726272";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1791725469";
-import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1791725469";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1791726272";
+import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1791726272";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
@@ -46,7 +46,7 @@ function norm(d) {
     else if (stage === "sustained") stage = "apart";
     else if (stage === "clerk" || stage === "setapart") { stage = "apart"; setApart = true; }
     if (stage === "fill" && d.decided) stage = "issue"; // a decided name moves forward
-    return { kind: "calling", candidates: [], decided: "", ...d, stage, setApart };
+    return { kind: "calling", candidates: [], decided: "", ...d, stage, setApart, people: d.people || (d.decided ? [d.decided] : []) };
   }
   const s = d.status || "considering";
   const stage = s === "considering" ? "fill"
@@ -134,6 +134,11 @@ export function initCallings() {
   });
 }
 
+// Several people can hold one calling (2026-10-11): `people` lists everyone chosen for the card;
+// `decided` stays as the first of them so older code (and older docs with just a name) keep working.
+const namesOf = (c) => ((c.people || []).length ? c.people : c.decided ? [c.decided] : []);
+// per-person Set apart / MLS ticks on the last column; a one-name card falls back to the card's own flags
+const doneOf = (c, name) => (c.peopleDone || {})[name] || (namesOf(c).length <= 1 ? { setApart: !!c.setApart, mlsDone: !!c.mlsDone } : {});
 const tsMs = (ts) => { const d = ts?.toDate?.() || (ts ? new Date(ts) : null); return d && !isNaN(d) ? d.getTime() : 0; };
 const sortKey = (c) => (typeof c.order === "number" ? c.order : 1e15 + (tsMs(c.createdAt) || tsMs(c.stamps?.fill) || tsMs(c.updatedAt) || 0));
 
@@ -163,15 +168,17 @@ const isCallingRec = (x) => x && (x.kind || "calling") === "calling";
 async function wardBusinessSync(prev, upd) {
   try {
     const nextStage = upd?.stage;
-    if (nextStage && BACK_STAGES.includes(nextStage) && isCallingRec(prev) && ON_BUSINESS.includes(prev.stage) && prev.decided) {
-      const n = await removeSustaining(prev.decided, prev.calling);
+    if (nextStage && BACK_STAGES.includes(nextStage) && isCallingRec(prev) && ON_BUSINESS.includes(prev.stage) && namesOf(prev).length) {
+      let n = 0;
+      for (const name of namesOf(prev)) n += (await removeSustaining(name, prev.calling)) || 0;
       if (n) toast(`Removed from Ward Business (${n} Sunday${n === 1 ? "" : "s"})`);
     }
     if (nextStage === "sustain" && prev?.stage !== "sustain") {
-      const name = upd.decided || prev?.decided;
+      const names = (upd.people || []).length ? upd.people : upd.decided ? [upd.decided] : namesOf(prev || {});
       const calling = upd.calling ?? prev?.calling;
-      if (name && isCallingRec({ ...prev, ...upd })) {
-        const d = await addSustainingToNext(name, calling);
+      if (names.length && isCallingRec({ ...prev, ...upd })) {
+        let d = "";
+        for (const name of names) d = (await addSustainingToNext(name, calling)) || d;
         if (d) toast(`Added to Ward Business for ${new Date(d + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}`);
       }
     }
@@ -179,9 +186,10 @@ async function wardBusinessSync(prev, upd) {
 }
 // Deleting a calling that was already on Ward Business pulls it back off.
 async function wardBusinessForget(prev) {
-  if (!isCallingRec(prev) || !ON_BUSINESS.includes(prev.stage) || !prev.decided) return;
+  if (!isCallingRec(prev) || !ON_BUSINESS.includes(prev.stage) || !namesOf(prev).length) return;
   try {
-    const n = await removeSustaining(prev.decided, prev.calling);
+    let n = 0;
+    for (const name of namesOf(prev)) n += (await removeSustaining(name, prev.calling)) || 0;
     if (n) toast(`Removed from Ward Business (${n} Sunday${n === 1 ? "" : "s"})`);
   } catch (e) { console.warn("[callings] ward business forget", e); }
 }
@@ -238,7 +246,7 @@ const cardStyle = (label, orgKey) => {
 const fillRow = (c) => {
   const cands = c.candidates || [];
   const sub = cands.length
-    ? cands.map((n, i) => `<div class="cand-line"><span class="cand-x" data-rm="${i}" title="Remove ${esc(n)} from consideration">✕</span><span class="cand-name-txt">${esc(n)}</span><span class="cand-pick" data-star="${i}" title="Choose ${esc(n)} — the bishopric has settled on this name (moves to Calls to Issue)">○</span></div>`).join("")
+    ? cands.map((n, i) => `<div class="cand-line"><span class="cand-x" data-rm="${i}" title="Remove ${esc(n)} from consideration">✕</span><span class="cand-name-txt">${esc(n)}</span><span class="cand-pick${(c.people || []).some((p) => p.toLowerCase() === n.toLowerCase()) ? " on" : ""}" data-star="${i}" title="${(c.people || []).some((p) => p.toLowerCase() === n.toLowerCase()) ? "Chosen — click to unchoose" : "Choose " + esc(n) + " — star everyone being called, then “Issue call”"}">${(c.people || []).some((p) => p.toLowerCase() === n.toLowerCase()) ? "★" : "○"}</span></div>`).join("")
     : "";
   // Inline add box (2026-09-13): type a name + Enter to add it to the
   // consideration list without opening the editor. The card itself still
@@ -248,7 +256,15 @@ const fillRow = (c) => {
   <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
     <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}${c.organization ? ` <span class="call-card-org">· ${esc(c.organization)}</span>` : ""}${delBtn(c)}</div>
     <div class="row-sub">${sub}${addBox}</div>
+    ${(c.people || []).length ? `<div class="call-card-line"><span class="row-sub">${c.people.length === 1 ? "1 name chosen" : c.people.length + " names chosen"}</span><button class="btn btn-sm btn-primary" data-issue="${c.id}" type="button" title="Move to Calls to Issue with the starred name${c.people.length === 1 ? "" : "s"}">Issue call${c.people.length === 1 ? "" : "s"} →</button></div>` : ""}
   </div>`;
+};
+// the people on a card, each a pill of its own; with more than one, a pill can be dragged on by itself
+const peoplePills = (c, extra) => {
+  const names = namesOf(c);
+  if (!names.length) return `<div class="row-title">—</div>`;
+  const many = names.length > 1;
+  return `<div class="call-people${extra ? " call-people-col" : ""}">${names.map((n) => `<div class="call-person-row"><span class="call-person" draggable="true" data-person="${esc(n)}" title="${many ? "Drag just this person to another column — the others stay here" : "Drag the card to move it along"}">${esc(n)}</span>${extra ? extra(n) : ""}</div>`).join("")}</div>`;
 };
 
 // small ✕ in the title band deletes the calling (with a confirm) — 2026-09-20
@@ -256,8 +272,8 @@ const delBtn = (c) => `<span class="call-del" data-del="${c.id}" title="Delete t
 const issueRow = (c) => `
   <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
     <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}${delBtn(c)}</div>
-    <div class="row-title">${esc(c.decided || "—")}</div>
-    ${stampAction("Decided", c.stamps?.issue, `<button class="btn btn-sm" data-adv="sustain" type="button" title="${esc(c.decided || "")} accepted the call">Accepted</button>`)}
+    ${peoplePills(c)}
+    ${stampAction("Decided", c.stamps?.issue, `<button class="btn btn-sm" data-adv="sustain" type="button" title="${esc(namesOf(c).join(", "))} accepted the call">Accepted</button>`)}
   </div>`;
 
 // Stake pop-up (2026-09-20): stake callings have their own two-step flow
@@ -319,19 +335,18 @@ function openStake(prefillName = "") {
 const sustainRow = (c) => `
   <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
     <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}${delBtn(c)}</div>
-    <div class="row-title">${esc(c.decided || "—")}</div>
+    ${peoplePills(c)}
     ${stampAction("Accepted", c.stamps?.sustain, `<button class="btn btn-sm" data-adv="apart" type="button">Sustained →</button>`)}
   </div>`;
 
 const apartRow = (c) => `
   <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
     <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}${delBtn(c)}</div>
-    <div class="row-title">${esc(c.decided || "—")}</div>
+    ${peoplePills(c, (n) => { const d = doneOf(c, n); return `<div class="step-pills">
+      <button class="step-pill${d.setApart ? " on" : ""}" data-ptoggle="setApart" data-pname="${esc(n)}" type="button" title="${d.setApart ? "Set apart — click to undo" : "Click when " + esc(n) + " is set apart"}">${d.setApart ? "✓" : "○"} Set apart</button>
+      <button class="step-pill${d.mlsDone ? " on" : ""}" data-ptoggle="mlsDone" data-pname="${esc(n)}" type="button" title="${d.mlsDone ? "Updated in MLS — click to undo" : "Click when " + esc(n) + " is updated in MLS"}">${d.mlsDone ? "✓" : "○"} MLS</button>
+    </div>`; })}
     ${stampLine("Sustained", c.stamps?.apart)}
-    <div class="step-pills">
-      <button class="step-pill${c.setApart ? " on" : ""}" data-toggle="setApart" type="button" title="${c.setApart ? "Set apart" + (c.stamps?.setApartDone ? " " + fmtStamp(c.stamps.setApartDone) : "") + " — click to undo" : "Click when set apart"}">${c.setApart ? "✓" : "○"} Set apart</button>
-      <button class="step-pill${c.mlsDone ? " on" : ""}" data-toggle="mlsDone" type="button" title="${c.mlsDone ? "Updated in MLS" + (c.stamps?.mlsDone ? " " + fmtStamp(c.stamps.mlsDone) : "") + " — click to undo" : "Click when updated in MLS"}">${c.mlsDone ? "✓" : "○"} MLS</button>
-    </div>
   </div>`;
 
 // Release card in the three-column flow. Drag between columns; on the last
@@ -369,7 +384,7 @@ const REL_BACK = [["decided", "Decided"], ["notified", "Notified"], ["released",
 const doneRow = (it) => `
   <div class="list-row done-row" data-id="${it.id}">
     <div class="row-main">
-      <div class="row-title">${it.kind === "release" ? `${esc(it.name)} — released` : it.kind === "stake" ? `${esc(it.name || "")} — ${esc(it.calling)} <span class="row-sub">(stake · ${it.outcome === "notcalled" ? "not called" : "called"})</span>` : `${esc(it.decided || "")} — ${esc(it.calling)}`}</div>
+      <div class="row-title">${it.kind === "release" ? `${esc(it.name)} — released` : it.kind === "stake" ? `${esc(it.name || "")} — ${esc(it.calling)} <span class="row-sub">(stake · ${it.outcome === "notcalled" ? "not called" : "called"})</span>` : `${esc(namesOf(it).join(", "))} — ${esc(it.calling)}`}</div>
       ${stampLine("Completed", it.stamps?.done)}
     </div>
     <select class="done-back" data-id="${it.id}" title="Move this back into the flow">
@@ -501,12 +516,34 @@ function render() {
           .catch((err) => toast("Couldn't delete: " + (err.code || err.message)));
         return;
       }
-      if (t.dataset.star != null && t.classList.contains("cand-pick")) { // ☆ on the card: settle on this name → Calls to Issue
+      if (t.dataset.star != null && t.classList.contains("cand-pick")) { // ★ on the card: choose this name (several can be chosen) — "Issue call" moves them on
         e.stopPropagation();
         const name = (item.candidates || [])[Number(t.dataset.star)];
         if (!name) return;
-        save(item.id, { decided: name, stage: "issue" });
-        toast(`${name} — call to issue`);
+        const people = item.people || [];
+        const on = people.some((p) => p.toLowerCase() === name.toLowerCase());
+        save(item.id, { people: on ? people.filter((p) => p.toLowerCase() !== name.toLowerCase()) : [...people, name] });
+        return;
+      }
+      if (t.dataset.issue) { // the starred names move to Calls to Issue together, on this one card
+        e.stopPropagation();
+        const people = item.people || [];
+        if (!people.length) return;
+        save(item.id, { stage: "issue", people, decided: people[0] });
+        toast(`${people.join(", ")} — call${people.length === 1 ? "" : "s"} to issue`);
+        return;
+      }
+      if (t.dataset.ptoggle) { // Set apart / MLS, per person; the card completes when everyone has both
+        e.stopPropagation();
+        const name = t.dataset.pname, cur = doneOf(item, name);
+        const mine = { setApart: !!cur.setApart, mlsDone: !!cur.mlsDone };
+        mine[t.dataset.ptoggle] = !mine[t.dataset.ptoggle];
+        const peopleDone = { ...(item.peopleDone || {}), [name]: mine };
+        const names = namesOf(item);
+        const all = (k) => names.every((n) => !!(peopleDone[n] || {})[k]);
+        const upd = { peopleDone, setApart: all("setApart"), mlsDone: all("mlsDone") };
+        if (upd.setApart && upd.mlsDone) upd.stage = "done";
+        save(item.id, upd);
         return;
       }
       if (t.dataset.rm != null && t.classList.contains("cand-x")) { // ✕ a considered name
@@ -539,10 +576,10 @@ function render() {
       if (t.dataset.adv) { // quick advance / step back to the named stage
         e.stopPropagation();
         const upd = { stage: t.dataset.adv };
-        if (t.dataset.adv !== "fill" && !item.decided) { // leaving "fill" needs a name on the card
+        if (t.dataset.adv !== "fill" && !namesOf(item).length) { // leaving "fill" needs a name on the card
           const first = (item.candidates || [])[0];
           if (!first) { toast("Add a name first"); return; }
-          upd.decided = first;
+          upd.decided = first; upd.people = [first];
         }
         save(item.id, upd);
         return;
@@ -630,6 +667,7 @@ function render() {
 
   // drag a calling row between the three flow columns
   let dragId = null;
+  let dragPersonName = ""; // one person being dragged off a card with several (2026-10-11)
   document.querySelectorAll("#panel-callings .bb-drop .list-row").forEach((row) => {
     row.draggable = true;
     row.addEventListener("dragstart", (e) => {
@@ -640,6 +678,20 @@ function render() {
     });
     row.addEventListener("dragend", () => {
       dragId = null; dragCard = null;
+      document.querySelectorAll(".bb-drop").forEach((z) => z.classList.remove("bb-over"));
+      document.getElementById("chip-stake")?.classList.remove("drop-over");
+    });
+  });
+  document.querySelectorAll("#panel-callings .call-person[draggable]").forEach((pill) => {
+    pill.addEventListener("dragstart", (e) => {
+      e.stopPropagation(); // the card itself doesn't start dragging
+      const row = pill.closest(".list-row");
+      dragId = row.dataset.id; dragCard = items.find((x) => x.id === dragId) || null; dragPersonName = pill.dataset.person;
+      e.dataTransfer.effectAllowed = "move";
+      try { e.dataTransfer.setData("text/plain", dragPersonName); } catch { /* older browsers */ }
+    });
+    pill.addEventListener("dragend", () => {
+      dragId = null; dragCard = null; dragPersonName = "";
       document.querySelectorAll(".bb-drop").forEach((z) => z.classList.remove("bb-over"));
       document.getElementById("chip-stake")?.classList.remove("drop-over");
     });
@@ -688,10 +740,13 @@ function render() {
       const beforeId = targetRow && targetRow.dataset.id !== dragId ? targetRow.dataset.id : null;
       clearMarks();
       const it = items.find((x) => x.id === dragId);
+      const person = dragPersonName; dragPersonName = "";
       dragId = null;
       if (!it || (it.kind !== "calling" && it.kind !== "release")) return;
       const st = zone.dataset.stage;
       if (!st) return;
+      // one pill off a card with several people: that person moves on their own, the rest stay put
+      if (person && it.kind === "calling" && namesOf(it).length > 1 && st !== it.stage) { splitPerson(it, person, st, beforeId); return; }
       if (it.kind === "release") { // releases flow: decided → notified → released (MLS tick archives)
         if (!["decided", "notified", "released"].includes(st)) return;
         if (st === it.stage) { reorderWithin(st, it.id, beforeId); return; }
@@ -709,10 +764,12 @@ function render() {
       const upd = { stage: st };
       if (st === "fill") {
         upd.decided = ""; // dragged back = reconsidering…
-        const cands = it.candidates || [];
-        // …but the name stays on the card as a name under consideration
-        if (it.decided && !cands.some((n) => n.toLowerCase() === it.decided.toLowerCase())) upd.candidates = [...cands, it.decided];
-      } else if (!it.decided) upd.decided = (it.candidates || [])[0];
+        const cands = [...(it.candidates || [])];
+        // …but the names stay on the card as names under consideration (and stay starred)
+        namesOf(it).forEach((n) => { if (!cands.some((x) => x.toLowerCase() === n.toLowerCase())) cands.push(n); });
+        upd.candidates = cands; upd.people = namesOf(it);
+      } else if (!namesOf(it).length) { upd.decided = (it.candidates || [])[0]; upd.people = [upd.decided]; }
+      else if (!it.decided) upd.decided = namesOf(it)[0];
       // stepping back out of Set Apart & MLS clears its ticks so it can't re-complete by itself
       if (it.stage === "apart" && st !== "apart") { upd.setApart = false; upd.mlsDone = false; }
       const before = { ...it }; // ward-business sync needs the pre-drag stage
@@ -720,6 +777,31 @@ function render() {
       save(it.id, upd, before).then(() => reorderWithin(st, it.id, beforeId));
     }
   }
+}
+
+// One person leaves a card that holds several: a new card carries them (and the calling's
+// details) to the chosen column; the original keeps everyone else where it was.
+async function splitPerson(card, name, stage, beforeId) {
+  const rest = namesOf(card).filter((n) => n !== name);
+  const restDone = { ...(card.peopleDone || {}) }; delete restDone[name];
+  const all = (k, names, done) => names.length > 0 && names.every((n) => !!(done[n] || {})[k]);
+  const restUpd = { people: rest, decided: rest[0] || "", peopleDone: restDone, setApart: all("setApart", rest, restDone), mlsDone: all("mlsDone", rest, restDone), updatedAt: serverTimestamp() };
+  const { id, ...base } = card;
+  const mineDone = (card.peopleDone || {})[name] || {};
+  const fresh = {
+    ...base, people: [name], decided: name, peopleDone: { [name]: mineDone }, stage, splitFrom: card.id, order: 0,
+    setApart: stage === "apart" && !!mineDone.setApart, mlsDone: stage === "apart" && !!mineDone.mlsDone,
+    stamps: { ...(card.stamps || {}), [stage]: new Date().toISOString() }, createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+  };
+  if (stage === "fill") { fresh.decided = ""; fresh.people = [name]; fresh.candidates = [...new Set([...(card.candidates || []), name])]; }
+  try {
+    await updateDoc(doc(db, "callings", card.id), restUpd);
+    const ref = await addDoc(collection(db, "callings"), fresh);
+    // ward business follows the one who moved (prev = how they stood on the old card)
+    await wardBusinessSync({ ...card, decided: name, people: [name] }, { stage, decided: fresh.decided, people: fresh.people, calling: card.calling });
+    toast(`${name} moved on — ${rest.join(", ")} stay${rest.length === 1 ? "s" : ""} put`);
+    if (beforeId) setTimeout(() => reorderWithin(stage, ref.id, beforeId), 400);
+  } catch (err) { toast("Couldn't move: " + (err.code || err.message)); }
 }
 
 // ---- Calling-to-Fill groupings ----
@@ -771,7 +853,7 @@ function editCalling(c) {
   const cands = (c?.candidates || []).length ? [...c.candidates] : [""];
   const candRow = (n) => `
     <div class="speaker-row cand-row">
-      <button class="btn btn-sm cand-star${n && n === c?.decided ? " cand-decided" : ""}" type="button" title="Mark as the name the bishopric settled on">★</button>
+      <button class="btn btn-sm cand-star${n && namesOf(c || {}).some((p) => p.toLowerCase() === n.toLowerCase()) ? " cand-decided" : ""}" type="button" title="Star everyone the bishopric settled on — several can hold one calling">★</button>
       <input class="cand-name" list="dl-needy" autocomplete="off" placeholder="Name" value="${esc(n)}">
       <button class="btn btn-sm cand-del" type="button" title="Remove this name">✕</button>
     </div>`;
@@ -809,9 +891,7 @@ function editCalling(c) {
     }
     if (e.target.classList.contains("cand-del")) e.target.closest(".cand-row").remove();
     if (e.target.classList.contains("cand-star")) {
-      const was = e.target.classList.contains("cand-decided");
-      el.querySelectorAll(".cand-star").forEach((s) => s.classList.remove("cand-decided"));
-      if (!was) e.target.classList.add("cand-decided"); // click again to un-decide
+      e.target.classList.toggle("cand-decided"); // click again to un-decide; several may be starred
     }
   });
   el.querySelector("#cl-cancel").addEventListener("click", closeModal);
@@ -826,8 +906,8 @@ function editCalling(c) {
     if (!calling) { toast("Calling needs a name"); return; }
     const rows = [...el.querySelectorAll(".cand-row")];
     const candidates = rows.map((r) => r.querySelector(".cand-name").value.trim()).filter(Boolean);
-    const starRow = rows.find((r) => r.querySelector(".cand-star").classList.contains("cand-decided"));
-    const decided = starRow ? starRow.querySelector(".cand-name").value.trim() : "";
+    const people = rows.filter((r) => r.querySelector(".cand-star").classList.contains("cand-decided")).map((r) => r.querySelector(".cand-name").value.trim()).filter(Boolean);
+    const decided = people[0] || "";
     let stage = el.querySelector("#cl-stage").value;
     if (stage === "fill" && decided) stage = "issue";   // decided moves it forward
     if (stage === "issue" && !decided) stage = "fill";  // un-starred moves it back
@@ -837,6 +917,7 @@ function editCalling(c) {
       organization: el.querySelector("#cl-org").value.trim(),
       candidates,
       decided,
+      people,
       stage,
       setApart: c?.setApart || false,
       notes: el.querySelector("#cl-notes").value.trim(),
@@ -849,9 +930,9 @@ function editCalling(c) {
         await updateDoc(doc(db, "callings", c.id), data);
         await wardBusinessSync(c, data);
       }
-      const matched = decided && needy.find((p) => p.name.toLowerCase() === decided.toLowerCase());
-      if (matched && data.stage !== "fill" && confirm(`Remove ${matched.name} from the "needs a calling" pool?`)) {
-        await deleteDoc(doc(db, "callings", matched.id));
+      for (const n of people) {
+        const matched = needy.find((p) => p.name.toLowerCase() === n.toLowerCase());
+        if (matched && data.stage !== "fill" && confirm(`Remove ${matched.name} from the "needs a calling" pool?`)) await deleteDoc(doc(db, "callings", matched.id));
       }
       closeModal(); toast("Saved");
     } catch (err) { toast("Couldn't save: " + (err.code || err.message)); }

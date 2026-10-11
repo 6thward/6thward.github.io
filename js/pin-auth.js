@@ -13,7 +13,7 @@ import {
   getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
   deleteUser, signOut,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-import { firebaseConfig, pinEmail, PIN_LENGTH } from "./firebase-init.js?v=1791725469";
+import { firebaseConfig, pinEmail, PIN_LENGTH } from "./firebase-init.js?v=1791726272";
 
 function sideAuth() {
   const name = "pin-admin";
