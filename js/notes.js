@@ -5,8 +5,10 @@
 //   two spaces in front     → a sub-point (up to three levels deep)   (2026-10-04)
 //   **words**               → bold;  "Lead-in: rest" → the lead-in is bold
 //   {@Name}                 → that line is assigned to Name (shown as a pill)   (2026-10-04)
+//   "## Name"               → a name card: the lines under it (until the next "## " or a "---" line)
+//                             sit inside a card headed by that name; cards in a row form a group (2026-10-11)
 // The text is stored exactly as typed, so it stays readable anywhere.
-import { esc } from "./ui.js?v=1791723348";
+import { esc } from "./ui.js?v=1791725341";
 
 const MAX_LEVEL = 3;
 const levelOf = (indent) => Math.min(MAX_LEVEL, Math.floor(String(indent || "").replace(/\t/g, "  ").length / 2));
@@ -70,7 +72,7 @@ export function setLineWho(text, lineIdx, name) {
   lines[lineIdx] = clean ? `${base} {@${clean}}` : base;
   return lines.join("\n");
 }
-export const plainLine = (line) => stripMarks(String(line ?? "").replace(/^\s*(?:[-•*]\s+|\[( |x|X)\]\s*)/, "")).trim();
+export const plainLine = (line) => stripMarks(String(line ?? "").replace(/^\s*(?:##\s+|[-•*]\s+|\[( |x|X)\]\s*)/, "")).trim();
 
 // attrFn(lineIndex) → the data attribute for a to-do checkbox (default: data-todo-line="key|idx")
 // opts.assign → each line carries data-aline="key|idx" and list lines get a "+ assign" button
@@ -80,11 +82,21 @@ export function notesHtml(text, key, editable, attrFn, opts) {
   const aline = (i) => (canAssign ? ` data-aline="${esc(key)}|${i}"` : "");
   const addBtn = (line) => (canAssign && !lineWho(line) ? `<button type="button" class="nt-assign" title="Assign this to someone">+ assign</button>` : "");
   const lines = String(text || "").split("\n");
-  let html = "", inList = false;
+  let html = "", inList = false, inCard = false, inCards = false;
   const closeList = () => { if (inList) { html += "</ul>"; inList = false; } };
+  const closeCard = () => { closeList(); if (inCard) { html += "</div></div>"; inCard = false; } };
+  const closeCards = () => { closeCard(); if (inCards) { html += "</div>"; inCards = false; } };
   lines.forEach((raw, i) => {
     const line = raw.replace(/\s+$/, "");
     let m;
+    if ((m = /^##\s+(.*)$/.exec(line))) { // a name card; consecutive cards share one row
+      closeCard();
+      if (!inCards) { html += `<div class="nt-cards">`; inCards = true; }
+      html += `<div class="nt-card"><div class="nt-card-name"${aline(i)}>${inlineFmt(m[1])}</div><div class="nt-card-body">`;
+      inCard = true;
+      return;
+    }
+    if (line.trim() === "---") { closeCards(); return; } // ends the row of cards
     if ((m = /^(\s*)[-•*]\s+(.*)$/.exec(line)) || (m = /^(\s*)[-•*]()$/.exec(line))) {
       if (!inList) { html += `<ul class="rc-list">`; inList = true; }
       const lvl = levelOf(m[1]);
@@ -99,7 +111,7 @@ export function notesHtml(text, key, editable, attrFn, opts) {
       closeList(); html += `<div${aline(i)}>${inlineFmt(line)}</div>`;
     }
   });
-  closeList();
+  closeCards();
   return html;
 }
 
@@ -120,7 +132,7 @@ export function prefixLine(ta, prefix) {
   const cur = ta.value.slice(st).split("\n")[0];
   const indent = /^\s*/.exec(cur)[0];
   const body = cur.slice(indent.length);
-  const stripped = body.replace(/^(?:[-•*]\s+|[-•*]$|\[( |x|X)\]\s*)/, "");
+  const stripped = body.replace(/^(?:##\s+|[-•*]\s+|[-•*]$|\[( |x|X)\]\s*)/, "");
   const repl = indent + (body.startsWith(prefix) ? stripped : prefix + stripped);
   ta.setRangeText(repl, st, st + cur.length, "end");
   ta.focus(); ta.dispatchEvent(new Event("input"));
@@ -156,6 +168,7 @@ export function continueList(ta, e) {
   if (e.key !== "Enter" || e.shiftKey || e.metaKey || e.ctrlKey) return false;
   const st = lineStart(ta);
   const cur = ta.value.slice(st, ta.selectionStart);
+  if (/^##\s+\S/.test(cur)) { e.preventDefault(); ta.setRangeText("\n- ", ta.selectionStart, ta.selectionEnd, "end"); ta.dispatchEvent(new Event("input")); return true; } // under a name: first bullet
   const m = /^(\s*)(?:([-•*])\s*|\[( |x|X)\]\s*)(.*)$/.exec(cur);
   if (!m || (!m[2] && m[3] === undefined)) return false;
   e.preventDefault();
@@ -192,6 +205,7 @@ export function toggleBold(ta) {
 export function toolbarHtml(hint) {
   return `<button type="button" class="btn btn-sm" data-nt="bullet" title="Bullet point">• Bullet</button>` +
     `<button type="button" class="btn btn-sm" data-nt="todo" title="To-do with a checkbox">☐ To-do</button>` +
+    `<button type="button" class="btn btn-sm" data-nt="person" title="A name card: this line becomes the name, the lines under it go inside the card. Several in a row sit side by side.">👤 Name card</button>` +
     `<button type="button" class="btn btn-sm" data-nt="in" title="Make it a sub-point (Tab)">→ Sub-point</button>` +
     `<button type="button" class="btn btn-sm" data-nt="out" title="Move it back out (Shift+Tab)">←</button>` +
     `<button type="button" class="btn btn-sm nt-bold" data-nt="bold" title="Bold the selected words (⌘B)"><b>B</b></button>` +
@@ -207,6 +221,7 @@ export function wireToolbar(box, ta) {
       const k = b.dataset.nt;
       if (k === "bullet") prefixLine(ta, "- ");
       else if (k === "todo") prefixLine(ta, "[ ] ");
+      else if (k === "person") prefixLine(ta, "## ");
       else if (k === "in") indentLines(ta, 1);
       else if (k === "out") indentLines(ta, -1);
       else toggleBold(ta);

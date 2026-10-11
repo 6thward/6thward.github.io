@@ -1857,3 +1857,10 @@ button.src-st { cursor: pointer; } button.src-st:hover { filter: brightness(.93)
 .type-pill.type-highcouncil.st-click:hover { color: #fff; filter: brightness(1.15); border-color: transparent; }
 .hc-pill { background: #e0f2f1; color: #0f5c57; text-decoration: none; font-weight: 600; }
 .hc-pill:hover { background: #c8e8e6; }
+/* Name cards inside notes: "## Name" then the lines under it (2026-10-11) */
+.nt-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .5rem; margin: .3rem 0 .5rem; }
+.nt-card { background: #fff; border: 1px solid var(--line); border-left: 4px solid var(--brand); border-radius: 10px; padding: .45rem .7rem .5rem; min-width: 0; }
+.nt-card-name { font-weight: 700; font-size: .98rem; margin-bottom: .15rem; }
+.nt-card-body > .rc-list { margin: .1rem 0 0; padding-left: 1.1rem; }
+.nt-card-body .rc-gap { height: .3rem; }
+.nt-card-body > div:not(.rc-gap) { font-size: .92rem; }
