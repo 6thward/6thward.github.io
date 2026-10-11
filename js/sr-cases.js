@@ -9,18 +9,18 @@
 //   summary  — the leader's own few lines, shown first on the card (bullets / to-dos / bold like council notes)
 //   log[]    — dated notes { id, at, by, text, editedAt }; the old single `notes` text shows as an undated note
 // Same privacy as the rest of this page: only the bishop and people given Self-Reliance.
-import { db } from "./firebase-init.js?v=1791721542";
-import { ctx, can } from "./app.js?v=1791721542";
+import { db } from "./firebase-init.js?v=1791722874";
+import { ctx, can } from "./app.js?v=1791722874";
 import {
   collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791721542";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine } from "./notes.js?v=1791721542";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1791721542";
+import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791722874";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine } from "./notes.js?v=1791722874";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1791722874";
 import {
   INC, EXP, QA, parseCsv, mapResponses, personKey, respTotals, fmtUsd, isBlank, writeupSections,
   parseBudgetCsv, parseMoney, budgetTotals, fmtUsdC,
-} from "./sr-import.js?v=1791721542";
+} from "./sr-import.js?v=1791722874";
 
 let mount = null, cases = [], started = false, openId = null, openRi = null;
 let openBi = 0, budgetEditing = false; // which budget is showing on the open card, and whether it's being edited

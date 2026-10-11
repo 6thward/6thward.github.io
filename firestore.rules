@@ -214,7 +214,8 @@ service cloud.firestore {
     // ---- Shared settings (rosters, hymns, homebound list, program) ----
     match /settings/{id} {
       allow read: if hasAccess();
-      allow write: if canEdit('sacrament') || (id == 'homebound' && canEdit('homesac'));
+      allow write: if canEdit('sacrament') || (id == 'homebound' && canEdit('homesac'))
+        || (id == 'bishopCal' && canEdit('calendar')); // standing meetings on the bishop's calendar (2026-10-11)
     }
 
     // ---- Member Board (cards per person in custom sections) ----

@@ -1,16 +1,17 @@
 // Tithing declaration sign-ups (2026-10-04) — the bishop's side, its own page
 // ("Tithing Declaration" tab, area key "tithing"): set when you're available, share the link / QR code, and see
 // who signed up. The public page is tithing.html (js/tithing-form.js).
-import { db } from "./firebase-init.js?v=1791721542";
-import { ctx, can } from "./app.js?v=1791721542";
+import { db } from "./firebase-init.js?v=1791722874";
+import { ctx, can } from "./app.js?v=1791722874";
 import {
   collection, doc, onSnapshot, setDoc, updateDoc, writeBatch, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast } from "./ui.js?v=1791721542";
+import { watchBishopCal, standingEvents } from "./bishop-cal.js?v=1791722874";
+import { openModal, closeModal, toast } from "./ui.js?v=1791722874";
 import {
   GROUPS, PLACES, SLOT_LENGTHS, esc, toMin, fmtClock, fmtLongDay, fmtShortDay, slotsOf, slotMap,
   sortWindows, overlaps, newToken, parseSlotId, todayIso, addDays, hhmm, busyFromEvents, sameBusy, offList,
-} from "./tithing-shared.js?v=1791721542";
+} from "./tithing-shared.js?v=1791722874";
 
 let mount = null, season = null, signups = [], unsubSignups = null, started = false, dirty = false;
 let events = null; // the ward calendar (events with cal: "bishop" block sign-up times); null until it loads
@@ -67,6 +68,7 @@ export function initTithing(el) {
   }, (e) => { mount.innerHTML = `<div class="empty-note">Couldn't load tithing declaration sign-ups (${esc(e.code || e.message)}).</div>`; });
   // the bishop's calendar: someone without the Calendar page just keeps whatever busy times were last saved
   onSnapshot(collection(db, "events"), (qs) => { events = qs.docs.map((d) => ({ id: d.id, ...d.data() })); render(); reconcileBusy(); }, () => {});
+  watchBishopCal(() => { render(); reconcileBusy(); });
 }
 
 // ---- QR code (qrcodejs from cdnjs, loaded the first time it's needed) ----
@@ -89,7 +91,8 @@ async function qrDataUrl(url) {
 }
 
 // the public doc's slot map leaves out hand-blocked times and anything on the bishop's calendar
-const busyFor = (windows) => (events ? busyFromEvents(windows, events) : season.busy || {});
+const withStanding = (windows, evs) => [...evs, ...standingEvents((windows || []).map((w) => w.date))]; // ward council + bishopric meeting too
+const busyFor = (windows) => (events ? busyFromEvents(windows, withStanding(windows, events)) : season.busy || {});
 async function saveWindows(windows) {
   const busy = busyFor(windows);
   await updateDoc(seasonRef(), { windows, busy, slots: slotMap(windows, [...(season.blocked || []), ...Object.keys(busy)]), updatedAt: serverTimestamp() });
@@ -97,7 +100,7 @@ async function saveWindows(windows) {
 // the bishop's calendar changed (or we just loaded): keep busy times in step
 async function reconcileBusy() {
   if (!season || !events || !can("tithing", "edit")) return;
-  const busy = busyFromEvents(season.windows, events);
+  const busy = busyFromEvents(season.windows, withStanding(season.windows, events));
   if (sameBusy(busy, season.busy)) return;
   try { await updateDoc(seasonRef(), { busy, slots: slotMap(season.windows, [...(season.blocked || []), ...Object.keys(busy)]), updatedAt: serverTimestamp() }); }
   catch (e) { console.warn("[tithing] busy sync", e); }

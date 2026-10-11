@@ -1844,3 +1844,11 @@ button.src-st { cursor: pointer; } button.src-st:hover { filter: brightness(.93)
 .cal-clash { background: #fdf3da; border: 1px solid #f0dca0; border-radius: 10px; padding: .55rem .7rem; font-size: .9rem; display: flex; flex-direction: column; gap: .25rem; }
 .cal-clash-hit { color: #8a3b00; }
 .td-srow-busy .td-sname { color: #5b3a8e; }
+/* Standing meetings on the bishop's calendar (2026-10-11) */
+.cal-event.ev-standing { border-left-style: dashed; }
+.cal-standing { display: flex; flex-direction: column; gap: .5rem; }
+.cal-standing-on { display: flex; align-items: center; gap: .45rem; margin-top: .4rem; cursor: pointer; }
+.cal-standing-on input { width: 1.05rem; height: 1.05rem; }
+.cal-standing-times { display: flex; gap: .6rem; flex-wrap: wrap; padding-left: 1.6rem; }
+.cal-standing-times label { display: flex; flex-direction: column; gap: .15rem; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); }
+.cal-standing-times input, .cal-standing-times select { font: inherit; font-size: .92rem; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--ink); padding: .35rem .5rem; border: 1px solid var(--line); border-radius: 8px; background: #fff; }

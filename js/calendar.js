@@ -2,13 +2,14 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1791721542";
-import { ctx, hasRole, can } from "./app.js?v=1791721542";
+import { db } from "./firebase-init.js?v=1791722874";
+import { ctx, hasRole, can } from "./app.js?v=1791722874";
 import {
-  collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp,
+  collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1791721542";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1791721542";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1791722874";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1791722874";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1791722874";
 
 let events = [];
 let viewYear, viewMonth; // 0-based month
@@ -37,6 +38,7 @@ export function initCalendar() {
           <button class="chip" data-cal="ward" type="button">Ward</button>
           <button class="chip chip-bishop" data-cal="bishop" type="button" title="The bishop's own calendar — its events block tithing declaration times">Bishop</button>
         </div>
+        ${can("calendar", "edit") ? `<button class="btn" id="btn-standing" type="button" title="Ward council and bishopric meeting times — they go on the Bishop calendar every week">⚙ Standing meetings</button>` : ""}
         <button class="btn btn-primary" id="btn-new-event">+ New event</button>
       </div>
     </div>
@@ -56,6 +58,8 @@ export function initCalendar() {
   panel.querySelector("#cal-prev").addEventListener("click", () => shiftMonth(-1));
   panel.querySelector("#cal-next").addEventListener("click", () => shiftMonth(1));
   panel.querySelector("#btn-new-event").addEventListener("click", () => editEvent(null, todayISO()));
+  panel.querySelector("#btn-standing")?.addEventListener("click", editStanding);
+  watchBishopCal(() => { render(); if (season) syncBusy(events); });
   panel.querySelectorAll("#cal-filter [data-cal]").forEach((b) => b.addEventListener("click", () => {
     calView = b.dataset.cal;
     panel.querySelectorAll("#cal-filter .chip").forEach((c) => c.classList.toggle("active", c === b));
@@ -104,7 +108,7 @@ const toMinutes = (hhmm) => { const [h, m] = String(hhmm).split(":").map(Number)
 // after the bishop's calendar changes, keep the sign-up page's busy times in step
 async function syncBusy(nextEvents) {
   if (!season) return;
-  const busy = busyFromEvents(season.windows, nextEvents);
+  const busy = busyFromEvents(season.windows, [...nextEvents, ...standingEvents((season.windows || []).map((w) => w.date))]);
   if (sameBusy(busy, season.busy)) return;
   try { await updateDoc(doc(db, "tithing", season.token), { busy, slots: slotMap(season.windows, [...(season.blocked || []), ...Object.keys(busy)]), updatedAt: serverTimestamp() }); }
   catch (e) { console.warn("[calendar] tithing busy sync", e); }
@@ -131,7 +135,8 @@ function render() {
   const daysInPrev = new Date(viewYear, viewMonth, 0).getDate();
   const today = todayISO();
   const byDate = {};
-  events.filter(showIt).forEach((e) => (byDate[e.date] = byDate[e.date] || []).push(e));
+  const gridDates = []; { const first = new Date(viewYear, viewMonth, 1); first.setDate(1 - first.getDay()); for (let i = 0; i < 42; i++) { const d = new Date(first); d.setDate(first.getDate() + i); gridDates.push(iso(d.getFullYear(), d.getMonth(), d.getDate())); } }
+  [...events, ...standingEvents(gridDates)].filter(showIt).forEach((e) => (byDate[e.date] = byDate[e.date] || []).push(e));
   if (calView !== "ward" && season) (season.windows || []).forEach((w) => { if (!byDate[w.date] || !byDate[w.date].some((x) => x.tithing)) tithingItems(w.date).forEach((t) => (byDate[w.date] = byDate[w.date] || []).push(t)); });
   Object.values(byDate).forEach((l) => l.sort((a, b) => (a.startTime || "") < (b.startTime || "") ? -1 : 1));
 
@@ -160,7 +165,7 @@ function render() {
       <div class="cal-cell ${otherMonth ? "other-month" : ""} ${cellDate === today ? "today" : ""}" data-date="${cellDate}">
         <span class="cal-daynum">${displayNum}</span>
         ${evs.slice(0, 3).map((e) => `
-          <div class="cal-event ${isSunday ? "ev-sunday" : ""}${e.tithing ? " ev-tithing" : calOf(e) === "bishop" ? " ev-bishop" : ""}" title="${esc(e.title)}${e.sub ? " · " + esc(e.sub) : ""}">
+          <div class="cal-event ${isSunday ? "ev-sunday" : ""}${e.tithing ? " ev-tithing" : calOf(e) === "bishop" ? " ev-bishop" : ""}${e.standing ? " ev-standing" : ""}" title="${esc(e.title)}${e.sub ? " · " + esc(e.sub) : ""}">
             ${e.startTime ? fmtTime(e.startTime) + " " : ""}${esc(e.title)}
           </div>`).join("")}
         ${evs.length > 3 ? `<div class="cal-event">+${evs.length - 3} more</div>` : ""}
@@ -174,7 +179,8 @@ function render() {
   // Upcoming list (next 30 days)
   const horizon = new Date(); horizon.setDate(horizon.getDate() + 30);
   const horizonISO = iso(horizon.getFullYear(), horizon.getMonth(), horizon.getDate());
-  const up = [...events.filter(showIt), ...(calView !== "ward" && season ? (season.windows || []).filter((w) => w.date >= today && w.date <= horizonISO).flatMap((w) => tithingItems(w.date).filter((t) => t.id === "t:" + w.id)) : [])]
+  const soon = []; { const d = new Date(); for (let i = 0; i <= 30; i++) { soon.push(iso(d.getFullYear(), d.getMonth(), d.getDate())); d.setDate(d.getDate() + 1); } }
+  const up = [...events.filter(showIt), ...standingEvents(soon).filter(showIt), ...(calView !== "ward" && season ? (season.windows || []).filter((w) => w.date >= today && w.date <= horizonISO).flatMap((w) => tithingItems(w.date).filter((t) => t.id === "t:" + w.id)) : [])]
     .filter((e) => e.date >= today && e.date <= horizonISO)
     .sort((a, b) => (a.date + (a.startTime || "")) < (b.date + (b.startTime || "")) ? -1 : 1);
   document.getElementById("upcoming-list").innerHTML = up.length
@@ -189,6 +195,7 @@ function render() {
   document.querySelectorAll("#upcoming-list .list-row").forEach((row) =>
     row.addEventListener("click", () => {
       if (row.dataset.id.startsWith("t:")) return dayView(up.find((x) => x.id === row.dataset.id)?.date);
+      if (/^s[cb]:/.test(row.dataset.id)) return can("calendar", "edit") ? editStanding() : undefined;
       const e = events.find((x) => x.id === row.dataset.id);
       if (e) editEvent(e);
     }));
@@ -196,7 +203,7 @@ function render() {
 
 function dayView(date) {
   if (!date) return;
-  const dayEvents = [...events.filter((e) => e.date === date && showIt(e)), ...(calView !== "ward" ? tithingItems(date) : [])]
+  const dayEvents = [...events.filter((e) => e.date === date && showIt(e)), ...standingEvents([date]).filter(showIt), ...(calView !== "ward" ? tithingItems(date) : [])]
     .sort((a, b) => (a.startTime || "") < (b.startTime || "") ? -1 : 1);
   const el = openModal(`
     <h3>${fmtDate(date, { year: true })}</h3>
@@ -223,9 +230,38 @@ function dayView(date) {
   el.querySelector("#dv-add").addEventListener("click", () => editEvent(null, date));
   el.querySelectorAll(".list-row[data-id]").forEach((row) =>
     row.addEventListener("click", () => {
+      if (/^s[cb]:/.test(row.dataset.id)) return can("calendar", "edit") ? editStanding() : undefined;
       const e = events.find((x) => x.id === row.dataset.id);
       if (e) editEvent(e);
     }));
+}
+
+// ward council + bishopric meeting times (settings/bishopCal)
+function editStanding() {
+  const c = bishopCalConfig(), co = c.council || {}, bp = c.bishopric || {};
+  const el = openModal(`
+    <h3>Standing meetings</h3>
+    <p class="row-sub" style="margin-top:-.6rem">These go on the Bishop calendar every week and block tithing declaration sign-up times they overlap.</p>
+    <div class="cal-standing">
+      <label class="cal-standing-on"><input type="checkbox" id="st-co-on" ${co.on ? "checked" : ""}> <b>Ward council</b> <span class="row-sub">— on each council Sunday chosen on the Ward Council page</span></label>
+      <div class="cal-standing-times"><label>From<input type="time" id="st-co-start" step="300" value="${esc(co.start || "")}"></label><label>To<input type="time" id="st-co-end" step="300" value="${esc(co.end || "")}"></label></div>
+      <label class="cal-standing-on"><input type="checkbox" id="st-bp-on" ${bp.on ? "checked" : ""}> <b>Bishopric meeting</b> <span class="row-sub">— every week</span></label>
+      <div class="cal-standing-times"><label>Day<select id="st-bp-day">${WEEKDAYS.map((w, i) => `<option value="${i}"${Number(bp.weekday ?? 0) === i ? " selected" : ""}>${w}</option>`).join("")}</select></label><label>From<input type="time" id="st-bp-start" step="300" value="${esc(bp.start || "")}"></label><label>To<input type="time" id="st-bp-end" step="300" value="${esc(bp.end || "")}"></label></div>
+    </div>
+    <div class="modal-actions"><button class="btn" id="st-cancel" type="button">Cancel</button><button class="btn btn-primary" id="st-save" type="button">Save</button></div>`);
+  el.querySelector("#st-cancel").addEventListener("click", closeModal);
+  el.querySelector("#st-save").addEventListener("click", async () => {
+    const v = (id) => el.querySelector(id).value;
+    const next = {
+      council: { on: el.querySelector("#st-co-on").checked, start: v("#st-co-start"), end: v("#st-co-end") },
+      bishopric: { on: el.querySelector("#st-bp-on").checked, weekday: Number(v("#st-bp-day")), start: v("#st-bp-start"), end: v("#st-bp-end") },
+      updatedAt: serverTimestamp(),
+    };
+    if (next.council.on && !next.council.start) return toast("Give ward council a start time");
+    if (next.bishopric.on && !next.bishopric.start) return toast("Give the bishopric meeting a start time");
+    try { await setDoc(doc(db, "settings", "bishopCal"), next, { merge: true }); closeModal(); toast("Saved"); }
+    catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
+  });
 }
 
 function editEvent(e, defaultDate) {
