@@ -3,14 +3,14 @@
 // added, renamed, reordered and removed. Data:
 //   boardColumns/{id}  { label, order }
 //   board/{id}         { name, notes, column, order, createdAt, updatedAt }
-import { db } from "./firebase-init.js?v=1791778431";
-import { goTab, ctx, can } from "./app.js?v=1791778431";
+import { db } from "./firebase-init.js?v=1791778830";
+import { goTab, ctx, can } from "./app.js?v=1791778830";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openCaseById } from "./sr-cases.js?v=1791778431";
-import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1791778431";
-import { notesHtml, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1791778431";
+import { openCaseById } from "./sr-cases.js?v=1791778830";
+import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1791778830";
+import { notesHtml, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1791778830";
 
 // Next ordinance a person is working toward — shown as a pill beside the name.
 const ORDINANCES = ["Sacrament", "Aaronic Priesthood", "Melchizedek Priesthood", "Endowment", "Sealing"];
@@ -172,9 +172,11 @@ function render() {
 
   // ---- drag a section header to reorder the sections ----
   let dragCol = null, dragAfter = false; // drop on the left half of a section = before it, right half = after it (2026-10-11)
-  wrap.querySelectorAll(".board-col-head[draggable]").forEach((h) => {
+  // the whole section (anything that isn't a person card) is the handle, not just the header (2026-10-11)
+  if (editor) wrap.querySelectorAll(".board-col").forEach((col) => { col.draggable = true; });
+  wrap.querySelectorAll(".board-col-head[draggable], .board-col[draggable]").forEach((h) => {
     const col = h.closest(".board-col");
-    h.addEventListener("dragstart", (e) => { dragCol = col.dataset.colid; e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", ""); } catch {} col.classList.add("col-dragging"); e.stopPropagation(); });
+    h.addEventListener("dragstart", (e) => { if (e.target.closest(".board-card, input, textarea, select")) return; dragCol = col.dataset.colid; e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", ""); } catch {} col.classList.add("col-dragging"); e.stopPropagation(); });
     h.addEventListener("dragend", () => { dragCol = null; wrap.querySelectorAll(".col-dragging, .col-before, .col-after").forEach((x) => x.classList.remove("col-dragging", "col-before", "col-after")); });
   });
   wrap.querySelectorAll(".board-col").forEach((col) => {
@@ -210,7 +212,7 @@ function render() {
   const clearMarks = () => wrap.querySelectorAll(".bb-before").forEach((r) => r.classList.remove("bb-before"));
   wrap.querySelectorAll(".board-card").forEach((row) => {
     row.draggable = true;
-    row.addEventListener("dragstart", (e) => { dragId = row.dataset.id; e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", ""); } catch {} });
+    row.addEventListener("dragstart", (e) => { e.stopPropagation(); dragId = row.dataset.id; e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", ""); } catch {} }); // a card drag never becomes a section drag
     row.addEventListener("dragend", () => { dragId = null; clearMarks(); wrap.querySelectorAll(".bb-drop").forEach((z) => z.classList.remove("bb-over")); });
     row.addEventListener("dragover", (e) => { if (!dragId || row.dataset.id === dragId) return; e.preventDefault(); clearMarks(); row.classList.add("bb-before"); });
     row.addEventListener("dragleave", () => row.classList.remove("bb-before"));

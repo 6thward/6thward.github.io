@@ -1964,3 +1964,7 @@ button.src-st { cursor: pointer; } button.src-st:hover { filter: brightness(.93)
 .wc-fu-form textarea { width: 100%; font: inherit; padding: .45rem .6rem; border: 1px solid var(--line); border-radius: 8px; resize: vertical; }
 .wc-fu-form-actions { display: flex; justify-content: flex-end; gap: .4rem; margin-top: .4rem; }
 .wc-asg-opt i { font-style: normal; font-size: .72rem; color: var(--ink-soft); background: #eef1f4; border-radius: 99px; padding: 0 .4rem; }
+.board-col[draggable] { cursor: grab; }
+.board-col[draggable] .board-card, .board-col[draggable] input, .board-col[draggable] textarea, .board-col[draggable] .st-click, .board-col[draggable] button { cursor: auto; }
+.board-col[draggable] .board-card { cursor: grab; }
+.board-col-grip { font-size: 1.05rem; padding: 0 .15rem; }
