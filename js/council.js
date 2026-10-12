@@ -9,21 +9,24 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1791778160";
-import { ctx, can } from "./app.js?v=1791778160";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1791778160";
-import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791778160";
+import { db } from "./firebase-init.js?v=1791778431";
+import { ctx, can } from "./app.js?v=1791778431";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1791778431";
+import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791778431";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1791778160";
+import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1791778431";
 
 let cards = [];
 let councils = {};    // date -> doc
 let members = [];     // names of ward council members (Users tab → "Ward council member")
 // what a council member can be asked to do at a meeting (2026-10-04)
 const ASSIGN = [["openPrayer", "Opening prayer"], ["thought", "Scripture & thought"], ["training", "Handbook training"], ["closePrayer", "Closing prayer"]];
-let openNotesFor = null; // an item just added: its notes box opens as soon as it's drawn (2026-10-11)
+let openNotesFor = null;
+let fuOpen = new Set(); // follow-up rows that are unfolded (2026-10-11)
+// organizations a follow-up can be handed to, besides a council member or any typed name
+const ORGS = ["Bishopric", "Relief Society", "Elders Quorum", "Primary", "Young Women", "Young Men", "Sunday School", "Ward Mission", "Ward Clerk", "Executive Secretary", "Temple & Family History", "Music", "Activities Committee"]; // an item just added: its notes box opens as soon as it's drawn (2026-10-11)
 let schedule = [];    // council dates (Sundays) set by the bishopric — councils/_dates.dates; empty = every Sunday
 let date = "";        // selected meeting date (YYYY-MM-DD)
 let started = false;
@@ -196,9 +199,61 @@ async function saveTodoPatch(k, todoId, mut) {
   await updateDoc(doc(db, "board", k.id), { todos, updatedAt: serverTimestamp() });
 }
 
+// Follow-ups (2026-10-11): an item from an earlier council that still needs attention sits at the
+// top of this meeting's agenda — headline + what's needed; unfold for the original notes.
+//   councils/{date}.followups[] { id, title, text, srcNotes, from, fromKey, assignee, done, doneAt, createdAt, by }
+function followupsHtml(cdoc, editor) {
+  const list = cdoc.followups || [];
+  if (!list.length) return "";
+  const openOnes = list.filter((f) => !f.done), doneOnes = list.filter((f) => f.done);
+  const rowHtml = (f) => {
+    const open = fuOpen.has(f.id);
+    return `<div class="wc-fu${f.done ? " wc-fu-done" : ""}${open ? " open" : ""}" data-fu="${esc(f.id)}">
+      <div class="wc-fu-head" data-futoggle="${esc(f.id)}" title="${open ? "Fold up" : "Unfold for the notes from that council"}">
+        <span class="wc-fu-caret">${open ? "▾" : "▸"}</span>
+        <b class="wc-fu-title">${esc(f.title || "Follow-up")}</b>
+        <span class="wc-fu-text">${esc(f.text || "")}</span>
+        ${f.assignee ? `<span class="wc-assignee${editor ? " wc-assignee-edit" : ""}"${editor ? ` data-fuassign="${esc(f.id)}" title="Click to change who this is with"` : ""}>→ ${esc(f.assignee)}</span>` : (editor && !f.done ? `<span class="wc-assignee wc-assignee-add wc-assignee-edit" data-fuassign="${esc(f.id)}" title="Hand this to a council member, an organization, or anyone">+ assign</span>` : "")}
+        <span class="wc-fu-from">from ${esc(fmtDay(f.from))}</span>
+        ${editor ? `<span class="wc-fu-tools">
+          ${f.done ? `<button type="button" class="btn btn-sm btn-ghost" data-fudone="${esc(f.id)}" title="Not finished after all">↩</button>`
+            : `<button type="button" class="btn btn-sm btn-ghost" data-fuagain="${esc(f.id)}" title="Still open — carry it to the council after this one">↪ Again</button><button type="button" class="btn btn-sm" data-fudone="${esc(f.id)}" title="Done — tick it off">✓ Done</button>`}
+          <button type="button" class="btn btn-sm btn-ghost" data-furemove="${esc(f.id)}" title="Remove this follow-up">✕</button>
+        </span>` : ""}
+      </div>
+      ${open ? `<div class="wc-fu-body">
+        ${f.text ? `<div class="wc-fu-need"><span>Follow up on</span>${esc(f.text)}</div>` : ""}
+        ${f.srcNotes ? `<div class="wc-fu-src"><span>Notes from ${esc(fmtDay(f.from))}</span><div class="wc-cnotes">${notesHtml(f.srcNotes, "fu:" + f.id, false)}</div></div>` : ""}
+        ${editor ? `<div class="row-sub"><span class="st-click" data-fuedit="${esc(f.id)}">✎ Edit what needs following up</span></div>` : ""}
+      </div>` : ""}
+    </div>`;
+  };
+  return `<div class="wc-fus">
+    <div class="wc-fus-head">Follow-ups <span class="pill ${openOnes.length ? "pill-pending" : "pill-role-member"}">${openOnes.length}</span><span class="row-sub">from earlier councils</span></div>
+    ${openOnes.map(rowHtml).join("")}
+    ${doneOnes.length ? `<details class="wc-fus-done"><summary>Completed (${doneOnes.length})</summary>${doneOnes.map(rowHtml).join("")}</details>` : ""}
+  </div>`;
+}
+// a small box to write what needs following up; onSave(text)
+function followupForm(anchor, { title, forDate, text = "", onSave, onCancel }) {
+  document.querySelectorAll(".wc-fu-form").forEach((x) => x.remove());
+  const form = document.createElement("div");
+  form.className = "wc-fu-form";
+  form.innerHTML = `<div class="wc-fu-form-title">Follow up on <b>${esc(title)}</b> <span class="row-sub">· goes on the agenda for ${esc(fmtDay(forDate))}</span></div>
+    <textarea placeholder="What needs to happen or be reported back?" rows="2"></textarea>
+    <div class="wc-fu-form-actions"><button type="button" class="btn btn-sm" data-x="cancel">Cancel</button><button type="button" class="btn btn-primary btn-sm" data-x="save">Add follow-up</button></div>`;
+  form.addEventListener("click", (e) => e.stopPropagation());
+  anchor.after(form);
+  const ta = form.querySelector("textarea"); ta.value = text; ta.focus();
+  const done = (save) => { const v = ta.value.trim(); form.remove(); if (save) onSave(v); else onCancel?.(); };
+  form.querySelector('[data-x="save"]').addEventListener("click", () => done(true));
+  form.querySelector('[data-x="cancel"]').addEventListener("click", () => done(false));
+  ta.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.preventDefault(); done(false); } if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); done(true); } });
+}
+
 // A small "who?" pop-up under a chip: council members to pick from, or type any name.
 // onPick(name) — "" clears. Clicking away keeps what was typed; Escape cancels.
-function pickName(anchor, current, onPick) {
+function pickName(anchor, current, onPick, opts = {}) {
   document.querySelector(".wc-who-pop")?.remove();
   const r = anchor.getBoundingClientRect();
   const pop = document.createElement("div");
@@ -213,8 +268,9 @@ function pickName(anchor, current, onPick) {
   let sel = -1, typed = false, closed = false;
   const draw = () => {
     const q = typed ? inp.value.trim().toLowerCase() : "";
-    const rows = members.filter((n) => !q || n.toLowerCase().includes(q));
-    list.innerHTML = rows.map((n) => `<div class="wc-asg-opt${n.toLowerCase() === current.toLowerCase() ? " cur" : ""}" data-name="${esc(n)}"><span>${esc(n)}</span></div>`).join("")
+    const pool = opts.orgs ? [...members, ...ORGS.filter((o) => !members.includes(o))] : members;
+    const rows = pool.filter((n) => !q || n.toLowerCase().includes(q));
+    list.innerHTML = rows.map((n) => `<div class="wc-asg-opt${n.toLowerCase() === current.toLowerCase() ? " cur" : ""}" data-name="${esc(n)}"><span>${esc(n)}</span>${opts.orgs && ORGS.includes(n) && !members.includes(n) ? `<i>org</i>` : ""}</div>`).join("")
       || `<div class="row-sub" style="padding:.35rem .6rem">${members.length ? "Press Enter to use this name" : "Type a name and press Enter"}</div>`;
     sel = -1;
   };
@@ -297,7 +353,8 @@ function render() {
       : (editor && !it.discussed ? `<span class="wc-assignee wc-assignee-add wc-assignee-edit" data-assignee="" title="Assign this item to someone">+ assign</span>` : "");
     const actions = editor ? `<div class="wc-actions">
           ${it.discussed
-            ? `<button class="btn btn-sm btn-ghost" data-act="reopen" title="Put it back on the agenda">↩</button>`
+            ? `<span class="wc-act-wrap"><button class="btn btn-sm btn-ghost wc-act-btn" data-actions="1" type="button" title="Follow up at a later council, or copy / move this item">Actions ▾</button></span>
+               <button class="btn btn-sm btn-ghost" data-act="reopen" title="Not finished after all — mark it open again">↩ Reopen</button>`
             : `<button class="btn btn-sm btn-ghost" data-attach="1" type="button" title="Attach a document, PDF or image">📎 Attach</button>
                <span class="wc-act-wrap"><button class="btn btn-sm btn-ghost wc-act-btn" data-actions="1" type="button" title="Copy or move this item to another council">Actions ▾</button></span>
                <button class="btn btn-sm" data-act="discussed" title="Discussed — moves to this meeting's record${it.kind === "board" ? "; the to-do stays on the card" : ""}">Discussed ✓</button>
@@ -307,7 +364,7 @@ function render() {
       <div class="wc-row${it.discussed ? " wc-done" : ""}${editor && !it.discussed ? " wc-drag" : ""}" data-key="${key}">
         <div class="wc-num${editor && !it.discussed ? " wc-grip" : ""}"${editor && !it.discussed ? ` draggable="true" title="Drag to reorder"` : ""}>${editor && !it.discussed ? `<span class="wc-grip-dots" aria-hidden="true">⋮⋮</span>` : ""}${n}.</div>
         <div class="wc-main">
-          <div class="wc-head"><div class="wc-title">${person ? `<span class="wc-person-name">${esc(person)}</span> · ` : ""}${esc(title)}${owner}${assignee}${due}</div>${actions}</div>
+          <div class="wc-head"><div class="wc-title">${person ? `<span class="wc-person-name">${esc(person)}</span> · ` : ""}${esc(title)}${it.discussed ? `<span class="wc-done-badge" title="Discussed${when ? " " + esc(fmtDay(when)) : ""}">✓ Discussed</span>` : ""}${owner}${assignee}${due}</div>${actions}</div>
           ${context}
           ${(editor || notes) ? noteBlock(key, notes, "+ council notes") : ""}
           ${files.length ? `<div class="wc-files">${files.map((f) => `<span class="wc-file" data-file="${esc(f.id)}" title="Open ${esc(f.name)}"><span class="wc-file-ic">${fileIcon(f)}</span><span class="wc-file-name">${esc(f.name)}</span><span class="wc-file-size">${fmtBytes(f.size)}</span>${editor ? `<button type="button" class="wc-file-x" data-rmfile="${esc(f.id)}" title="Remove this attachment">✕</button>` : ""}</span>`).join("")}</div>` : ""}
@@ -349,6 +406,7 @@ function render() {
     noteFollow(title, it.kind === "board" ? it.t.councilNotes : it.x.notes);
   });
   noteFollow("", cdoc.notes);
+  (cdoc.followups || []).forEach((f) => { if (f.assignee) addFollow(f.assignee, `Follow-up: ${f.title}${f.text ? " — " + f.text : ""}`, !!f.done); });
   const followCard = follow.size ? `
     <div class="card wc-follow-card" style="margin-top:.8rem">
       <h3 style="margin:0 0 .4rem">Follow-ups <span class="row-sub" style="font-weight:400">· who has what</span></h3>
@@ -365,11 +423,11 @@ function render() {
         ${!next && !isFuture(date) ? `<span class="row-sub" style="margin-left:auto;font-weight:400">Past meeting — record only</span>` : ""}
         ${isFuture(date) ? `<span class="row-sub" style="margin-left:auto;font-weight:400">Board items join once this becomes the next council</span>` : ""}
       </h3>
+      ${followupsHtml(cdoc, editor)}
       <div class="wc-list">
-        ${open.length ? open.map((it, i) => row(it, i + 1)).join("") : `<div class="empty-note" style="padding:.7rem">${next ? "Nothing on the agenda yet." : "No open items."}</div>`}
+        ${items.length ? items.map((it, i) => row(it, i + 1)).join("") : `<div class="empty-note" style="padding:.7rem">${next ? "Nothing on the agenda yet." : "No items."}</div>`}
       </div>
       ${editor ? `<div class="wc-add"><input class="wc-new" placeholder="+ Add an agenda item and press Enter — its notes open right after" autocomplete="off"></div>` : ""}
-      ${done.length ? `<details class="wc-hist" open><summary>Discussed at this meeting (${done.length})</summary>${done.map((it, i) => row(it, open.length + i + 1)).join("")}</details>` : ""}
     </div>
     ${followCard}
     <div class="card" style="margin-top:.8rem">
@@ -404,7 +462,7 @@ function render() {
       e.preventDefault();
       const r = rowEl.getBoundingClientRect();
       const after = e.clientY > r.top + r.height / 2;
-      const keys = openRows.map((x) => x.dataset.key).filter((k) => k !== dragKey);
+      const keys = [...body.querySelectorAll(".wc-list > .wc-row")].map((x) => x.dataset.key).filter((k) => k !== dragKey); // discussed rows keep their place too
       keys.splice(keys.indexOf(rowEl.dataset.key) + (after ? 1 : 0), 0, dragKey);
       dragKey = null; clearMarks();
       try { await saveCouncil(date, { order: keys }); } catch (err) { toast("Couldn't save the order: " + (err.code || err.message)); }
@@ -729,6 +787,53 @@ function render() {
       toast(`${mode === "move" ? "Moved" : "Copied"} to ${fmtDay(target)}`);
     } catch (e) { toast("Couldn't save: " + (e.code || e.message)); render(); }
   };
+  // ---- follow-ups ----
+  const fuList = () => (cdoc.followups || []);
+  const saveFus = (next, msg) => saveCouncil(date, { followups: next }).then(() => { if (msg) toast(msg); }).catch((e) => toast("Couldn't save: " + (e.code || e.message)));
+  const startFollowup = (key, forDate) => {
+    const it = items.find((x) => itemKey(x) === key); if (!it) return;
+    const title = it.kind === "board" ? `${it.k.name} · ${it.t.title}` : it.x.title;
+    const srcNotes = it.kind === "board" ? (it.t.councilNotes || "") : (it.x.notes || "");
+    const rowEl = body.querySelector(`.wc-row[data-key="${key}"] .wc-head`);
+    followupForm(rowEl, { title, forDate, onSave: async (text) => {
+      const target = councils[forDate] || {};
+      const fu = { id: "f" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), title, text, srcNotes, from: date, fromKey: key, assignee: (it.kind === "board" ? it.t.councilAssignee : it.x.assignee) || "", done: false, createdAt: new Date().toISOString(), by: ctx.name || "" };
+      try { await saveCouncil(forDate, { followups: [...(target.followups || []), fu] }); toast(`Follow-up added to ${fmtDay(forDate)}`); }
+      catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
+    } });
+  };
+  body.querySelectorAll("[data-futoggle]").forEach((h) => h.addEventListener("click", (e) => {
+    if (e.target.closest("button, [data-fuassign]")) return;
+    const id = h.dataset.futoggle; if (fuOpen.has(id)) fuOpen.delete(id); else fuOpen.add(id); render();
+  }));
+  body.querySelectorAll("[data-fudone]").forEach((b) => b.addEventListener("click", () => {
+    const f = fuList().find((x) => x.id === b.dataset.fudone); if (!f) return;
+    saveFus(fuList().map((x) => (x.id === f.id ? { ...x, done: !x.done, doneAt: x.done ? "" : new Date().toISOString() } : x)), f.done ? "Open again" : "Done ✓");
+  }));
+  body.querySelectorAll("[data-furemove]").forEach((b) => b.addEventListener("click", () => {
+    const f = fuList().find((x) => x.id === b.dataset.furemove); if (!f || !confirm(`Remove the follow-up on “${f.title}”?`)) return;
+    saveFus(fuList().filter((x) => x.id !== f.id), "Removed");
+  }));
+  body.querySelectorAll("[data-fuassign]").forEach((chip) => chip.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const f = fuList().find((x) => x.id === chip.dataset.fuassign); if (!f) return;
+    pickName(chip, f.assignee || "", (val) => saveFus(fuList().map((x) => (x.id === f.id ? { ...x, assignee: val } : x)), val ? "Handed to " + val : "Assignment removed"), { orgs: true });
+  }));
+  body.querySelectorAll("[data-fuagain]").forEach((b) => b.addEventListener("click", () => {
+    const f = fuList().find((x) => x.id === b.dataset.fuagain); if (!f) return;
+    const forDate = councilsAfter(date)[0]; if (!forDate) return toast("No later council dates are set — add some under 📅 Council dates");
+    followupForm(b.closest(".wc-fu-head"), { title: f.title, forDate, text: f.text, onSave: async (text) => {
+      const target = councils[forDate] || {};
+      const again = { ...f, id: "f" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), text, from: date, done: false, doneAt: "", createdAt: new Date().toISOString(), by: ctx.name || "" };
+      try { await saveCouncil(forDate, { followups: [...(target.followups || []), again] }); toast(`Carried to ${fmtDay(forDate)}`); }
+      catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
+    } });
+  }));
+  body.querySelectorAll("[data-fuedit]").forEach((b) => b.addEventListener("click", () => {
+    const f = fuList().find((x) => x.id === b.dataset.fuedit); if (!f) return;
+    followupForm(b.closest(".wc-fu-body"), { title: f.title, forDate: date, text: f.text, onSave: (text) => saveFus(fuList().map((x) => (x.id === f.id ? { ...x, text } : x)), "Saved") });
+  }));
+
   const closeMenus = () => body.querySelectorAll(".wc-menu").forEach((x) => x.remove());
   body.querySelectorAll(".wc-row [data-actions]").forEach((b) => b.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -742,6 +847,8 @@ function render() {
     menu.className = "wc-menu";
     const mainMenu = () => {
       menu.innerHTML = nextD ? `
+        <button type="button" data-m="followup-next" title="Put a follow-up at the top of the next council's agenda">↪ Follow up at next council <span>${fmtDay(nextD)}</span></button>
+        <div class="wc-menu-sep"></div>
         ${isBoard ? "" : `<button type="button" data-m="copy-next">Copy to next council <span>${fmtDay(nextD)}</span></button>`}
         <button type="button" data-m="move-next">Move to next council <span>${fmtDay(nextD)}</span></button>
         ${targets.length > 1 ? `<div class="wc-menu-sep"></div>
@@ -751,6 +858,7 @@ function render() {
       menu.querySelectorAll("[data-m]").forEach((mi) => mi.addEventListener("click", (ev) => {
         ev.stopPropagation();
         const [mode, when] = mi.dataset.m.split("-");
+        if (mode === "followup") { closeMenus(); startFollowup(key, nextD); return; }
         if (when === "next") { closeMenus(); carry(key, mode, nextD); }
         else pickDate(mode);
       }));

@@ -1939,3 +1939,28 @@ button.src-st { cursor: pointer; } button.src-st:hover { filter: brightness(.93)
 .src-board-link { color: var(--brand); text-decoration: none; font-weight: 600; margin-right: .2rem; }
 .src-board-link:hover { text-decoration: underline; }
 .board-card.board-card-flash { box-shadow: 0 0 0 4px var(--brand-soft), 0 0 0 6px var(--brand); transition: box-shadow .3s; }
+/* Ward Council: discussed items stay in place; follow-ups at the top (2026-10-11) */
+.wc-done-badge { display: inline-block; margin-left: .5rem; font-size: .74rem; font-weight: 700; color: #22693f; background: #dff3e6; border-radius: 99px; padding: .08rem .55rem; vertical-align: middle; }
+.wc-row.wc-done .wc-title { color: var(--ink-soft); }
+.wc-row.wc-done .wc-cnotes { opacity: .85; }
+.wc-fus { margin: .2rem 0 .9rem; padding: .6rem .7rem .5rem; background: #fdf6e3; border: 1px solid #efd9a0; border-radius: 12px; }
+.wc-fus-head { display: flex; align-items: center; gap: .5rem; font-weight: 800; font-size: .8rem; text-transform: uppercase; letter-spacing: .07em; color: #8a6500; margin-bottom: .4rem; }
+.wc-fus-head .row-sub { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.wc-fu { background: #fff; border: 1px solid #efd9a0; border-radius: 10px; margin-bottom: .4rem; }
+.wc-fu-head { display: flex; align-items: center; gap: .5rem; padding: .45rem .65rem; cursor: pointer; flex-wrap: wrap; }
+.wc-fu-caret { color: #b89a52; width: .8rem; flex: none; }
+.wc-fu-title { flex: none; max-width: 40%; }
+.wc-fu-text { flex: 1; min-width: 8rem; color: var(--ink); }
+.wc-fu-from { font-size: .76rem; color: var(--ink-soft); white-space: nowrap; }
+.wc-fu-tools { display: inline-flex; gap: .2rem; margin-left: auto; }
+.wc-fu-body { padding: .2rem .9rem .7rem 2rem; border-top: 1px dashed #efd9a0; }
+.wc-fu-need, .wc-fu-src { margin-top: .5rem; }
+.wc-fu-need > span, .wc-fu-src > span { display: block; font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); margin-bottom: .15rem; }
+.wc-fu-src .wc-cnotes { padding: .2rem 0 0 .5rem; border-left: 3px solid #efd9a0; }
+.wc-fu.wc-fu-done .wc-fu-title, .wc-fu.wc-fu-done .wc-fu-text { text-decoration: line-through; color: var(--ink-soft); }
+.wc-fus-done { margin-top: .4rem; } .wc-fus-done summary { cursor: pointer; font-size: .82rem; color: var(--ink-soft); }
+.wc-fu-form { margin: .4rem 0 .5rem; padding: .55rem .7rem; background: #fdf6e3; border: 1px solid #efd9a0; border-radius: 10px; }
+.wc-fu-form-title { font-size: .9rem; margin-bottom: .35rem; }
+.wc-fu-form textarea { width: 100%; font: inherit; padding: .45rem .6rem; border: 1px solid var(--line); border-radius: 8px; resize: vertical; }
+.wc-fu-form-actions { display: flex; justify-content: flex-end; gap: .4rem; margin-top: .4rem; }
+.wc-asg-opt i { font-style: normal; font-size: .72rem; color: var(--ink-soft); background: #eef1f4; border-radius: 99px; padding: 0 .4rem; }
