@@ -2127,3 +2127,10 @@ button.src-reqst { cursor: pointer; } button.src-reqst:hover { filter: brightnes
 .src-card-b .src-openreq-txt { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.3; }
 .src-ini { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 1.35rem; height: 1.15rem; padding: 0 .25rem; border-radius: 99px; background: #e8edf3; color: #3b4a5c; font-size: .58rem; font-weight: 700; letter-spacing: .04em; margin-left: .15rem; }
 .src-card-b.src-card-x .src-openreq-txt { -webkit-line-clamp: unset; }
+/* drag a Self-Reliance card between Open and Closed (2026-10-11) */
+.src-card[draggable] { cursor: grab; }
+.src-card.src-dragging { opacity: .45; }
+.src-grid-inner { min-height: 3rem; border-radius: 12px; transition: background .12s, box-shadow .12s; }
+.src-grid-inner.src-drop-over { background: var(--brand-soft); box-shadow: 0 0 0 2px var(--brand); }
+.src-drop-hint { color: #9aa4b1; font-style: italic; }
+.src-card[draggable] { user-select: none; -webkit-user-select: none; } /* so a drag never turns into a text selection */

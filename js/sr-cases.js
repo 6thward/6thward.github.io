@@ -18,18 +18,18 @@
 //   plan[]     — the plan, as dated notes { id, at, text, by } (2026-10-11)
 
 // Same privacy as the rest of this page: only the bishop and people given Self-Reliance.
-import { db } from "./firebase-init.js?v=1791783337";
-import { ctx, can, goTab } from "./app.js?v=1791783337";
+import { db } from "./firebase-init.js?v=1791783505";
+import { ctx, can, goTab } from "./app.js?v=1791783505";
 import {
   collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791783337";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine, inlineFmt } from "./notes.js?v=1791783337";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1791783337";
+import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791783505";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine, inlineFmt } from "./notes.js?v=1791783505";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1791783505";
 import {
   INC, EXP, QA, parseCsv, mapResponses, personKey, respTotals, fmtUsd, isBlank, writeupSections,
   parseBudgetCsv, parseMoney, budgetTotals, fmtUsdC,
-} from "./sr-import.js?v=1791783337";
+} from "./sr-import.js?v=1791783505";
 
 let mount = null, cases = [], started = false, openId = null, openRi = null;
 let loaded = null, markLoaded = null; // resolves once the cards have arrived (for opening one from another page)
@@ -111,6 +111,26 @@ const requestsOf = (c) => {
   return raw.map((q, i) => (q.status ? q : { ...q, status: i === 0 && c.status !== "closed" ? "open" : "closed" }));
 };
 const openRequests = (c) => requestsOf(c).filter((q) => q.status === "open");
+// Click the Open / Closed pill (2026-10-11): closing closes every open request too; re-opening re-opens the newest
+// request (or, on a card with no requests yet, just flips the stored status).
+async function toggleCardStatus(c) {
+  const st = statusOf(c), reqs = requestsOf(c).map((q) => ({ ...q })), now = new Date().toISOString();
+  let patch, msg;
+  if (st === "open") {
+    const open = reqs.filter((q) => q.status === "open");
+    if (open.length && !confirm(`Close ${displayName(c)}? ${open.length === 1 ? "The open request" : `All ${open.length} open requests`} will be marked closed too.`)) return;
+    open.forEach((q) => { q.status = "closed"; q.closedAt = now; });
+    patch = { status: "closed", closedAt: now, requests: reqs.map((q) => (q.id === "legacy" ? { ...q, id: "q" + Date.now().toString(36) + "old" } : q)) };
+    msg = `${displayName(c)} — closed`;
+  } else {
+    if (reqs.length) { reqs[0].status = "open"; reqs[0].closedAt = ""; } // newest first
+    patch = { status: "open", closedAt: "", requests: reqs.map((q) => (q.id === "legacy" ? { ...q, id: "q" + Date.now().toString(36) + "old" } : q)), requested: reqs[0]?.text || c.requested || "" };
+    msg = reqs.length ? `${displayName(c)} — re-opened (latest request open again)` : `${displayName(c)} — re-opened`;
+  }
+  if (!reqs.length) delete patch.requests;
+  try { await updateDoc(doc(db, "srCases", c.id), { ...patch, updatedAt: serverTimestamp() }); toast(msg); }
+  catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
+}
 const planOf = (c) => [...(c.plan || [])].sort((a, b) => String(b.at).localeCompare(String(a.at))); // newest first
 // "JC" for Jordan Christensen — who logged an entry, as a little tag on the card (2026-10-11)
 const initials = (by) => { const w = String(by || "").trim().split(/\s+/).filter(Boolean); return w.length ? (w.length === 1 ? w[0].slice(0, 2) : w[0][0] + w[w.length - 1][0]).toUpperCase() : ""; };
@@ -159,8 +179,10 @@ function renderGrid() {
     const row = (e) => e.a
       ? `<div class="src-tl-row"><span class="src-tl-d">${esc(fmtShort(e.a.at))}</span>${e.a.type ? `<span class="src-act-type src-at-${esc(e.a.type)}">${esc(actionTypeLabel(e.a.type) || e.a.type)}</span>` : ""}<span class="src-tl-t">${esc(plainLine(e.a.text || ""))}</span>${iniTag(e.a.by)}</div>`
       : `<div class="src-tl-row src-tl-req${e.q.status === "open" ? " src-tl-open" : ""}"><span class="src-tl-d">${esc(fmtShort(e.q.at))}</span><span class="src-act-type src-at-req">Request</span><span class="src-tl-t">${esc(plainLine(e.q.text || ""))}</span><span class="src-tl-st src-tl-st-${e.q.status}">${e.q.status}</span>${iniTag(e.q.by)}</div>`;
-    return `<div class="src-card src-card-b${st === "closed" ? " src-card-closed" : ""}" data-id="${c.id}" tabindex="0">
-      <div class="src-card-top"><b class="src-name">${esc(displayName(c))}</b><span class="pill src-st ${STATUS_PILL[st]}" title="${st === "open" ? `${opens.length} open request${opens.length === 1 ? "" : "s"}` : `Closed${c.closedAt ? " " + fmtDay(c.closedAt) : ""} — no open request`}">${st === "closed" ? "Closed" : "Open"}</span></div>
+    return `<div class="src-card src-card-b${st === "closed" ? " src-card-closed" : ""}" data-id="${c.id}" tabindex="0"${editor() ? ` draggable="true" title="Drag into the other section to close or re-open"` : ""}>
+      <div class="src-card-top"><b class="src-name">${esc(displayName(c))}</b>${editor()
+        ? `<button type="button" class="pill src-st ${STATUS_PILL[st]}" data-toggle="${c.id}" title="${st === "open" ? `${opens.length} open request${opens.length === 1 ? "" : "s"} — click to close` : `Closed${c.closedAt ? " " + fmtDay(c.closedAt) : ""} — click to re-open`}">${st === "closed" ? "Closed" : "Open"}</button>`
+        : `<span class="pill src-st ${STATUS_PILL[st]}" title="${st === "open" ? `${opens.length} open request${opens.length === 1 ? "" : "s"}` : `Closed${c.closedAt ? " " + fmtDay(c.closedAt) : ""} — no open request`}">${st === "closed" ? "Closed" : "Open"}</span>`}</div>
       <div class="src-bio">${esc(c.bio || "")}</div>
       <div class="src-openreqs">${editor() ? `<button type="button" class="src-addreq" data-addreq="${c.id}" title="Add a request">+</button>` : ""}${opens.length ? opens.map((q, i) => `<div class="src-openreq"><span class="src-openreq-lbl">Open request · ${esc(fmtDay(q.at))}${i === 0 && opens.length > 1 ? `<span class="src-openreq-more"> · +${opens.length - 1} more</span>` : ""}</span><span class="src-openreq-txt">${esc(plainLine(q.text || ""))}</span></div>`).join("") : `<div class="src-openreq src-openreq-none">No open request</div>`}</div>
       <div class="src-tl"><span class="src-tl-h">Latest</span>${tl.length ? tl.map(row).join("") : `<span class="row-sub">Nothing logged yet</span>`}</div>
@@ -169,9 +191,42 @@ function renderGrid() {
     </div>`;
   };
   // open cards on top; closed ones keep their place in a section underneath
-  grid.innerHTML = `<div class="src-grid-inner">${openRows.length ? openRows.map(cardHtml).join("") : `<div class="card empty-note" style="grid-column:1/-1">No open cards${q ? " match" : ""}.</div>`}</div>`
-    + (closedRows.length ? `<h3 class="src-closed-head">Closed <span class="pill src-st src-st-closed">${closedRows.length}</span></h3><div class="src-grid-inner src-grid-closed">${closedRows.map(cardHtml).join("")}</div>` : "");
-  // (the Open ⇄ Closed toggle is gone — a card's status follows its requests, 2026-10-11)
+  // both sections always exist for editors so a card can be dragged into either one (2026-10-11)
+  grid.innerHTML = `<div class="src-grid-inner src-grid-open" data-sect="open">${openRows.length ? openRows.map(cardHtml).join("") : `<div class="card empty-note" style="grid-column:1/-1">No open cards${q ? " match" : ""}.${editor() && closedRows.length ? " Drag a closed card up here to re-open it." : ""}</div>`}</div>`
+    + (closedRows.length || editor() ? `<h3 class="src-closed-head">Closed <span class="pill src-st src-st-closed">${closedRows.length}</span></h3><div class="src-grid-inner src-grid-closed" data-sect="closed">${closedRows.length ? closedRows.map(cardHtml).join("") : `<div class="card empty-note src-drop-hint" style="grid-column:1/-1">Drag a card down here to close it.</div>`}</div>` : "");
+  // drag a card into the other section: dropping on Closed closes it (requests too), dropping on the open section re-opens it
+  if (editor()) {
+    let dragId = null;
+    grid.querySelectorAll(".src-card[draggable]").forEach((el) => {
+      el.addEventListener("dragstart", (e) => { dragId = el.dataset.id; e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", ""); } catch {} el.classList.add("src-dragging"); });
+      el.addEventListener("dragend", () => { dragId = null; el.classList.remove("src-dragging"); grid.querySelectorAll(".src-drop-over").forEach((x) => x.classList.remove("src-drop-over")); });
+    });
+    const sects = [...grid.querySelectorAll("[data-sect]")];
+    const head = grid.querySelector(".src-closed-head"); // the "Closed" headline counts as part of the closed section
+    const sectOf = (node) => node.dataset.sect ? node : grid.querySelector('[data-sect="closed"]');
+    [...sects, ...(head ? [head] : [])].forEach((node) => {
+      node.addEventListener("dragover", (e) => {
+        if (!dragId) return;
+        const c = cases.find((x) => x.id === dragId); if (!c || statusOf(c) === sectOf(node).dataset.sect) return; // same section: nothing to do
+        e.preventDefault(); e.dataTransfer.dropEffect = "move";
+        grid.querySelectorAll(".src-drop-over").forEach((x) => x.classList.remove("src-drop-over")); sectOf(node).classList.add("src-drop-over");
+      });
+      node.addEventListener("dragleave", (e) => { if (!node.contains(e.relatedTarget)) sectOf(node).classList.remove("src-drop-over"); });
+      node.addEventListener("drop", async (e) => {
+        if (!dragId) return;
+        e.preventDefault();
+        const c = cases.find((x) => x.id === dragId); const id = dragId; dragId = null;
+        grid.querySelectorAll(".src-drop-over").forEach((x) => x.classList.remove("src-drop-over"));
+        if (c && statusOf(c) !== sectOf(node).dataset.sect) await toggleCardStatus(c);
+        void id;
+      });
+    });
+  }
+  // Open ⇄ Closed on the card pill (closes / re-opens the requests with it)
+  grid.querySelectorAll("[data-toggle]").forEach((b) => b.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const c = cases.find((x) => x.id === b.dataset.toggle); if (c) toggleCardStatus(c);
+  }));
   // every card is the same shape (sections capped, text clipped) so they line up across the row; ⌄ lets one card show everything
   // "+" on the request banner: open the card with a new-request row ready to type (2026-10-11)
   grid.querySelectorAll("[data-addreq]").forEach((b) => b.addEventListener("click", (e) => {
@@ -289,7 +344,8 @@ function detailHtml(c, ri) {
           ? `<span class="src-bio${ed ? " src-bio-ed" : ""}"${ed ? ` data-bioedit title="Click to edit"` : ""}>${esc(c.bio)}</span>`
           : ed ? `<span class="src-bio src-bio-empty" data-bioedit>+ Who they are — a line or two to jog your memory</span>` : ""}</div></div>
       <div class="src-d-tools">
-        <span class="pill src-st ${STATUS_PILL[st]}" title="${st === "open" ? `Open — ${openRequests(c).length} open request${openRequests(c).length === 1 ? "" : "s"}. Close the last open request to close the card.` : `Closed${c.closedAt ? " " + esc(fmtDay(c.closedAt)) : ""} — no open request. A new request re-opens it.`}">${esc(STATUS.find(([k]) => k === st)?.[1] || st)}</span>
+        ${ed ? `<button type="button" class="pill src-st ${STATUS_PILL[st]}" id="srd-status" title="${st === "open" ? `Open — ${openRequests(c).length} open request${openRequests(c).length === 1 ? "" : "s"}. Click to close the card (and its open requests).` : `Closed${c.closedAt ? " " + esc(fmtDay(c.closedAt)) : ""}. Click to re-open.`}">${esc(STATUS.find(([k]) => k === st)?.[1] || st)}</button>`
+          : `<span class="pill src-st ${STATUS_PILL[st]}">${esc(STATUS.find(([k]) => k === st)?.[1] || st)}</span>`}
         <button class="btn btn-sm" id="srd-print" type="button">🖨 Print</button>
       </div>
     </div>
@@ -430,7 +486,7 @@ function drawOpen() {
     deleteAttachment("srCases", meta).catch(() => {});
   }));
 
-  // (status is no longer set by hand — it follows the requests, 2026-10-11)
+  box.querySelector("#srd-status")?.addEventListener("click", async () => { await toggleCardStatus(c); drawOpen(); });
   // --- budgets: import the specialist's sheet, add a what-if, edit lines ---
   const budgets = c.budgets || [];
   box.querySelector("#srb-edit")?.addEventListener("click", () => { budgetEditing = true; drawOpen(); });
