@@ -1917,3 +1917,4 @@ button.src-st { cursor: pointer; } button.src-st:hover { filter: brightness(.93)
 .st-li-hymn .hymn-num { flex: none; white-space: nowrap; }
 .st-li-hymn .hymn-bar { flex: none; align-self: stretch; width: 1.5px; background: currentColor; opacity: .45; border-radius: 1px; }
 .st-li-hymn .hymn-title { flex: 1; min-width: 0; text-align: left; overflow-wrap: anywhere; }
+.st-inter .st-music-in.st-music-ro { padding: .1rem .2rem; cursor: default; }

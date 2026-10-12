@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1791765837";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1791765837";
+import { db } from "./firebase-init.js?v=1791765884";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1791765884";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1791765837";
-import { HYMNS } from "./hymns.js?v=1791765837";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1791765837";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1791765884";
+import { HYMNS } from "./hymns.js?v=1791765884";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1791765884";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -1017,11 +1017,13 @@ function statusChips(m, date) {
     const pill = (label, inner) => `<span class="st-music-field st-music-labelled"><span class="st-li-tag">${label}</span>${inner}</span>`;
     const field = mode === "none" ? ""
       : mode === "hymn"
-      ? pill("Hymn:", `<input class="st-in-title st-music-in hymn-combo" data-mfield="hymn" list="dl-hymn-all" placeholder="number or title…" autocomplete="off" value="${esc(detail)}">`)
+      ? pill("Who:", `<span class="st-music-in st-music-ro">Congregation</span>`)
+        + pill("Hymn:", `<input class="st-in-title st-music-in hymn-combo" data-mfield="hymn" list="dl-hymn-all" placeholder="number or title…" autocomplete="off" value="${esc(detail)}">`)
       : mode === "musical"
       ? pill("Who:", `<textarea class="st-in-title st-music-in st-music-ta" data-mfield="musical" placeholder="person or group" rows="1" autocomplete="off">${esc(detail)}</textarea>`)
         + pill("Hymn:", `<textarea class="st-in-title st-music-in st-music-ta" data-mfield="musicalHymn" placeholder="song or piece" rows="1" autocomplete="off">${esc(slotMusical.hymn || "")}</textarea>`)
-      : pill("Hymn:", `<textarea class="st-in-title st-music-in st-music-ta" data-mfield="${mode}" placeholder="song or piece" rows="1" autocomplete="off">${esc(detail)}</textarea>`); // wraps onto a 2nd line (2026-09-20)
+      : pill("Who:", `<span class="st-music-in st-music-ro">${mode === "youthChoir" ? "Youth Choir" : "Choir"}</span>`) // the choir named by the type above
+        + pill("Hymn:", `<textarea class="st-in-title st-music-in st-music-ta" data-mfield="${mode}" placeholder="song or piece" rows="1" autocomplete="off">${esc(detail)}</textarea>`); // wraps onto a 2nd line (2026-09-20)
     const conf = slotIt && slotIt.kind !== "intermediateHymn" && filled
       ? `<span class="st-li-ic st-confirm-dot${isConf(slotIt) ? "" : " st-unconf"}" data-confirm='${JSON.stringify({ k: slotIt.kind, o: 0 })}' title="${isConf(slotIt) ? "Confirmed — click if this still needs confirming" : "Not confirmed yet — click once it's confirmed"}">${isConf(slotIt) ? "✓" : "!"}</span>`
       : "";
