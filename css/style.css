@@ -2087,3 +2087,12 @@ button.src-reqst { cursor: pointer; } button.src-reqst:hover { filter: brightnes
 .src-card-b .src-bio, .src-card-b .src-openreq, .src-card-b .src-tl-d, .src-card-b .src-tl-t, .src-card-b .src-tl-open .src-tl-t,
 .src-card-b .src-planline, .src-card-b .src-card-foot, .src-card-b .src-foot-left { font-weight: 400; }
 .src-card-b .src-tl-d { color: var(--ink-soft); }
+
+/* Self-Reliance detail: the name edits in place (2026-10-11) */
+.src-name-ed { cursor: text; }
+.src-name-pen { font-size: .7em; color: #b3bac4; margin-left: .4rem; vertical-align: middle; opacity: 0; transition: opacity .12s; }
+.src-name-ed:hover .src-name-pen { opacity: 1; }
+.src-who-form { display: flex; gap: .6rem; flex-wrap: wrap; align-items: flex-end; margin: .1rem 0 .4rem; }
+.src-who-form label { display: flex; flex-direction: column; gap: .15rem; font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); }
+.src-who-form input { font: inherit; font-size: .95rem; text-transform: none; letter-spacing: 0; padding: .35rem .5rem; border: 1px solid var(--line); border-radius: 8px; background: #fff; min-width: 12rem; }
+.src-who-form .src-act-form-tools { margin-left: 0; align-self: flex-end; }

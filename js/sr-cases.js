@@ -18,18 +18,18 @@
 //   plan[]     — the plan, as dated notes { id, at, text, by } (2026-10-11)
 
 // Same privacy as the rest of this page: only the bishop and people given Self-Reliance.
-import { db } from "./firebase-init.js?v=1791782371";
-import { ctx, can, goTab } from "./app.js?v=1791782371";
+import { db } from "./firebase-init.js?v=1791782516";
+import { ctx, can, goTab } from "./app.js?v=1791782516";
 import {
   collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791782371";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine, inlineFmt } from "./notes.js?v=1791782371";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1791782371";
+import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791782516";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine, inlineFmt } from "./notes.js?v=1791782516";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1791782516";
 import {
   INC, EXP, QA, parseCsv, mapResponses, personKey, respTotals, fmtUsd, isBlank, writeupSections,
   parseBudgetCsv, parseMoney, budgetTotals, fmtUsdC,
-} from "./sr-import.js?v=1791782371";
+} from "./sr-import.js?v=1791782516";
 
 let mount = null, cases = [], started = false, openId = null, openRi = null;
 let loaded = null, markLoaded = null; // resolves once the cards have arrived (for opening one from another page)
@@ -266,7 +266,7 @@ function detailHtml(c, ri) {
   const rs = sorted(c), r = rs[ri] || null, st = statusOf(c), ed = editor();
   return `
     <div class="src-d-head">
-      <div><h3>${esc(c.name || "—")}</h3>
+      <div id="srd-who"><h3${ed ? ` class="src-name-ed" data-nameedit title="Click to edit the name"` : ""}>${esc(c.name || "—")}${ed ? `<span class="src-name-pen">✎</span>` : ""}</h3>
         <div class="row-sub">${[c.spouse ? "& " + esc(c.spouse) : "", boardCards.some((k) => k.srCase === c.id) ? `<a href="#" class="src-board-link" data-board="${esc(boardCards.find((k) => k.srCase === c.id).id)}" title="Open their Member Board card">📋 Member Board</a>` : "", c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : ""].filter(Boolean).join(" · ")}</div>
         <div class="src-bio-line" id="srd-bio">${(c.bio || "").trim()
           ? `<span class="src-bio${ed ? " src-bio-ed" : ""}"${ed ? ` data-bioedit title="Click to edit"` : ""}>${esc(c.bio)}</span>`
@@ -360,7 +360,7 @@ function refreshOpen() {
   if (!cases.some((x) => x.id === openId)) { closeModal(); openId = null; return; }
   if (box.querySelector(".src-rich-editor") || box.querySelector(".src-budget-editing")) return; // a summary / note / budget is being written
   if (box.querySelector(".src-wu-editor")) return;                                       // a write-up is being edited
-  if (box.querySelector(".src-act-form")) return;                                        // an action-log entry is being typed
+  if (box.querySelector(".src-act-form") || box.querySelector(".src-who-form")) return;  // an entry or the name is being typed
   drawOpen();
 }
 function drawOpen() {
@@ -585,6 +585,24 @@ function drawOpen() {
     await saveRequests(requestsOf(c).map((x) => (x.id === q.id ? { ...x, status: closing ? "closed" : "open", closedAt: closing ? new Date().toISOString() : "" } : x)), closing ? "Request closed" : "Request re-opened");
     drawOpen();
   }));
+  // the name itself (plus spouse and email) edits in place from the headline (2026-10-11)
+  box.querySelector("[data-nameedit]")?.addEventListener("click", () => {
+    const who = box.querySelector("#srd-who"); if (!who || who.querySelector(".src-who-form")) return;
+    who.innerHTML = `<div class="src-who-form">
+      <label>Name <input data-wn value="${esc(c.name || "")}" autocomplete="off" maxlength="120"></label>
+      <label>Spouse <input data-ws value="${esc(c.spouse || "")}" autocomplete="off" maxlength="120" placeholder="optional"></label>
+      <label>Email <input data-we type="email" value="${esc(c.email || "")}" autocomplete="off" maxlength="160" placeholder="optional"></label>
+      <span class="src-act-form-tools"><button type="button" class="btn btn-sm" data-x="cancel">Cancel</button><button type="button" class="btn btn-primary btn-sm" data-x="save">Save</button></span></div>`;
+    const f = who.querySelector(".src-who-form"); f.querySelector("[data-wn]").focus();
+    const done = async (commit) => {
+      const name = f.querySelector("[data-wn]").value.trim(), spouse = f.querySelector("[data-ws]").value.trim(), email = f.querySelector("[data-we]").value.trim();
+      if (commit && !name) { f.querySelector("[data-wn]").focus(); return toast("A name is needed"); }
+      if (commit && (name !== (c.name || "") || spouse !== (c.spouse || "") || email !== (c.email || ""))) await save({ name, spouse, email }, "Saved");
+      drawOpen();
+    };
+    f.querySelectorAll("[data-x]").forEach((b) => b.addEventListener("click", () => done(b.dataset.x === "save")));
+    f.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); done(true); } if (e.key === "Escape") { e.preventDefault(); done(false); } });
+  });
   // who they are: a one-line bio under the name, edited in place (2026-10-11)
   box.querySelectorAll("[data-bioedit]").forEach((el) => el.addEventListener("click", () => {
     const line = box.querySelector("#srd-bio"); if (!line || line.querySelector("input")) return;
