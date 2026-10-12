@@ -319,11 +319,12 @@ label.field input:focus, label.field select:focus, label.field textarea:focus {
   vertical-align: middle;
   line-height: 1;
 }
-.megaphone-btn.has-announce { background: #cddff1; color: var(--brand); }
-.megaphone-btn.has-announce:hover { background: #bed5ec; }
-.megaphone-btn.has-announce svg { stroke-width: 2.5; }
-.megaphone-btn.has-wb { background: #e3f2e8; color: var(--ok); }
-.megaphone-btn.has-wb:hover { background: #d5ecdd; }
+/* when there's something there, the icon goes solid — bold colour, white glyph — so it's obvious at a glance (2026-10-11) */
+.megaphone-btn.has-announce { background: var(--brand); color: #fff; box-shadow: 0 1px 2px rgba(31,78,121,.35); }
+.megaphone-btn.has-announce:hover { background: #163a5c; }
+.megaphone-btn.has-announce svg, .megaphone-btn.has-wb svg { stroke-width: 2.6; }
+.megaphone-btn.has-wb { background: var(--ok); color: #fff; box-shadow: 0 1px 2px rgba(46,125,79,.35); }
+.megaphone-btn.has-wb:hover { background: #256641; }
 .pill-choir-bold {
   display: inline-block;
   background: #4c3fa8; color: #fff;
