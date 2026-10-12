@@ -18,18 +18,18 @@
 //   plan[]     — the plan, as dated notes { id, at, text, by } (2026-10-11)
 
 // Same privacy as the rest of this page: only the bishop and people given Self-Reliance.
-import { db } from "./firebase-init.js?v=1791783089";
-import { ctx, can, goTab } from "./app.js?v=1791783089";
+import { db } from "./firebase-init.js?v=1791783337";
+import { ctx, can, goTab } from "./app.js?v=1791783337";
 import {
   collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791783089";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine, inlineFmt } from "./notes.js?v=1791783089";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1791783089";
+import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791783337";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine, inlineFmt } from "./notes.js?v=1791783337";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1791783337";
 import {
   INC, EXP, QA, parseCsv, mapResponses, personKey, respTotals, fmtUsd, isBlank, writeupSections,
   parseBudgetCsv, parseMoney, budgetTotals, fmtUsdC,
-} from "./sr-import.js?v=1791783089";
+} from "./sr-import.js?v=1791783337";
 
 let mount = null, cases = [], started = false, openId = null, openRi = null;
 let loaded = null, markLoaded = null; // resolves once the cards have arrived (for opening one from another page)
@@ -112,6 +112,9 @@ const requestsOf = (c) => {
 };
 const openRequests = (c) => requestsOf(c).filter((q) => q.status === "open");
 const planOf = (c) => [...(c.plan || [])].sort((a, b) => String(b.at).localeCompare(String(a.at))); // newest first
+// "JC" for Jordan Christensen — who logged an entry, as a little tag on the card (2026-10-11)
+const initials = (by) => { const w = String(by || "").trim().split(/\s+/).filter(Boolean); return w.length ? (w.length === 1 ? w[0].slice(0, 2) : w[0][0] + w[w.length - 1][0]).toUpperCase() : ""; };
+const iniTag = (by) => (by ? `<span class="src-ini" title="${esc(by)}">${esc(initials(by))}</span>` : "");
 const fmtShort = (iso) => { const d = iso ? new Date(iso) : null; return d && !isNaN(d) ? d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""; };
 const logOf = (c) => [...(c.log || []), ...((c.notes || "").trim() ? [{ id: "legacy", at: "", by: "", text: c.notes }] : [])]
   .sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")));
@@ -154,12 +157,12 @@ function renderGrid() {
     const opens = openRequests(c), acts = actionsOf(c), reqs = requestsOf(c), plan = planOf(c);
     const tl = [...acts.map((a) => ({ at: a.at, a })), ...reqs.map((q) => ({ at: q.at, q }))].sort((x, y) => String(y.at).localeCompare(String(x.at))).slice(0, 4);
     const row = (e) => e.a
-      ? `<div class="src-tl-row"><span class="src-tl-d">${esc(fmtShort(e.a.at))}</span>${e.a.type ? `<span class="src-act-type src-at-${esc(e.a.type)}">${esc(actionTypeLabel(e.a.type) || e.a.type)}</span>` : ""}<span class="src-tl-t">${esc(plainLine(e.a.text || ""))}</span></div>`
-      : `<div class="src-tl-row src-tl-req${e.q.status === "open" ? " src-tl-open" : ""}"><span class="src-tl-d">${esc(fmtShort(e.q.at))}</span><span class="src-act-type src-at-req">Request</span><span class="src-tl-t">${esc(plainLine(e.q.text || ""))}</span><span class="src-tl-st src-tl-st-${e.q.status}">${e.q.status}</span></div>`;
+      ? `<div class="src-tl-row"><span class="src-tl-d">${esc(fmtShort(e.a.at))}</span>${e.a.type ? `<span class="src-act-type src-at-${esc(e.a.type)}">${esc(actionTypeLabel(e.a.type) || e.a.type)}</span>` : ""}<span class="src-tl-t">${esc(plainLine(e.a.text || ""))}</span>${iniTag(e.a.by)}</div>`
+      : `<div class="src-tl-row src-tl-req${e.q.status === "open" ? " src-tl-open" : ""}"><span class="src-tl-d">${esc(fmtShort(e.q.at))}</span><span class="src-act-type src-at-req">Request</span><span class="src-tl-t">${esc(plainLine(e.q.text || ""))}</span><span class="src-tl-st src-tl-st-${e.q.status}">${e.q.status}</span>${iniTag(e.q.by)}</div>`;
     return `<div class="src-card src-card-b${st === "closed" ? " src-card-closed" : ""}" data-id="${c.id}" tabindex="0">
       <div class="src-card-top"><b class="src-name">${esc(displayName(c))}</b><span class="pill src-st ${STATUS_PILL[st]}" title="${st === "open" ? `${opens.length} open request${opens.length === 1 ? "" : "s"}` : `Closed${c.closedAt ? " " + fmtDay(c.closedAt) : ""} — no open request`}">${st === "closed" ? "Closed" : "Open"}</span></div>
       <div class="src-bio">${esc(c.bio || "")}</div>
-      <div class="src-openreqs">${editor() ? `<button type="button" class="src-addreq" data-addreq="${c.id}" title="Add a request">+</button>` : ""}${opens.length ? opens.map((q, i) => `<div class="src-openreq"><span class="src-openreq-lbl">Open request · ${esc(fmtDay(q.at))}${i === 0 && opens.length > 1 ? `<span class="src-openreq-more"> · +${opens.length - 1} more</span>` : ""}</span>${esc(plainLine(q.text || ""))}</div>`).join("") : `<div class="src-openreq src-openreq-none">No open request</div>`}</div>
+      <div class="src-openreqs">${editor() ? `<button type="button" class="src-addreq" data-addreq="${c.id}" title="Add a request">+</button>` : ""}${opens.length ? opens.map((q, i) => `<div class="src-openreq"><span class="src-openreq-lbl">Open request · ${esc(fmtDay(q.at))}${i === 0 && opens.length > 1 ? `<span class="src-openreq-more"> · +${opens.length - 1} more</span>` : ""}</span><span class="src-openreq-txt">${esc(plainLine(q.text || ""))}</span></div>`).join("") : `<div class="src-openreq src-openreq-none">No open request</div>`}</div>
       <div class="src-tl"><span class="src-tl-h">Latest</span>${tl.length ? tl.map(row).join("") : `<span class="row-sub">Nothing logged yet</span>`}</div>
       <div class="src-planbox"><span class="src-tl-h">Plan</span>${plan.length ? plan.slice(0, 3).map((x) => `<div class="src-planline">• ${esc(plainLine(x.text || ""))}</div>`).join("") + (plan.length > 3 ? `<div class="src-planline row-sub">+ ${plan.length - 3} more</div>` : "") : `<span class="row-sub">No plan yet</span>`}</div>
       <div class="src-card-foot"><span>${acts.length} action${acts.length === 1 ? "" : "s"} · ${reqs.length} request${reqs.length === 1 ? "" : "s"}</span>${r ? `<span>plan ${esc(fmtDay(r.at))}</span>` : ""}${(c.files || []).length ? `<span>📎 ${(c.files || []).length}</span>` : ""}${t && t.net != null ? `<span class="src-foot-left ${t.net < 0 ? "neg" : "pos"}">${fmtUsd(t.net)}/mo</span>` : ""}<button type="button" class="src-expand" data-expand title="Show everything on this card">⌄</button></div>
