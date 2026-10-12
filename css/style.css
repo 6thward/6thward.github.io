@@ -2052,3 +2052,38 @@ button.src-reqst { cursor: pointer; } button.src-reqst:hover { filter: brightnes
 .src-reqlog .src-req-open .src-act-text { font-weight: 600; }
 .src-reqlog .src-req-latest .src-act-text { font-weight: inherit; }
 .src-reqst-sel { text-transform: none; }
+
+/* Self-Reliance cards: same shape across the row (2026-10-11). Each section has a fixed height and clips;
+   the ⌄ in the footer lifts the caps on one card. */
+.src-grid-inner { align-items: start; }
+.src-card-b .src-card-top { align-items: flex-start; min-height: 2.9rem; }
+.src-card-b .src-name { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.25; }
+.src-card-b .src-bio { height: 2.3rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.src-card-b .src-openreqs { height: 3.9rem; overflow: hidden; }
+.src-card-b .src-openreq { height: 3.9rem; box-sizing: border-box; overflow: hidden; }
+.src-card-b .src-openreq-none { display: flex; align-items: center; }
+.src-openreq-more { color: #8a6500; font-weight: 700; }
+.src-card-b .src-tl { height: 7.1rem; overflow: hidden; }
+.src-card-b .src-tl-row { align-items: center; height: 1.5rem; box-sizing: border-box; padding: 0; }
+.src-card-b .src-tl-t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.src-card-b .src-tl-row .src-act-type { margin-top: 0; align-self: center; }
+.src-card-b .src-planbox { height: 5rem; overflow: hidden; box-sizing: border-box; }
+.src-card-b .src-planline { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.src-card-b .src-card-foot { align-items: center; margin-top: 0; }
+.src-expand { font: inherit; font-size: 1rem; line-height: 1; border: 1px solid var(--line); background: #fff; color: var(--ink-soft); border-radius: 6px; width: 1.5rem; height: 1.4rem; padding: 0; cursor: pointer; margin-left: .3rem; }
+.src-expand:hover { color: var(--brand); border-color: var(--brand); }
+.src-card-b .src-foot-left { margin-left: auto; }
+/* expanded: everything shows */
+.src-card-b.src-card-x .src-card-top { min-height: 0; }
+.src-card-b.src-card-x .src-name, .src-card-b.src-card-x .src-bio { -webkit-line-clamp: unset; height: auto; }
+.src-card-b.src-card-x .src-bio:empty { display: none; }
+.src-card-b.src-card-x .src-openreqs, .src-card-b.src-card-x .src-openreq, .src-card-b.src-card-x .src-tl, .src-card-b.src-card-x .src-planbox { height: auto; }
+.src-card-b.src-card-x .src-openreq + .src-openreq { margin-top: .35rem; }
+.src-card-b.src-card-x .src-openreq-more { display: none; }
+.src-card-b.src-card-x .src-tl-row { height: auto; align-items: flex-start; padding: .17rem 0; }
+.src-card-b.src-card-x .src-tl-t, .src-card-b.src-card-x .src-planline { white-space: normal; overflow: visible; text-overflow: clip; }
+.src-card-b.src-card-x .src-tl-row .src-act-type { align-self: flex-start; margin-top: .12rem; }
+/* cards: plain weight for everything but the name and the little section headlines (2026-10-11, Jordan) */
+.src-card-b .src-bio, .src-card-b .src-openreq, .src-card-b .src-tl-d, .src-card-b .src-tl-t, .src-card-b .src-tl-open .src-tl-t,
+.src-card-b .src-planline, .src-card-b .src-card-foot, .src-card-b .src-foot-left { font-weight: 400; }
+.src-card-b .src-tl-d { color: var(--ink-soft); }

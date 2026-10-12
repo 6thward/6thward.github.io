@@ -18,18 +18,18 @@
 //   plan[]     — the plan, as dated notes { id, at, text, by } (2026-10-11)
 
 // Same privacy as the rest of this page: only the bishop and people given Self-Reliance.
-import { db } from "./firebase-init.js?v=1791782128";
-import { ctx, can, goTab } from "./app.js?v=1791782128";
+import { db } from "./firebase-init.js?v=1791782371";
+import { ctx, can, goTab } from "./app.js?v=1791782371";
 import {
   collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791782128";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine, inlineFmt } from "./notes.js?v=1791782128";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1791782128";
+import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791782371";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine, inlineFmt } from "./notes.js?v=1791782371";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1791782371";
 import {
   INC, EXP, QA, parseCsv, mapResponses, personKey, respTotals, fmtUsd, isBlank, writeupSections,
   parseBudgetCsv, parseMoney, budgetTotals, fmtUsdC,
-} from "./sr-import.js?v=1791782128";
+} from "./sr-import.js?v=1791782371";
 
 let mount = null, cases = [], started = false, openId = null, openRi = null;
 let loaded = null, markLoaded = null; // resolves once the cards have arrived (for opening one from another page)
@@ -149,17 +149,23 @@ function renderGrid() {
       : `<div class="src-tl-row src-tl-req${e.q.status === "open" ? " src-tl-open" : ""}"><span class="src-tl-d">${esc(fmtShort(e.q.at))}</span><span class="src-act-type src-at-req">Request</span><span class="src-tl-t">${esc(plainLine(e.q.text || ""))}</span><span class="src-tl-st src-tl-st-${e.q.status}">${e.q.status}</span></div>`;
     return `<div class="src-card src-card-b${st === "closed" ? " src-card-closed" : ""}" data-id="${c.id}" tabindex="0">
       <div class="src-card-top"><b class="src-name">${esc(c.name || "—")}${c.spouse ? ` <span class="src-spouse">& ${esc(c.spouse)}</span>` : ""}</b><span class="pill src-st ${STATUS_PILL[st]}" title="${st === "open" ? `${opens.length} open request${opens.length === 1 ? "" : "s"}` : `Closed${c.closedAt ? " " + fmtDay(c.closedAt) : ""} — no open request`}">${st === "closed" ? "Closed" : "Open"}</span></div>
-      ${(c.bio || "").trim() ? `<div class="src-bio">${esc(c.bio)}</div>` : ""}
-      ${opens.length ? opens.map((q) => `<div class="src-openreq"><span class="src-openreq-lbl">Open request · ${esc(fmtDay(q.at))}</span>${esc(plainLine(q.text || ""))}</div>`).join("") : `<div class="src-openreq src-openreq-none">No open request</div>`}
-      ${tl.length ? `<div class="src-tl"><span class="src-tl-h">Latest</span>${tl.map(row).join("")}</div>` : ""}
+      <div class="src-bio">${esc(c.bio || "")}</div>
+      <div class="src-openreqs">${opens.length ? opens.map((q, i) => `<div class="src-openreq"><span class="src-openreq-lbl">Open request · ${esc(fmtDay(q.at))}${i === 0 && opens.length > 1 ? `<span class="src-openreq-more"> · +${opens.length - 1} more</span>` : ""}</span>${esc(plainLine(q.text || ""))}</div>`).join("") : `<div class="src-openreq src-openreq-none">No open request</div>`}</div>
+      <div class="src-tl"><span class="src-tl-h">Latest</span>${tl.length ? tl.map(row).join("") : `<span class="row-sub">Nothing logged yet</span>`}</div>
       <div class="src-planbox"><span class="src-tl-h">Plan</span>${plan.length ? plan.slice(0, 3).map((x) => `<div class="src-planline">• ${esc(plainLine(x.text || ""))}</div>`).join("") + (plan.length > 3 ? `<div class="src-planline row-sub">+ ${plan.length - 3} more</div>` : "") : `<span class="row-sub">No plan yet</span>`}</div>
-      <div class="src-card-foot"><span>${acts.length} action${acts.length === 1 ? "" : "s"} · ${reqs.length} request${reqs.length === 1 ? "" : "s"}</span>${r ? `<span>plan ${esc(fmtDay(r.at))}</span>` : ""}${(c.files || []).length ? `<span>📎 ${(c.files || []).length}</span>` : ""}${t && t.net != null ? `<span class="src-foot-left ${t.net < 0 ? "neg" : "pos"}">${fmtUsd(t.net)}/mo</span>` : ""}</div>
+      <div class="src-card-foot"><span>${acts.length} action${acts.length === 1 ? "" : "s"} · ${reqs.length} request${reqs.length === 1 ? "" : "s"}</span>${r ? `<span>plan ${esc(fmtDay(r.at))}</span>` : ""}${(c.files || []).length ? `<span>📎 ${(c.files || []).length}</span>` : ""}${t && t.net != null ? `<span class="src-foot-left ${t.net < 0 ? "neg" : "pos"}">${fmtUsd(t.net)}/mo</span>` : ""}<button type="button" class="src-expand" data-expand title="Show everything on this card">⌄</button></div>
     </div>`;
   };
   // open cards on top; closed ones keep their place in a section underneath
   grid.innerHTML = `<div class="src-grid-inner">${openRows.length ? openRows.map(cardHtml).join("") : `<div class="card empty-note" style="grid-column:1/-1">No open cards${q ? " match" : ""}.</div>`}</div>`
     + (closedRows.length ? `<h3 class="src-closed-head">Closed <span class="pill src-st src-st-closed">${closedRows.length}</span></h3><div class="src-grid-inner src-grid-closed">${closedRows.map(cardHtml).join("")}</div>` : "");
   // (the Open ⇄ Closed toggle is gone — a card's status follows its requests, 2026-10-11)
+  // every card is the same shape (sections capped, text clipped) so they line up across the row; ⌄ lets one card show everything
+  grid.querySelectorAll("[data-expand]").forEach((b) => b.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const card = b.closest(".src-card"), on = card.classList.toggle("src-card-x");
+    b.textContent = on ? "⌃" : "⌄"; b.title = on ? "Back to the compact card" : "Show everything on this card";
+  }));
   grid.querySelectorAll(".src-card").forEach((el) => {
     const go = () => openCase(el.dataset.id);
     el.addEventListener("click", go);
