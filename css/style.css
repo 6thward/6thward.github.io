@@ -1918,3 +1918,9 @@ button.src-st { cursor: pointer; } button.src-st:hover { filter: brightness(.93)
 .st-li-hymn .hymn-bar { flex: none; align-self: stretch; width: 1.5px; background: currentColor; opacity: .45; border-radius: 1px; }
 .st-li-hymn .hymn-title { flex: 1; min-width: 0; text-align: left; overflow-wrap: anywhere; }
 .st-inter .st-music-in.st-music-ro { padding: .1rem .2rem; cursor: default; }
+/* Calling to Fill: each name under consideration is a pill that can be dragged out on its own (2026-10-11) */
+.cand-line .cand-name-txt.call-person { font-size: .92rem; padding: .12rem .6rem; }
+/* Releases: the three steps framed as one group (2026-10-11) */
+.releases-wrap { margin-top: 1.4rem; padding: .9rem 1rem 1rem; background: #f3f5f8; border: 1px solid var(--line); border-radius: 14px; }
+.releases-wrap .releases-board { margin-top: 0; }
+.releases-wrap .releases-board > .card { background: #fff; }

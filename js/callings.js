@@ -5,13 +5,13 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1791777430";
+import { db } from "./firebase-init.js?v=1791777570";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1791777430";
-import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1791777430";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1791777570";
+import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1791777570";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
@@ -246,7 +246,7 @@ const cardStyle = (label, orgKey) => {
 const fillRow = (c) => {
   const cands = c.candidates || [];
   const sub = cands.length
-    ? cands.map((n, i) => `<div class="cand-line"><span class="cand-x" data-rm="${i}" title="Remove ${esc(n)} from consideration">✕</span><span class="cand-name-txt">${esc(n)}</span><span class="cand-pick${(c.people || []).some((p) => p.toLowerCase() === n.toLowerCase()) ? " on" : ""}" data-star="${i}" title="${(c.people || []).some((p) => p.toLowerCase() === n.toLowerCase()) ? "Chosen — click to unchoose" : "Choose " + esc(n) + " — star everyone being called, then “Issue call”"}">${(c.people || []).some((p) => p.toLowerCase() === n.toLowerCase()) ? "★" : "○"}</span></div>`).join("")
+    ? cands.map((n, i) => `<div class="cand-line"><span class="cand-x" data-rm="${i}" title="Remove ${esc(n)} from consideration">✕</span><span class="cand-name-txt call-person" draggable="true" data-person="${esc(n)}" title="${cands.length > 1 ? "Drag just this name to another column — the other names stay here" : "Drag to the next column"}">${esc(n)}</span><span class="cand-pick${(c.people || []).some((p) => p.toLowerCase() === n.toLowerCase()) ? " on" : ""}" data-star="${i}" title="${(c.people || []).some((p) => p.toLowerCase() === n.toLowerCase()) ? "Chosen — click to unchoose" : "Choose " + esc(n) + " — star everyone being called, then “Issue call”"}">${(c.people || []).some((p) => p.toLowerCase() === n.toLowerCase()) ? "★" : "○"}</span></div>`).join("")
     : "";
   // Inline add box (2026-09-13): type a name + Enter to add it to the
   // consideration list without opening the editor. The card itself still
@@ -443,7 +443,7 @@ function render() {
       by("apart").map(apartRow), "No one waiting to be set apart.", "apart") +
     `</div>` +
 
-    `<h3 style="margin:1.4rem 0 0;display:flex;align-items:center;gap:.5rem">Releases <span class="pill pill-role-member">${releases.filter((r) => r.stage !== "done").length}</span></h3>` +
+    `<div class="releases-wrap"><h3 style="margin:0;display:flex;align-items:center;gap:.5rem">Releases <span class="pill pill-role-member">${releases.filter((r) => r.stage !== "done").length}</span></h3>` + // the three release steps sit in one framed group (2026-10-11)
     `<div class="bishopric-board releases-board">` +
     bucket("Decided", "Release decided — let them know.",
       releases.filter((r) => r.stage === "decided").map(releaseRow), "Nothing decided yet.", "decided", "release") + // + on the card itself (2026-09-13)
@@ -451,7 +451,7 @@ function render() {
       releases.filter((r) => r.stage === "notified").map(releaseRow), "No one waiting to be released.", "notified") +
     bucket("Released", "Released — tick MLS once the clerk has recorded it.",
       releases.filter((r) => r.stage === "released").map(releaseRow), "No one waiting on MLS.", "released") +
-    `</div>` +
+    `</div></div>` +
     `<div class="needy-wrap">` + // 2026-09-20 — a short list doesn't need the whole page width
     bucket("Members who need callings", "The pool to draw from as positions open up.",
       members.map(memberRow), "No one on the list.", null, "member") +
@@ -746,7 +746,9 @@ function render() {
       const st = zone.dataset.stage;
       if (!st) return;
       // one pill off a card with several people: that person moves on their own, the rest stay put
-      if (person && it.kind === "calling" && namesOf(it).length > 1 && st !== it.stage) { splitPerson(it, person, st, beforeId); return; }
+      const others = it.stage === "fill" ? (it.candidates || []).length : namesOf(it).length;
+      if (person && it.kind === "calling" && others > 1 && st !== it.stage) { splitPerson(it, person, st, beforeId); return; }
+      if (person && it.kind === "calling" && it.stage === "fill" && st !== "fill") { it.people = [person]; } // the one name on the card goes forward as the decided name
       if (it.kind === "release") { // releases flow: decided → notified → released (MLS tick archives)
         if (!["decided", "notified", "released"].includes(st)) return;
         if (st === it.stage) { reorderWithin(st, it.id, beforeId); return; }
@@ -782,10 +784,13 @@ function render() {
 // One person leaves a card that holds several: a new card carries them (and the calling's
 // details) to the chosen column; the original keeps everyone else where it was.
 async function splitPerson(card, name, stage, beforeId) {
-  const rest = namesOf(card).filter((n) => n !== name);
+  const fromFill = card.stage === "fill"; // a name under consideration leaves the list; the rest stay in Calling to Fill
+  const rest = fromFill ? (card.people || []).filter((n) => n !== name) : namesOf(card).filter((n) => n !== name);
   const restDone = { ...(card.peopleDone || {}) }; delete restDone[name];
   const all = (k, names, done) => names.length > 0 && names.every((n) => !!(done[n] || {})[k]);
-  const restUpd = { people: rest, decided: rest[0] || "", peopleDone: restDone, setApart: all("setApart", rest, restDone), mlsDone: all("mlsDone", rest, restDone), updatedAt: serverTimestamp() };
+  const restUpd = fromFill
+    ? { candidates: (card.candidates || []).filter((n) => n !== name), people: rest, updatedAt: serverTimestamp() }
+    : { people: rest, decided: rest[0] || "", peopleDone: restDone, setApart: all("setApart", rest, restDone), mlsDone: all("mlsDone", rest, restDone), updatedAt: serverTimestamp() };
   const { id, ...base } = card;
   const mineDone = (card.peopleDone || {})[name] || {};
   const fresh = {
@@ -794,12 +799,14 @@ async function splitPerson(card, name, stage, beforeId) {
     stamps: { ...(card.stamps || {}), [stage]: new Date().toISOString() }, createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
   };
   if (stage === "fill") { fresh.decided = ""; fresh.people = [name]; fresh.candidates = [...new Set([...(card.candidates || []), name])]; }
+  if (fromFill) fresh.candidates = [name]; // the new card only ever considered this person
   try {
     await updateDoc(doc(db, "callings", card.id), restUpd);
     const ref = await addDoc(collection(db, "callings"), fresh);
     // ward business follows the one who moved (prev = how they stood on the old card)
     await wardBusinessSync({ ...card, decided: name, people: [name] }, { stage, decided: fresh.decided, people: fresh.people, calling: card.calling });
-    toast(`${name} moved on — ${rest.join(", ")} stay${rest.length === 1 ? "s" : ""} put`);
+    const stayed = fromFill ? (card.candidates || []).filter((n) => n !== name) : rest;
+    toast(`${name} moved on — ${stayed.join(", ")} stay${stayed.length === 1 ? "s" : ""} put`);
     if (beforeId) setTimeout(() => reorderWithin(stage, ref.id, beforeId), 400);
   } catch (err) { toast("Couldn't move: " + (err.code || err.message)); }
 }
