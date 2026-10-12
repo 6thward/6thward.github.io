@@ -18,18 +18,18 @@
 //   plan[]     — the plan, as dated notes { id, at, text, by } (2026-10-11)
 
 // Same privacy as the rest of this page: only the bishop and people given Self-Reliance.
-import { db } from "./firebase-init.js?v=1791782732";
-import { ctx, can, goTab } from "./app.js?v=1791782732";
+import { db } from "./firebase-init.js?v=1791782828";
+import { ctx, can, goTab } from "./app.js?v=1791782828";
 import {
   collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791782732";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine, inlineFmt } from "./notes.js?v=1791782732";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1791782732";
+import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791782828";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine, inlineFmt } from "./notes.js?v=1791782828";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1791782828";
 import {
   INC, EXP, QA, parseCsv, mapResponses, personKey, respTotals, fmtUsd, isBlank, writeupSections,
   parseBudgetCsv, parseMoney, budgetTotals, fmtUsdC,
-} from "./sr-import.js?v=1791782732";
+} from "./sr-import.js?v=1791782828";
 
 let mount = null, cases = [], started = false, openId = null, openRi = null;
 let loaded = null, markLoaded = null; // resolves once the cards have arrived (for opening one from another page)
@@ -49,6 +49,15 @@ const fmtDay = (iso) => { const d = iso ? new Date(iso) : null; return d && !isN
 const sorted = (c) => [...(c.responses || [])].sort((a, b) => String(a.at || "").localeCompare(String(b.at || "")));
 const latest = (c) => sorted(c).slice(-1)[0] || null;
 const editor = () => can("selfreliance", "edit");
+// "Shelley & Andy Walters" when the couple share a last name; "Shelley Walters & Andy Smith" when they don't (2026-10-11)
+const displayName = (c) => {
+  const n = (c.name || "").trim(), sp = (c.spouse || "").trim();
+  if (!sp) return n || "—";
+  const nw = n.split(/\s+/), sw = sp.split(/\s+/);
+  const last = nw.length > 1 ? nw[nw.length - 1] : "", slast = sw.length > 1 ? sw[sw.length - 1] : "";
+  if (last && slast && last.toLowerCase() === slast.toLowerCase()) return `${nw.slice(0, -1).join(" ")} & ${sw.slice(0, -1).join(" ")} ${last}`;
+  return `${n} & ${sp}`;
+};
 
 // Open one card from another page (the Member Board): switch tabs, then open it once the list is here
 export async function openCaseById(id) {
@@ -148,7 +157,7 @@ function renderGrid() {
       ? `<div class="src-tl-row"><span class="src-tl-d">${esc(fmtShort(e.a.at))}</span>${e.a.type ? `<span class="src-act-type src-at-${esc(e.a.type)}">${esc(actionTypeLabel(e.a.type) || e.a.type)}</span>` : ""}<span class="src-tl-t">${esc(plainLine(e.a.text || ""))}</span></div>`
       : `<div class="src-tl-row src-tl-req${e.q.status === "open" ? " src-tl-open" : ""}"><span class="src-tl-d">${esc(fmtShort(e.q.at))}</span><span class="src-act-type src-at-req">Request</span><span class="src-tl-t">${esc(plainLine(e.q.text || ""))}</span><span class="src-tl-st src-tl-st-${e.q.status}">${e.q.status}</span></div>`;
     return `<div class="src-card src-card-b${st === "closed" ? " src-card-closed" : ""}" data-id="${c.id}" tabindex="0">
-      <div class="src-card-top"><b class="src-name">${esc(c.name || "—")}${c.spouse ? ` <span class="src-spouse">& ${esc(c.spouse)}</span>` : ""}</b><span class="pill src-st ${STATUS_PILL[st]}" title="${st === "open" ? `${opens.length} open request${opens.length === 1 ? "" : "s"}` : `Closed${c.closedAt ? " " + fmtDay(c.closedAt) : ""} — no open request`}">${st === "closed" ? "Closed" : "Open"}</span></div>
+      <div class="src-card-top"><b class="src-name">${esc(displayName(c))}</b><span class="pill src-st ${STATUS_PILL[st]}" title="${st === "open" ? `${opens.length} open request${opens.length === 1 ? "" : "s"}` : `Closed${c.closedAt ? " " + fmtDay(c.closedAt) : ""} — no open request`}">${st === "closed" ? "Closed" : "Open"}</span></div>
       <div class="src-bio">${esc(c.bio || "")}</div>
       <div class="src-openreqs">${opens.length ? opens.map((q, i) => `<div class="src-openreq"><span class="src-openreq-lbl">Open request · ${esc(fmtDay(q.at))}${i === 0 && opens.length > 1 ? `<span class="src-openreq-more"> · +${opens.length - 1} more</span>` : ""}</span>${esc(plainLine(q.text || ""))}</div>`).join("") : `<div class="src-openreq src-openreq-none">No open request</div>`}</div>
       <div class="src-tl"><span class="src-tl-h">Latest</span>${tl.length ? tl.map(row).join("") : `<span class="row-sub">Nothing logged yet</span>`}</div>
@@ -266,8 +275,8 @@ function detailHtml(c, ri) {
   const rs = sorted(c), r = rs[ri] || null, st = statusOf(c), ed = editor();
   return `
     <div class="src-d-head">
-      <div id="srd-who"><h3${ed ? ` class="src-name-ed" data-nameedit title="Click to edit the name"` : ""}>${esc(c.name || "—")}${ed ? `<span class="src-name-pen">✎</span>` : ""}</h3>
-        <div class="row-sub">${[c.spouse ? "& " + esc(c.spouse) : "", boardCards.some((k) => k.srCase === c.id) ? `<a href="#" class="src-board-link" data-board="${esc(boardCards.find((k) => k.srCase === c.id).id)}" title="Open their Member Board card">📋 Member Board</a>` : "", c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : ""].filter(Boolean).join(" · ")}</div>
+      <div id="srd-who"><h3${ed ? ` class="src-name-ed" data-nameedit title="Click to edit the names"` : ""}>${esc(displayName(c))}${ed ? `<span class="src-name-pen">✎</span>` : ""}</h3>
+        <div class="row-sub">${[boardCards.some((k) => k.srCase === c.id) ? `<a href="#" class="src-board-link" data-board="${esc(boardCards.find((k) => k.srCase === c.id).id)}" title="Open their Member Board card">📋 Member Board</a>` : "", c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : ""].filter(Boolean).join(" · ")}</div>
         <div class="src-bio-line" id="srd-bio">${(c.bio || "").trim()
           ? `<span class="src-bio${ed ? " src-bio-ed" : ""}"${ed ? ` data-bioedit title="Click to edit"` : ""}>${esc(c.bio)}</span>`
           : ed ? `<span class="src-bio src-bio-empty" data-bioedit>+ Who they are — a line or two to jog your memory</span>` : ""}</div></div>
@@ -787,8 +796,8 @@ function printCase(c, r) {
     .qa span { display: block; font-size: 8pt; text-transform: uppercase; letter-spacing: .05em; color: #5b6675; margin-top: .08in; }
     .noprint { text-align: center; margin: .3in; } @media print { .noprint { display: none; } }
   </style></head><body><div class="wrap">
-    <h1>${esc(c.name || "")}</h1>
-    <p class="sub">${[c.spouse ? "& " + esc(c.spouse) : "", r ? "Self-Reliance Plan " + esc(fmtDay(r.at)) : "", "printed " + new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })].filter(Boolean).join(" · ")}</p>
+    <h1>${esc(displayName(c))}</h1>
+    <p class="sub">${[r ? "Self-Reliance Plan " + esc(fmtDay(r.at)) : "", "printed " + new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })].filter(Boolean).join(" · ")}</p>
     ${(c.summary || "").trim() ? `<h2>Summary</h2>${String(c.summary).split("\n").map((l) => l.trim()).filter(Boolean).map((l) => `<p>${/^(\s*)([-•*]|\[( |x|X)\])/.test(l) ? "• " : ""}${esc(plainLine(l))}</p>`).join("")}` : ""}
     ${(c.bio || "").trim() ? `<p class="raw">${esc(c.bio)}</p>` : ""}
     ${requestsOf(c).length ? `<h2>Requests</h2><table>${requestsOf(c).map((q) => `<tr><td style="white-space:nowrap;padding-right:1rem">${esc(fmtDay(q.at) || "—")}</td><td style="white-space:nowrap;padding-right:1rem;text-transform:uppercase;font-size:.75em">${esc(q.status)}</td><td>${esc(plainLine(q.text || ""))}</td></tr>`).join("")}</table>` : ""}
