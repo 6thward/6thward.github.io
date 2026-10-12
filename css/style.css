@@ -1878,7 +1878,7 @@ button.src-st { cursor: pointer; } button.src-st:hover { filter: brightness(.93)
 .nt-card-edit-actions { display: flex; gap: .3rem; align-items: center; } .nt-card-edit-actions span { flex: 1; }
 /* Several people on one calling card (2026-10-11) */
 .cand-pick.on { color: #c98a00; }
-.call-people { display: flex; flex-wrap: wrap; gap: .3rem; margin: .3rem 0 .1rem; }
+.call-people { display: flex; flex-direction: column; align-items: flex-start; gap: .3rem; margin: .3rem 0 .1rem; } /* names stack, one per line (2026-10-11) */
 .call-people.call-people-col { flex-direction: column; gap: .45rem; }
 .call-person-row { display: flex; flex-direction: column; gap: .2rem; align-items: flex-start; }
 .call-person { display: inline-block; background: #fff; border: 1.5px solid rgba(31,39,51,.18); border-radius: 99px; padding: .18rem .65rem; font-weight: 700; font-size: .95rem; color: var(--ink); cursor: grab; white-space: nowrap; }
