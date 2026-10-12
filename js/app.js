@@ -1,22 +1,24 @@
 // App shell: auth flow (Google + PIN), permission gating, tab routing.
-import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1791748757";
+import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1791765756";
 import {
   signInWithPopup, signInWithEmailAndPassword, signOut, onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
   doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { initTasks } from "./tasks.js?v=1791748757";
-import { initSacrament, openMeetingLink } from "./sacrament.js?v=1791748757";
-import { initCalendar } from "./calendar.js?v=1791748757";
-import { initCallings } from "./callings.js?v=1791748757";
-import { initConfidential } from "./confidential.js?v=1791748757";
-import { initAdmin } from "./admin.js?v=1791748757";
-import { initBoard } from "./board.js?v=1791748757";
-import { initHomeSacrament } from "./home-sacrament.js?v=1791748757";
-import { initCouncil } from "./council.js?v=1791748757";
-import { initTithingPage } from "./tithing.js?v=1791748757";
-import { initSelfReliance } from "./selfreliance.js?v=1791748757";
+import { openModal, closeModal, toast } from "./ui.js?v=1791765756";
+import { initTasks } from "./tasks.js?v=1791765756";
+import { initSacrament, openMeetingLink } from "./sacrament.js?v=1791765756";
+import { initCalendar } from "./calendar.js?v=1791765756";
+import { initCallings } from "./callings.js?v=1791765756";
+import { initConfidential } from "./confidential.js?v=1791765756";
+import { initAdmin } from "./admin.js?v=1791765756";
+import { initBoard } from "./board.js?v=1791765756";
+import { initHomeSacrament } from "./home-sacrament.js?v=1791765756";
+import { initCouncil } from "./council.js?v=1791765756";
+import { initTithingPage } from "./tithing.js?v=1791765756";
+import { initSelfReliance } from "./selfreliance.js?v=1791765756";
+import { QUICK_PIN_LENGTH, validQuickPin, derive, devicePins, rememberDevice, forgetDevice, createQuickAccount, changeQuickPin, deleteQuickAccount } from "./quick-pin.js?v=1791765756";
 
 const ROLE_RANK = { pending: 0, member: 1, bishopric: 2, bishop: 3 };
 
@@ -90,10 +92,53 @@ $("btn-google-signin").addEventListener("click", async () => {
   try {
     await signInWithPopup(auth, googleProvider);
   } catch (err) {
-    loginError("Sign-in failed: " + (err.code || err.message));
+    // "Unable to save initial state…" = the browser blocked sessionStorage, nearly always an
+    // in-app browser (a link opened inside Messages, Facebook, Instagram…) or private browsing
+    if (/sessionStorage|initial state/i.test(err.message || "") || err.code === "auth/web-storage-unsupported") {
+      loginError("Google sign-in can't run inside this app's built-in browser. Open the page in Safari or Chrome (tap the ⋯ or share icon → “Open in browser”) and try again.");
+    } else if (err.code === "auth/popup-blocked") {
+      loginError("Your browser blocked the sign-in window — allow pop-ups for this site and try again.");
+    } else if (err.code !== "auth/popup-closed-by-user" && err.code !== "auth/cancelled-popup-request") {
+      loginError("Sign-in failed: " + (err.code || err.message));
+    }
   }
 });
 $("btn-signout").addEventListener("click", () => { $("user-menu").classList.add("hidden"); signOut(auth); });
+
+// ---- Quick sign-in (2026-10-11): a 4-digit PIN for anyone who has signed in with Google on this device ----
+function renderQuickLogin() {
+  const recs = devicePins(), uids = Object.keys(recs);
+  const box = $("quick-login"), rows = $("quick-rows");
+  box.classList.toggle("hidden", !uids.length);
+  rows.innerHTML = uids.map((uid) => `<div class="quick-row" data-uid="${uid}">
+      <span class="quick-name">${recs[uid].name || "You"}</span>
+      <input class="pin-input quick-pin" inputmode="numeric" pattern="[0-9]*" maxlength="${QUICK_PIN_LENGTH}" autocomplete="off" placeholder="••••" aria-label="4-digit PIN for ${recs[uid].name || "you"}">
+      <button type="button" class="btn btn-sm btn-ghost quick-forget" title="Forget this person on this device">✕</button>
+    </div>`).join("");
+  rows.querySelectorAll(".quick-row").forEach((row) => {
+    const uid = row.dataset.uid, inp = row.querySelector(".quick-pin");
+    const go = async () => {
+      if (refreshLockUi()) return;
+      const pin = inp.value.trim();
+      if (!validQuickPin(pin)) return;
+      inp.disabled = true; loginError("");
+      try {
+        await signInWithEmailAndPassword(auth, recs[uid].email, await derive(pin, recs[uid].salt));
+        writeLock({ misses: 0, until: 0 });
+      } catch (err) {
+        inp.value = "";
+        if (recordMiss(err.code === "auth/too-many-requests")) return;
+        const left = PIN_MAX_MISSES - (readLock().misses || 0);
+        loginError(`That PIN isn't right. ${left} ${left === 1 ? "try" : "tries"} left before a 15-minute lock — or sign in with Google below.`);
+      } finally { if (!lockedUntil()) { inp.disabled = false; inp.focus(); } }
+    };
+    inp.addEventListener("input", () => { inp.value = inp.value.replace(/\D/g, "").slice(0, QUICK_PIN_LENGTH); loginError(""); if (inp.value.length === QUICK_PIN_LENGTH) go(); });
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+    row.querySelector(".quick-forget").addEventListener("click", () => { if (confirm(`Forget ${recs[uid].name || "this person"} on this device? They can sign in with Google to set it up again.`)) { forgetDevice(uid); renderQuickLogin(); } });
+  });
+  if (uids.length === 1) setTimeout(() => rows.querySelector(".quick-pin")?.focus(), 50);
+}
+renderQuickLogin();
 // the name in the top bar opens a small account menu (Sign out lives there)
 $("user-btn").addEventListener("click", (e) => {
   e.stopPropagation();
@@ -102,6 +147,73 @@ $("user-btn").addEventListener("click", (e) => {
   e.currentTarget.setAttribute("aria-expanded", String(open));
 });
 const closeUserMenu = () => { $("user-menu").classList.add("hidden"); $("user-btn").setAttribute("aria-expanded", "false"); };
+$("btn-quick-pin").addEventListener("click", () => { closeUserMenu(); quickPinDialog(); });
+
+// Set / change / remove your own 4-digit PIN (Google sign-ins only)
+let myQuick = null; // users/{uid}.quickPin for the signed-in Google user
+function quickPinDialog() {
+  const has = !!myQuick;
+  const el = openModal(`
+    <h3>${has ? "Your 4-digit PIN" : "Set a 4-digit PIN"}</h3>
+    <p class="row-sub" style="margin-top:-.6rem">${has ? "Works on any device where you've signed in with Google once." : "Next time, on this device (or any device where you've signed in with Google once), you can sign in with just the PIN."}</p>
+    <div class="form-grid">
+      ${has ? `<label class="field"><span>Current PIN</span><input id="qp-old" class="pin-code-input" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="••••"></label>` : ""}
+      <label class="field"><span>${has ? "New PIN" : "PIN"} <span class="row-sub">(4 digits)</span></span><input id="qp-new" class="pin-code-input" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="••••"></label>
+      <label class="field"><span>Again</span><input id="qp-again" class="pin-code-input" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="••••"></label>
+    </div>
+    <p class="login-error hidden" id="qp-err"></p>
+    <div class="modal-actions">
+      ${has ? `<button class="btn btn-ghost btn-danger" id="qp-remove" type="button">Remove PIN</button>` : "<span></span>"}
+      <div class="right"><button class="btn" id="qp-cancel" type="button">Cancel</button><button class="btn btn-primary" id="qp-save" type="button">${has ? "Change PIN" : "Set PIN"}</button></div>
+    </div>`);
+  const err = (m) => { const e = el.querySelector("#qp-err"); e.textContent = m; e.classList.toggle("hidden", !m); };
+  el.querySelectorAll("input").forEach((i) => i.addEventListener("input", () => { i.value = i.value.replace(/\D/g, "").slice(0, 4); err(""); }));
+  el.querySelector("#qp-cancel").addEventListener("click", closeModal);
+  setTimeout(() => el.querySelector(has ? "#qp-old" : "#qp-new").focus(), 50);
+  const busy = (on) => el.querySelectorAll("button").forEach((b) => { b.disabled = on; });
+  el.querySelector("#qp-save").addEventListener("click", async () => {
+    const pin = el.querySelector("#qp-new").value, again = el.querySelector("#qp-again").value, old = el.querySelector("#qp-old")?.value || "";
+    if (!validQuickPin(pin)) return err("The PIN needs to be 4 digits.");
+    if (pin !== again) return err("The two PINs don't match.");
+    if (/^(\d)\1{3}$/.test(pin) || "0123456789".includes(pin) || "9876543210".includes(pin)) return err("Pick something less guessable than that.");
+    busy(true);
+    try {
+      if (has) {
+        await changeQuickPin(myQuick, old, pin);
+        toast("PIN changed");
+      } else {
+        const acct = await createQuickAccount(pin);
+        // the hidden account's profile: a mirror of mine, marked as an alias so access stays in step
+        await setDoc(doc(db, "users", acct.pinUid), {
+          alias: ctx.uid, name: ctx.name || "", organization: ctx.profile?.organization || "", calling: ctx.profile?.calling || "", councilMember: !!ctx.profile?.councilMember,
+          role: "pin", quick: true, perms: ctx.role === "bishop" ? permsForRole("bishop") : (ctx.profile?.perms && Object.keys(ctx.profile.perms).length ? ctx.profile.perms : permsForRole(ctx.role)),
+          email: "", revoked: false, createdAt: serverTimestamp(), createdBy: ctx.name || ctx.email || "",
+        });
+        const rec = { email: acct.email, salt: acct.salt, pinUid: acct.pinUid };
+        await updateDoc(doc(db, "users", ctx.uid), { quickPin: rec });
+        myQuick = rec;
+        rememberDevice(ctx.uid, { name: ctx.name || "", email: rec.email, salt: rec.salt });
+        renderQuickLogin();
+        toast("PIN set — use it next time you sign in here");
+      }
+      $("btn-quick-pin").textContent = "Change or remove your PIN…";
+      closeModal();
+    } catch (e) { err(e.message || String(e)); busy(false); }
+  });
+  el.querySelector("#qp-remove")?.addEventListener("click", async () => {
+    const old = el.querySelector("#qp-old").value;
+    if (!confirm("Remove your PIN? You'll sign in with Google again (and can set a new PIN any time).")) return;
+    busy(true);
+    try {
+      if (validQuickPin(old)) await deleteQuickAccount(myQuick, old).catch(() => false);
+      await deleteDoc(doc(db, "users", myQuick.pinUid)).catch(() => {});
+      await updateDoc(doc(db, "users", ctx.uid), { quickPin: null });
+      forgetDevice(ctx.uid); myQuick = null; renderQuickLogin();
+      $("btn-quick-pin").textContent = "Set a 4-digit PIN…";
+      toast("PIN removed"); closeModal();
+    } catch (e) { err(e.message || String(e)); busy(false); }
+  });
+}
 document.addEventListener("click", (e) => { if (!e.target.closest("#user-wrap")) closeUserMenu(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeUserMenu(); });
 $("btn-signout-pending").addEventListener("click", () => signOut(auth));
@@ -194,7 +306,7 @@ onAuthStateChanged(auth, async (user) => {
   if (!user) {
     hide("app"); hide("pending-screen"); show("login-screen");
     pinInput.value = "";
-    if (!refreshLockUi()) setTimeout(() => pinInput.focus(), 50);
+    if (!refreshLockUi()) setTimeout(() => (document.querySelector("#quick-rows .quick-pin") || pinInput).focus(), 50); // a remembered person's 4-digit box first
     return;
   }
   ctx.uid = user.uid;
@@ -272,6 +384,10 @@ onAuthStateChanged(auth, async (user) => {
       if (user.email === BISHOP_EMAIL) ctx.role = "bishop";
       if (snap.data().name) ctx.name = snap.data().name;
     }
+    ctx.profile = snap && snap.exists() ? snap.data() : {};
+    // a PIN they set earlier works on this device from now on (the salt rides along with their Google sign-in)
+    myQuick = ctx.profile.quickPin || null;
+    if (myQuick && myQuick.email && myQuick.salt) rememberDevice(user.uid, { name: ctx.profile.name || ctx.name || "", email: myQuick.email, salt: myQuick.salt });
     // explicit per-page access (Users tab) wins; legacy roles fill in for older profiles
     const explicit = snap && snap.exists() ? snap.data().perms : null;
     ctx.perms = ctx.role === "bishop" ? permsForRole("bishop")
@@ -293,6 +409,10 @@ onAuthStateChanged(auth, async (user) => {
   $("user-name").textContent = fullName.split(/\s+/)[0] || "Account";
   $("user-full").textContent = fullName || "Signed in";
   $("user-sub").textContent = ctx.isPin ? "Signed in with a PIN" : (user.email || "");
+  const qp = $("btn-quick-pin");
+  qp.classList.toggle("hidden", ctx.isPin); // PIN sessions can't manage the PIN — sign in with Google for that
+  qp.textContent = myQuick ? "Change or remove your PIN…" : "Set a 4-digit PIN…";
+  renderQuickLogin();
   const photo = $("user-photo"), initial = $("user-initial");
   const hasPhoto = !ctx.isPin && !!user.photoURL;
   if (hasPhoto) photo.src = user.photoURL;

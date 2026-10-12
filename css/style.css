@@ -1900,3 +1900,15 @@ button.src-st { cursor: pointer; } button.src-st:hover { filter: brightness(.93)
 .src-writeup .rc-list { margin: .2rem 0 .5rem; } .src-writeup .rc-todo { font-size: .93rem; }
 .src-wu-actions-top { margin: 0 0 .5rem; padding-bottom: .5rem; border-bottom: 1px solid var(--line); }
 .src-wu-status { font-size: .8rem; color: var(--ink-soft); }
+/* Quick sign-in with a self-set 4-digit PIN (2026-10-11) */
+.quick-login { margin-bottom: .2rem; }
+.quick-row { display: flex; align-items: center; gap: .5rem; justify-content: center; margin-bottom: .5rem; }
+.quick-name { font-weight: 700; min-width: 0; flex: 1; text-align: right; }
+.quick-pin { width: 7rem; letter-spacing: .4rem; }
+.quick-forget { flex: none; }
+/* Other Music: labelled Who: / Hymn: pills (2026-10-11) */
+.st-inter .st-music-fields { align-self: stretch; display: flex; flex-direction: column; gap: .25rem; position: relative; }
+.st-inter .st-music-field.st-music-labelled { align-items: center; gap: .3rem; }
+.st-inter .st-music-labelled .st-li-tag { flex: none; font-size: .74rem; font-weight: 600; color: var(--ink); }
+.st-inter .st-music-conf { position: absolute; right: .55rem; top: .35rem; }
+.st-inter .st-music-conf .st-li-ic { margin: 0; }

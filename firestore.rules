@@ -91,6 +91,21 @@ service cloud.firestore {
     function inviteFor(email) {
       return get(/databases/$(database)/documents/invites/$(email)).data;
     }
+    // A Google user setting their own 4-digit PIN (2026-10-11) writes a mirror profile that
+    // aliases theirs — with exactly their own access, never more.
+    function selfAlias() {
+      return signedIn() && hasAccess() && !revoked()
+        && request.resource.data.alias == request.auth.uid
+        && request.resource.data.role == 'pin'
+        && request.resource.data.quick == true
+        && request.resource.data.revoked == false
+        && (
+          isBishop()
+          || (('perms' in profile()) && request.resource.data.perms == profile().perms)
+          || (!('perms' in profile()) && request.resource.data.perms.confidential == '' && request.resource.data.perms.selfreliance == ''
+              && request.resource.data.perms.tithing == '' && request.resource.data.perms.users == '')
+        );
+    }
     function claimsInvite() {
       // first Google sign-in of an invited address: the profile must carry
       // exactly the access the inviter chose
@@ -109,12 +124,13 @@ service cloud.firestore {
         request.resource.data.role == 'pending' ||
         claimsInvite() ||
         (request.resource.data.role == 'bishop' && isBishopEmail())
-      ));
-      // managers assign access; anyone may stamp their own last-used time
+      )) || selfAlias();
+      // managers assign access; anyone may stamp their own last-used time or their own quick-PIN record
       allow update: if manages()
         || (signedIn() && request.auth.uid == uid
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSeen']));
-      allow delete: if manages();
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSeen', 'quickPin']));
+      // …and drop the mirror profile of a PIN they set themselves
+      allow delete: if manages() || (signedIn() && resource.data.alias == request.auth.uid);
     }
 
     // ---- Invitations by email (Users tab); the invitee may read + clear their own ----

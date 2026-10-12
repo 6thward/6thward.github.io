@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1791748757";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1791748757";
+import { db } from "./firebase-init.js?v=1791765756";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1791765756";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1791748757";
-import { HYMNS } from "./hymns.js?v=1791748757";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1791748757";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1791765756";
+import { HYMNS } from "./hymns.js?v=1791765756";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1791765756";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -990,8 +990,8 @@ function statusChips(m, date) {
   const hasPrelude = !!(prelude.who || prelude.song);
   const preludeBlock = can
     ? `<span class="st-prelude"><span class="st-prelude-lbl">Prelude music</span>
-        <span class="st-music-field"><textarea class="st-in-title st-music-in st-music-ta" data-prelude="who" placeholder="Who — a person or group" rows="1" autocomplete="off">${esc(prelude.who || "")}</textarea></span>
-        <span class="st-music-field"><textarea class="st-in-title st-music-in st-music-ta" data-prelude="song" placeholder="Song / piece" rows="1" autocomplete="off">${esc(prelude.song || "")}</textarea></span>
+        <span class="st-music-field st-music-labelled"><span class="st-li-tag">Who:</span><textarea class="st-in-title st-music-in st-music-ta" data-prelude="who" placeholder="person or group" rows="1" autocomplete="off">${esc(prelude.who || "")}</textarea></span>
+        <span class="st-music-field st-music-labelled"><span class="st-li-tag">Hymn:</span><textarea class="st-in-title st-music-in st-music-ta" data-prelude="song" placeholder="song or piece" rows="1" autocomplete="off">${esc(prelude.song || "")}</textarea></span>
       </span>`
     : hasPrelude ? `<span class="st-prelude"><span class="st-prelude-lbl">Prelude music</span><span class="st-prelude-ro"><b>${esc(prelude.who || "")}</b>${prelude.who && prelude.song ? " — " : ""}${esc(prelude.song || "")}</span></span>` : "";
   let preludeShown = false;
@@ -1011,10 +1011,15 @@ function statusChips(m, date) {
     const cls = mode === "none" ? "st-off" : !filled ? (planned ? "st-miss" : "st-off") : (slotIt && slotIt.kind !== "intermediateHymn" && !isConf(slotIt)) ? "st-pending" : "st-ok";
     const dragK = mode === "musical" ? "musical" : (mode === "choir" || mode === "youthChoir") ? "choir" : "";
     const dragAttr = dragK && filled ? ` draggable="true" data-drag='${JSON.stringify({ k: dragK, o: 0 })}'` : "";
+    // each part is its own labelled pill — Who: / Hymn: — like the Hymns box (2026-10-11)
+    const pill = (label, inner) => `<span class="st-music-field st-music-labelled"><span class="st-li-tag">${label}</span>${inner}</span>`;
     const field = mode === "none" ? ""
       : mode === "hymn"
-      ? `<input class="st-in-title st-music-in hymn-combo" data-mfield="hymn" list="dl-hymn-all" placeholder="Number or title…" autocomplete="off" value="${esc(detail)}">`
-      : `<textarea class="st-in-title st-music-in st-music-ta" data-mfield="${mode}" placeholder="${mode === "musical" ? "Who / what" : "Piece"}" rows="1" autocomplete="off">${esc(detail)}</textarea>`; // wraps onto a 2nd line (2026-09-20)
+      ? pill("Hymn:", `<input class="st-in-title st-music-in hymn-combo" data-mfield="hymn" list="dl-hymn-all" placeholder="number or title…" autocomplete="off" value="${esc(detail)}">`)
+      : mode === "musical"
+      ? pill("Who:", `<textarea class="st-in-title st-music-in st-music-ta" data-mfield="musical" placeholder="person or group" rows="1" autocomplete="off">${esc(detail)}</textarea>`)
+        + pill("Hymn:", `<textarea class="st-in-title st-music-in st-music-ta" data-mfield="musicalHymn" placeholder="song or piece" rows="1" autocomplete="off">${esc(slotMusical.hymn || "")}</textarea>`)
+      : pill("Hymn:", `<textarea class="st-in-title st-music-in st-music-ta" data-mfield="${mode}" placeholder="song or piece" rows="1" autocomplete="off">${esc(detail)}</textarea>`); // wraps onto a 2nd line (2026-09-20)
     const conf = slotIt && slotIt.kind !== "intermediateHymn" && filled
       ? `<span class="st-li-ic st-confirm-dot${isConf(slotIt) ? "" : " st-unconf"}" data-confirm='${JSON.stringify({ k: slotIt.kind, o: 0 })}' title="${isConf(slotIt) ? "Confirmed — click if this still needs confirming" : "Not confirmed yet — click once it's confirmed"}">${isConf(slotIt) ? "✓" : "!"}</span>`
       : "";
@@ -1026,7 +1031,7 @@ function statusChips(m, date) {
       <span class="st-sec st-sec-main ${cls}">
       <span class="st-prelude-lbl st-sub-lbl">Special Musical Number</span>
       <select class="st-mtype" data-mtype title="Type"><option value="none"${mode === "none" ? " selected" : ""}>— none —</option>${INTER_MODES.map(([k, l]) => `<option value="${k}"${mode === k ? " selected" : ""}>${l}</option>`).join("")}</select>
-      ${field ? `<span class="st-music-field">${field}${conf}</span>` : ""}
+      ${field ? `<span class="st-music-fields">${field}${conf ? `<span class="st-music-conf">${conf}</span>` : ""}</span>` : ""}
       ${placePill}
       </span>
     </span>`);
@@ -1352,7 +1357,7 @@ function renderCards(wrap) {
       if (inp.value === initial) return;
       const val = mode === "hymn" ? parseHymnCombo(inp.value)
         : mode === "musical" ? { who: inp.value.trim() } : { hymn: inp.value.trim() };
-      patchMeeting(date, (mm) => setInterSlot(mm, mode, val, ""));
+      patchMeeting(date, (mm) => setInterSlot(mm, mode === "musicalHymn" ? "musical" : mode, val, ""));
     };
     inp.addEventListener("keydown", (ev) => {
       if (ev.key === "Enter") { ev.preventDefault(); commit(); inp.blur(); }

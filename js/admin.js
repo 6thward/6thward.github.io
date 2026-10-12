@@ -15,13 +15,13 @@
 // whose profile doc carries `alias: <googleUid>` plus a mirror of the name /
 // organization / calling / pages, so the rules see the same access either
 // way. The table shows one row; the mirror is kept in step on every save.
-import { db } from "./firebase-init.js?v=1791748757";
-import { ctx, AREAS, normalizePerms } from "./app.js?v=1791748757";
+import { db } from "./firebase-init.js?v=1791765756";
+import { ctx, AREAS, normalizePerms } from "./app.js?v=1791765756";
 import {
   collection, onSnapshot, updateDoc, setDoc, deleteDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1791748757";
-import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1791748757";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1791765756";
+import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1791765756";
 
 let sort = { key: "created", dir: 1 }; // default: oldest at the top; click a header for A→Z / Z→A (2026-09-19)
 let users = [];   // profiles (alias PIN docs are folded into their Google row)
@@ -113,7 +113,7 @@ function signInPill(u) {
   if (u.role === "pending") return `<span class="pill pill-pending" title="Signed in with Google but hasn't been given any pages">waiting</span>`;
   if (u.role === "pin") return `<span class="pill pill-muted" title="Signs in with a PIN">PIN ${esc(pins[u.uid] || "")}</span>`;
   const ap = aliasPins[u.uid];
-  return `<span class="pill pill-muted" title="${esc(u.email || "")}">Google</span>${ap ? ` <span class="pill pill-muted" title="Also signs in with a PIN">PIN ${esc(pins[ap.uid] || "")}</span>` : ""}`;
+  return `<span class="pill pill-muted" title="${esc(u.email || "")}">Google</span>${ap ? (ap.quick ? ` <span class="pill pill-muted" title="Set their own 4-digit PIN">own PIN</span>` : ` <span class="pill pill-muted" title="Also signs in with a PIN">PIN ${esc(pins[ap.uid] || "")}</span>`) : ""}`;
 }
 
 function render() {
@@ -224,7 +224,9 @@ function editUser(u) {
       </label>` : `
       <label class="field"><span>Google email</span><input value="${esc(u.email || "")}" readonly></label>
       ${u.invite ? "" : `<div class="field"><span>PIN <span class="row-sub">(optional — a second way in, same pages)</span></span>
-        ${ap
+        ${ap && ap.quick
+          ? `<div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap"><span class="row-sub">They set their own 4-digit PIN (only they know it).</span><button class="btn btn-sm btn-ghost btn-danger" type="button" id="uu-droppin">Remove it</button></div>`
+          : ap
           ? `<div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap"><input id="uu-pin" class="pin-code-input" value="${esc(pin)}" readonly><button class="btn btn-sm" type="button" id="uu-changepin">Change PIN…</button><button class="btn btn-sm btn-ghost btn-danger" type="button" id="uu-droppin">Remove PIN</button></div>`
           : `<div id="uu-pin-wrap"><button class="btn btn-sm" type="button" id="uu-setpin">Set a PIN…</button></div>`}
       </div>`}`}
@@ -349,6 +351,7 @@ async function createAliasPin(u, pin, perms) {
 }
 async function removeAliasPin(ap) {
   if (!ap) return;
+  if (ap.quick) await updateDoc(doc(db, "users", ap.alias), { quickPin: null }).catch(() => {}); // their Google profile forgets the PIN too
   await deleteDoc(doc(db, "users", ap.uid));
   await deleteDoc(doc(db, "pins", ap.uid)).catch(() => {});
   if (pins[ap.uid]) await deletePinAccount(pins[ap.uid]).catch(() => {});

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>6th Ward</title>
 <link rel="icon" href="assets/program-logo.jpg">
-<link rel="stylesheet" href="css/style.css?v=1791748757">
+<link rel="stylesheet" href="css/style.css?v=1791765756">
 </head>
 <body>
 
@@ -15,6 +15,11 @@
     <div class="login-logo"><img src="assets/program-logo.jpg" alt="" class="login-logo-img"></div>
     <h1>6th Ward</h1>
     <p class="login-sub">Ward organization &amp; planning</p>
+    <div id="quick-login" class="quick-login hidden">
+      <label class="pin-label">Quick sign-in</label>
+      <div id="quick-rows"></div>
+      <div class="login-or"><span>or</span></div>
+    </div>
     <label class="pin-label" for="pin-input">Enter your PIN</label>
     <div class="pin-row">
       <input id="pin-input" class="pin-input" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" placeholder="••••••" aria-label="6-digit PIN">
@@ -69,6 +74,7 @@
       </button>
       <div class="user-menu hidden" id="user-menu">
         <div class="user-menu-head"><b id="user-full"></b><div id="user-sub"></div></div>
+        <button type="button" id="btn-quick-pin" class="user-menu-item hidden">Set a 4-digit PIN…</button>
         <button type="button" id="btn-signout" class="user-menu-item">Sign out</button>
       </div>
     </div>
@@ -96,6 +102,6 @@
 
 <div id="toast" class="toast hidden"></div>
 
-<script type="module" src="js/app.js?v=1791748757"></script>
+<script type="module" src="js/app.js?v=1791765756"></script>
 </body>
 </html>
