@@ -2005,3 +2005,15 @@ button.src-st { cursor: pointer; } button.src-st:hover { filter: brightness(.93)
 .src-act-form .src-in { flex: 1 1 14rem; min-width: 10rem; }
 .src-act-form-tools { display: inline-flex; gap: .3rem; margin-left: auto; }
 @media (max-width: 640px) { .src-act { flex-wrap: wrap; } .src-act-date { width: auto; } }
+
+/* action types + request log (2026-10-11) */
+.src-act-type { flex: none; font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: .08rem .45rem; border-radius: 99px; background: #e6e9ed; color: #4b5563; align-self: center; }
+.src-at-food { background: #dff3e6; color: #22693f; }
+.src-at-check { background: #dbe9f7; color: #1f4e79; }
+.src-at-meeting { background: #fdf0c9; color: #8a6500; }
+.src-at-call { background: #ece6f7; color: #5b3fa0; }
+.src-at-visit { background: #fde3d6; color: #a0472a; }
+.src-act-type-sel { font: inherit; font-size: .88rem; padding: .35rem .45rem; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.src-reqlog .src-act { padding-left: .2rem; }
+.src-reqlog .src-req-latest .src-act-text { font-weight: 600; }
+.src-reqlog .src-act-by { font-style: italic; }
