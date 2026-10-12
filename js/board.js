@@ -3,13 +3,14 @@
 // added, renamed, reordered and removed. Data:
 //   boardColumns/{id}  { label, order }
 //   board/{id}         { name, notes, column, order, createdAt, updatedAt }
-import { db } from "./firebase-init.js?v=1791777716";
-import { ctx, can } from "./app.js?v=1791777716";
+import { db } from "./firebase-init.js?v=1791778160";
+import { goTab, ctx, can } from "./app.js?v=1791778160";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1791777716";
-import { notesHtml, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1791777716";
+import { openCaseById } from "./sr-cases.js?v=1791778160";
+import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1791778160";
+import { notesHtml, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1791778160";
 
 // Next ordinance a person is working toward — shown as a pill beside the name.
 const ORDINANCES = ["Sacrament", "Aaronic Priesthood", "Melchizedek Priesthood", "Endowment", "Sealing"];
@@ -22,6 +23,7 @@ const DEFAULT_COLUMNS = ["Ideas", "Talking to", "Settled"];
 let cols = [];
 let cards = [];
 let started = false;
+let srCases = []; // Self-Reliance cards, for linking a person to theirs (only loads for people who can see that page) — 2026-10-11
 const expandedNotes = new Set(); // card ids whose long notes are shown in full
 let seeding = false;
 
@@ -63,6 +65,9 @@ export function initBoard() {
     render();
   }));
 
+  if (can("selfreliance")) onSnapshot(collection(db, "srCases"), (qs) => { srCases = qs.docs.map((d) => ({ id: d.id, name: d.data().name || "", status: d.data().status || "open" })).sort((a, b) => a.name.localeCompare(b.name)); render(); }, () => {});
+  // another page asks to show one card (e.g. the Self-Reliance card's "Member Board" link)
+  document.addEventListener("board:show", (e) => { setTimeout(() => { const el = document.querySelector(`#panel-board .board-card[data-id="${e.detail.id}"]`); if (el) { el.scrollIntoView({ block: "center" }); el.classList.add("board-card-flash"); setTimeout(() => el.classList.remove("board-card-flash"), 1800); } }, 150); });
   onSnapshot(collection(db, "boardColumns"), (qs) => {
     cols = qs.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     if (!cols.length && editor && !seeding && !(qs.metadata && qs.metadata.fromCache)) seedColumns();
@@ -108,7 +113,7 @@ function render() {
       <div class="board-head"><div class="row-title">${esc(k.name || "—")}</div>${k.nextOrdinance || editor ? `<span class="ord-pill${k.nextOrdinance ? "" : " ord-empty"}${editor ? " ord-edit" : ""}" data-ord="1" title="${editor ? "Click to change" : ""}">${k.nextOrdinance ? "Next: " + esc(k.nextOrdinance) : "+ next ordinance"}</span>` : ""}${k.cadence || editor ? `<span class="ord-pill cad-pill${k.cadence ? "" : " ord-empty"}${editor ? " ord-edit" : ""}" data-cad="1" title="${editor ? "How often you meet — click to change" : ""}">${k.cadence ? "Meets: " + esc(cadenceLabel(k.cadence)) : "+ regular meeting"}</span>` : ""}</div>
       ${k.notes || editor ? `<div class="row-sub board-note${k.notes ? "" : " board-note-empty"}${editor ? " board-note-edit" : ""}${k.notes && !expandedNotes.has(k.id) ? " board-note-clamp" : ""}" data-notes="1" title="${editor ? "Click to edit" : ""}">${k.notes ? esc(k.notes) : "+ notes"}</div><div class="board-note-more" data-more="${k.id}" hidden>${expandedNotes.has(k.id) ? "less ▴" : "more ▾"}</div>` : ""}
       <div class="todo-pills">${open.map((t) => todoPill(k, t)).join("")}${editor ? `<span class="todo-pill todo-add-pill" data-addtodo="1" title="Add a to-do — type and press Enter">+</span>` : ""}</div>
-      <div class="mtg-row">${meetingsPill(k, editor)}</div>
+      <div class="mtg-row">${meetingsPill(k, editor)}${k.srCase && can("selfreliance") ? `<span class="sr-link-pill" data-srcase="${esc(k.srCase)}" title="Open their Self-Reliance card">🧾 Self-Reliance${srCases.find((c) => c.id === k.srCase)?.status === "closed" ? " · closed" : ""}</span>` : ""}</div>
     </div>`;
   };
   wrap.innerHTML = `<div class="bishopric-board member-board">` + /* 4 columns on desktop (CSS); extra sections wrap to a second row */
@@ -117,7 +122,7 @@ function render() {
       return `
       <div class="card bb-col board-col" data-colid="${c.id}" style="margin-top:.8rem;border-top:4px solid ${colColor(i)}">
         <h3 class="board-col-head" ${editor ? `draggable="true" title="Drag to reorder sections"` : ""} style="display:flex;align-items:center;gap:.5rem;min-width:0">
-          <span class="board-col-label${editor ? " st-click" : ""}" data-col="${c.id}" title="${editor ? "Click to rename or remove this section" : ""}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.label)}</span>
+          ${editor ? `<span class="board-col-grip" aria-hidden="true" title="Drag to move this section">⋮⋮</span>` : ""}<span class="board-col-label${editor ? " st-click" : ""}" data-col="${c.id}" title="${editor ? "Click to rename or remove this section" : ""}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.label)}</span>
           <span class="pill pill-role-member">${rows.length}</span>
           ${editor ? `<button class="btn btn-sm" data-addto="${c.id}" type="button" style="margin-left:auto" title="Add a person to ${esc(c.label)}">+</button>` : ""}
         </h3>
@@ -144,6 +149,8 @@ function render() {
       const pill = e.target.closest(".todo-pill");
       if (pill && pill.dataset.addtodo) { e.stopPropagation(); inlineNewTodo(row, k, pill); return; }
       if (pill) { e.stopPropagation(); const t = (k.todos || []).find((x) => x.id === pill.dataset.todo); if (t) editTodo(k, t); return; }
+      const srl = e.target.closest(".sr-link-pill");
+      if (srl) { e.stopPropagation(); openCaseById(srl.dataset.srcase); return; }
       const rc = e.target.closest(".mtg-preview [data-rc]");
       if (rc) { e.stopPropagation(); if (editor) { const [mid, idx] = rc.dataset.rc.split(":"); toggleRecapTodo(k, mid, Number(idx)); } return; }
       const mp = e.target.closest(".mtg-pill, .mtg-preview");
@@ -164,30 +171,32 @@ function render() {
   wrap.querySelectorAll(".board-col-label").forEach((l) => l.addEventListener("click", () => editSection(cols.find((c) => c.id === l.dataset.col))));
 
   // ---- drag a section header to reorder the sections ----
-  let dragCol = null;
+  let dragCol = null, dragAfter = false; // drop on the left half of a section = before it, right half = after it (2026-10-11)
   wrap.querySelectorAll(".board-col-head[draggable]").forEach((h) => {
     const col = h.closest(".board-col");
     h.addEventListener("dragstart", (e) => { dragCol = col.dataset.colid; e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", ""); } catch {} col.classList.add("col-dragging"); e.stopPropagation(); });
-    h.addEventListener("dragend", () => { dragCol = null; wrap.querySelectorAll(".col-dragging, .col-before").forEach((x) => x.classList.remove("col-dragging", "col-before")); });
+    h.addEventListener("dragend", () => { dragCol = null; wrap.querySelectorAll(".col-dragging, .col-before, .col-after").forEach((x) => x.classList.remove("col-dragging", "col-before", "col-after")); });
   });
   wrap.querySelectorAll(".board-col").forEach((col) => {
     col.addEventListener("dragover", (e) => {
       if (!dragCol || col.dataset.colid === dragCol) return;
       e.preventDefault();
-      wrap.querySelectorAll(".col-before").forEach((x) => x.classList.remove("col-before"));
-      col.classList.add("col-before");
+      const r = col.getBoundingClientRect();
+      dragAfter = e.clientX > r.left + r.width / 2;
+      wrap.querySelectorAll(".col-before, .col-after").forEach((x) => x.classList.remove("col-before", "col-after"));
+      col.classList.add(dragAfter ? "col-after" : "col-before");
     });
     col.addEventListener("drop", async (e) => {
       if (!dragCol) return;
       e.preventDefault(); e.stopPropagation();
       const from = dragCol; dragCol = null;
-      wrap.querySelectorAll(".col-dragging, .col-before").forEach((x) => x.classList.remove("col-dragging", "col-before"));
+      wrap.querySelectorAll(".col-dragging, .col-before, .col-after").forEach((x) => x.classList.remove("col-dragging", "col-before", "col-after"));
       const target = col.dataset.colid;
       if (from === target) return;
       const list = cols.filter((c) => c.id !== from);
       const moving = cols.find((c) => c.id === from);
       const at = list.findIndex((c) => c.id === target);
-      list.splice(at < 0 ? list.length : at, 0, moving);
+      list.splice(at < 0 ? list.length : at + (dragAfter ? 1 : 0), 0, moving);
       const batch = writeBatch(db);
       list.forEach((c, i) => { if (c.order !== i) { c.order = i; batch.update(doc(db, "boardColumns", c.id), { order: i }); } });
       cols = list;
@@ -748,6 +757,8 @@ function editCard(k, presetCol) {
         <div style="display:flex;gap:.4rem;align-items:stretch"><select id="bc-col" style="flex:1" ${editor ? "" : "disabled"}>${cols.map((c) => `<option value="${c.id}" ${c.id === colId ? "selected" : ""}>${esc(c.label)}</option>`).join("")}</select>${editor ? `<button class="btn" type="button" id="bc-newcol" title="Create a new section and pick it">+ New section</button>` : ""}</div>
       </label>
       <label class="field"><span>Next ordinance</span><select id="bc-ord" ${editor ? "" : "disabled"}><option value="">— none —</option>${ORDINANCES.map((o) => `<option value="${esc(o)}"${(k?.nextOrdinance || "") === o ? " selected" : ""}>${esc(o)}</option>`).join("")}</select></label>
+      ${can("selfreliance") ? `<label class="field full"><span>Self-Reliance card <span class="row-sub">(links this person to their card on the Self-Reliance page)</span></span>
+        <select id="bc-sr" ${editor ? "" : "disabled"}><option value="">— none —</option>${srCases.map((c) => `<option value="${c.id}"${(k?.srCase || (isNew ? "" : "")) === c.id ? " selected" : ""}>${esc(c.name)}${c.status === "closed" ? " (closed)" : ""}</option>`).join("")}</select></label>` : ""}
       <label class="field full"><span>Notes</span><textarea id="bc-notes" ${editor ? "" : "disabled"} placeholder="Anything worth remembering — optional">${esc(k?.notes || "")}</textarea></label>
     </div>
     ${!isNew ? `<h4 style="margin:1rem 0 .3rem">To-dos <span class="row-sub" style="font-weight:400">· top = highest priority · ✓ archives</span></h4><div id="bc-todos">${todoListHtml(k)}</div>
@@ -797,14 +808,15 @@ function editCard(k, presetCol) {
     const column = el.querySelector("#bc-col").value;
     const notes = el.querySelector("#bc-notes").value.trim();
     const nextOrdinance = el.querySelector("#bc-ord").value;
+    const srSel = el.querySelector("#bc-sr"), srCase = srSel ? srSel.value : (k?.srCase || "");
     if (!name) { toast("Enter a name"); return; }
     try {
       if (isNew) {
         const order = cards.filter((x) => x.column === column).length;
-        await addDoc(collection(db, "board"), { name, notes, nextOrdinance, column, order, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), createdBy: ctx.name || "" });
+        await addDoc(collection(db, "board"), { name, notes, nextOrdinance, srCase, column, order, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), createdBy: ctx.name || "" });
         toast(`${name} added`);
       } else {
-        const patch = { name, notes, nextOrdinance, updatedAt: serverTimestamp() };
+        const patch = { name, notes, nextOrdinance, srCase, updatedAt: serverTimestamp() };
         if (column !== k.column) { patch.column = column; patch.order = cards.filter((x) => x.column === column).length; }
         await updateDoc(doc(db, "board", k.id), patch);
         toast("Saved");
@@ -814,6 +826,11 @@ function editCard(k, presetCol) {
   };
   el.querySelector("#bc-save").addEventListener("click", save);
   el.querySelector("#bc-name").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); save(); } });
+  const srSel = el.querySelector("#bc-sr");
+  if (srSel && !srSel.value) { // same name on the Self-Reliance page? suggest it
+    const pick = () => { const n = el.querySelector("#bc-name").value.trim().toLowerCase(); const hit = n && srCases.find((c) => c.name.trim().toLowerCase() === n); if (hit && !srSel.value) srSel.value = hit.id; };
+    pick(); el.querySelector("#bc-name").addEventListener("change", pick);
+  }
 }
 
 // ---- section editor (rename / reorder / remove) ----

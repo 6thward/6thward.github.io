@@ -11,20 +11,22 @@
 //   summary  — the leader's own few lines, shown first on the card (bullets / to-dos / bold like council notes)
 //   log[]    — dated notes { id, at, by, text, editedAt }; the old single `notes` text shows as an undated note
 // Same privacy as the rest of this page: only the bishop and people given Self-Reliance.
-import { db } from "./firebase-init.js?v=1791777716";
-import { ctx, can } from "./app.js?v=1791777716";
+import { db } from "./firebase-init.js?v=1791778160";
+import { ctx, can, goTab } from "./app.js?v=1791778160";
 import {
   collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791777716";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine, inlineFmt } from "./notes.js?v=1791777716";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1791777716";
+import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791778160";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine, inlineFmt } from "./notes.js?v=1791778160";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1791778160";
 import {
   INC, EXP, QA, parseCsv, mapResponses, personKey, respTotals, fmtUsd, isBlank, writeupSections,
   parseBudgetCsv, parseMoney, budgetTotals, fmtUsdC,
-} from "./sr-import.js?v=1791777716";
+} from "./sr-import.js?v=1791778160";
 
 let mount = null, cases = [], started = false, openId = null, openRi = null;
+let loaded = null, markLoaded = null; // resolves once the cards have arrived (for opening one from another page)
+let boardCards = []; // Member Board cards that point at a Self-Reliance card (2026-10-11)
 let openBi = 0, budgetEditing = false;
 let wuOpen = new Set(), wuEditing = null; // which write-ups are unfolded on the open card; the one being edited ("new" for a fresh one) // which budget is showing on the open card, and whether it's being edited
 const thumbs = new Map(); // file id -> object URL, so an attached image shows right on the card
@@ -40,10 +42,19 @@ const sorted = (c) => [...(c.responses || [])].sort((a, b) => String(a.at || "")
 const latest = (c) => sorted(c).slice(-1)[0] || null;
 const editor = () => can("selfreliance", "edit");
 
+// Open one card from another page (the Member Board): switch tabs, then open it once the list is here
+export async function openCaseById(id) {
+  goTab("selfreliance");
+  if (!started) { const host = document.getElementById("sr-cards-view"); if (host) initCases(host); }
+  try { await loaded; } catch {}
+  if (cases.some((c) => c.id === id)) openCase(id); else toast("That Self-Reliance card isn't there any more");
+}
 export function initCases(el) {
   mount = el;
   if (started) { renderGrid(); return; }
   started = true;
+  loaded = new Promise((res) => { markLoaded = res; });
+  if (can("board")) onSnapshot(collection(db, "board"), (qs) => { boardCards = qs.docs.map((d) => ({ id: d.id, ...d.data() })).filter((k) => k.srCase); renderGrid(); refreshOpen(); }, () => {});
   mount.innerHTML = `
     <div class="card src-bar">
       <input id="src-q" placeholder="Search a name…" autocomplete="off">
@@ -66,6 +77,7 @@ export function initCases(el) {
 
   onSnapshot(collection(db, "srCases"), (qs) => {
     cases = qs.docs.map((d) => ({ id: d.id, ...d.data() }));
+    if (markLoaded) { markLoaded(); markLoaded = null; }
     renderGrid();
     refreshOpen();
   }, (err) => { mount.querySelector("#src-grid").innerHTML = `<div class="empty-note">Couldn't load: ${esc(err.code || err.message)}</div>`; });
@@ -238,7 +250,7 @@ function detailHtml(c, ri) {
   return `
     <div class="src-d-head">
       <div><h3>${esc(c.name || "—")}</h3>
-        <div class="row-sub">${[c.spouse ? "& " + esc(c.spouse) : "", c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : ""].filter(Boolean).join(" · ")}</div></div>
+        <div class="row-sub">${[c.spouse ? "& " + esc(c.spouse) : "", boardCards.some((k) => k.srCase === c.id) ? `<a href="#" class="src-board-link" data-board="${esc(boardCards.find((k) => k.srCase === c.id).id)}" title="Open their Member Board card">📋 Member Board</a>` : "", c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : ""].filter(Boolean).join(" · ")}</div></div>
       <div class="src-d-tools">
         ${ed ? `<select id="srd-status" class="src-st-sel ${STATUS_PILL[st]}" title="${st === "closed" && c.closedAt ? "Closed " + esc(fmtDay(c.closedAt)) : "Open or closed"}">${STATUS.map(([k, l]) => `<option value="${k}"${k === st ? " selected" : ""}>${l}</option>`).join("")}</select>` : `<span class="pill src-st ${STATUS_PILL[st]}">${esc(STATUS.find(([k]) => k === st)?.[1] || st)}</span>`}
         <button class="btn btn-sm" id="srd-print" type="button">🖨 Print</button>
@@ -329,6 +341,7 @@ function drawOpen() {
     catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
   };
   box.querySelector("#srd-close").addEventListener("click", () => { openId = null; closeModal(); });
+  box.querySelector(".src-board-link")?.addEventListener("click", (e) => { e.preventDefault(); openId = null; closeModal(); goTab("board"); document.dispatchEvent(new CustomEvent("board:show", { detail: { id: e.currentTarget.dataset.board } })); });
   box.querySelector("#srd-print").addEventListener("click", () => printCase(c, rs[openRi]));
   box.querySelectorAll("[data-ri]").forEach((b) => b.addEventListener("click", () => { openRi = Number(b.dataset.ri); drawOpen(); }));
   box.querySelectorAll("[data-bi]").forEach((b) => b.addEventListener("click", () => { openBi = Number(b.dataset.bi); drawOpen(); }));
