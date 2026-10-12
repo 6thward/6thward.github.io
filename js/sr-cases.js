@@ -18,18 +18,18 @@
 //   plan[]     — the plan, as dated notes { id, at, text, by } (2026-10-11)
 
 // Same privacy as the rest of this page: only the bishop and people given Self-Reliance.
-import { db } from "./firebase-init.js?v=1791783505";
-import { ctx, can, goTab } from "./app.js?v=1791783505";
+import { db } from "./firebase-init.js?v=1791783908";
+import { ctx, can, goTab } from "./app.js?v=1791783908";
 import {
   collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791783505";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine, inlineFmt } from "./notes.js?v=1791783505";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1791783505";
+import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791783908";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine, inlineFmt } from "./notes.js?v=1791783908";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1791783908";
 import {
   INC, EXP, QA, parseCsv, mapResponses, personKey, respTotals, fmtUsd, isBlank, writeupSections,
   parseBudgetCsv, parseMoney, budgetTotals, fmtUsdC,
-} from "./sr-import.js?v=1791783505";
+} from "./sr-import.js?v=1791783908";
 
 let mount = null, cases = [], started = false, openId = null, openRi = null;
 let loaded = null, markLoaded = null; // resolves once the cards have arrived (for opening one from another page)
@@ -102,8 +102,10 @@ export function initCases(el) {
 
 // dated notes, newest first; a card from before the log existed may still carry one undated `notes` text
 const actionsOf = (c) => [...(c.actions || [])].sort((a, b) => String(b.at).localeCompare(String(a.at))); // newest first
-const ACTION_TYPES = [["food", "Food"], ["check", "Check"], ["meeting", "Meeting"], ["noshow", "No Show"], ["call", "Call"], ["visit", "Visit"], ["other", "Other"]]; // No Show = a meeting they didn't come to (2026-10-11)
+const ACTION_TYPES = [["food", "Food"], ["check", "Check"], ["meeting", "Meeting"], ["noshow", "No Show"], ["call", "Call"], ["visit", "Visit"], ["member", "Member Action"], ["other", "Other"]]; // No Show = a meeting they didn't come to; Member Action = something we asked THEM to do, open until marked done (2026-10-11)
 const actionTypeLabel = (t) => (ACTION_TYPES.find(([k]) => k === t) || [])[1] || "";
+const isMemberAction = (a) => a && a.type === "member";
+const openMemberActions = (c) => actionsOf(c).filter((a) => isMemberAction(a) && !a.done);
 const requestsOf = (c) => {
   const raw = (c.requests || []).length ? [...c.requests] : ((c.requested || "").trim() ? [{ id: "legacy", at: c.created || "", text: c.requested, by: "" }] : []);
   raw.sort((a, b) => String(b.at).localeCompare(String(a.at)));
@@ -177,7 +179,7 @@ function renderGrid() {
     const opens = openRequests(c), acts = actionsOf(c), reqs = requestsOf(c), plan = planOf(c);
     const tl = [...acts.map((a) => ({ at: a.at, a })), ...reqs.map((q) => ({ at: q.at, q }))].sort((x, y) => String(y.at).localeCompare(String(x.at))).slice(0, 4);
     const row = (e) => e.a
-      ? `<div class="src-tl-row"><span class="src-tl-d">${esc(fmtShort(e.a.at))}</span>${e.a.type ? `<span class="src-act-type src-at-${esc(e.a.type)}">${esc(actionTypeLabel(e.a.type) || e.a.type)}</span>` : ""}<span class="src-tl-t">${esc(plainLine(e.a.text || ""))}</span>${iniTag(e.a.by)}</div>`
+      ? `<div class="src-tl-row${isMemberAction(e.a) && !e.a.done ? " src-tl-open" : ""}"><span class="src-tl-d">${esc(fmtShort(e.a.at))}</span>${e.a.type ? `<span class="src-act-type src-at-${esc(e.a.type)}">${esc(actionTypeLabel(e.a.type) || e.a.type)}</span>` : ""}<span class="src-tl-t">${esc(plainLine(e.a.text || ""))}</span>${isMemberAction(e.a) ? `<span class="src-tl-st src-tl-st-${e.a.done ? "done" : "open"}">${e.a.done ? "done" : "open"}</span>` : ""}${iniTag(e.a.by)}</div>`
       : `<div class="src-tl-row src-tl-req${e.q.status === "open" ? " src-tl-open" : ""}"><span class="src-tl-d">${esc(fmtShort(e.q.at))}</span><span class="src-act-type src-at-req">Request</span><span class="src-tl-t">${esc(plainLine(e.q.text || ""))}</span><span class="src-tl-st src-tl-st-${e.q.status}">${e.q.status}</span>${iniTag(e.q.by)}</div>`;
     return `<div class="src-card src-card-b${st === "closed" ? " src-card-closed" : ""}" data-id="${c.id}" tabindex="0"${editor() ? ` draggable="true" title="Drag into the other section to close or re-open"` : ""}>
       <div class="src-card-top"><b class="src-name">${esc(displayName(c))}</b>${editor()
@@ -185,6 +187,9 @@ function renderGrid() {
         : `<span class="pill src-st ${STATUS_PILL[st]}" title="${st === "open" ? `${opens.length} open request${opens.length === 1 ? "" : "s"}` : `Closed${c.closedAt ? " " + fmtDay(c.closedAt) : ""} — no open request`}">${st === "closed" ? "Closed" : "Open"}</span>`}</div>
       <div class="src-bio">${esc(c.bio || "")}</div>
       <div class="src-openreqs">${editor() ? `<button type="button" class="src-addreq" data-addreq="${c.id}" title="Add a request">+</button>` : ""}${opens.length ? opens.map((q, i) => `<div class="src-openreq"><span class="src-openreq-lbl">Open request · ${esc(fmtDay(q.at))}${i === 0 && opens.length > 1 ? `<span class="src-openreq-more"> · +${opens.length - 1} more</span>` : ""}</span><span class="src-openreq-txt">${esc(plainLine(q.text || ""))}</span></div>`).join("") : `<div class="src-openreq src-openreq-none">No open request</div>`}</div>
+      <div class="src-openacts">${(() => { const ma = openMemberActions(c); return ma.length
+        ? `<div class="src-openact"><span class="src-openact-lbl">Member action${ma.length > 1 ? ` · +${ma.length - 1} more` : ""}</span><span class="src-openact-txt">${esc(plainLine(ma[0].text || ""))}</span></div>`
+        : `<div class="src-openact src-openact-none">No member action open</div>`; })()}</div>
       <div class="src-tl"><span class="src-tl-h">Latest</span>${tl.length ? tl.map(row).join("") : `<span class="row-sub">Nothing logged yet</span>`}</div>
       <div class="src-planbox"><span class="src-tl-h">Plan</span>${plan.length ? plan.slice(0, 3).map((x) => `<div class="src-planline">• ${esc(plainLine(x.text || ""))}</div>`).join("") + (plan.length > 3 ? `<div class="src-planline row-sub">+ ${plan.length - 3} more</div>` : "") : `<span class="row-sub">No plan yet</span>`}</div>
       <div class="src-card-foot"><span>${acts.length} action${acts.length === 1 ? "" : "s"} · ${reqs.length} request${reqs.length === 1 ? "" : "s"}</span>${r ? `<span>plan ${esc(fmtDay(r.at))}</span>` : ""}${(c.files || []).length ? `<span>📎 ${(c.files || []).length}</span>` : ""}${t && t.net != null ? `<span class="src-foot-left ${t.net < 0 ? "neg" : "pos"}">${fmtUsd(t.net)}/mo</span>` : ""}<button type="button" class="src-expand" data-expand title="Show everything on this card">⌄</button></div>
@@ -357,7 +362,9 @@ function detailHtml(c, ri) {
     </div>
     <div class="src-actions"><h4>Action log ${ed ? `<button class="btn btn-sm btn-ghost" id="srd-act-add" type="button">+ Add</button>` : ""}</h4>
       <div id="srd-act-new"></div>
-      ${actionsOf(c).length ? `<div class="src-act-list">${actionsOf(c).map((a) => `<div class="src-act${ed ? " src-act-ed" : ""}" data-act="${esc(a.id)}" ${ed ? `title="Click to edit"` : ""}><span class="src-act-date">${esc(fmtDay(a.at) || "—")}</span>${a.type ? `<span class="src-act-type src-at-${esc(a.type)}">${esc(actionTypeLabel(a.type) || a.type)}</span>` : ""}<span class="src-act-text">${inlineFmt(a.text || "")}</span>${a.by ? `<span class="src-act-by">${esc(a.by)}</span>` : ""}</div>`).join("")}</div>`
+      ${actionsOf(c).length ? `<div class="src-act-list">${actionsOf(c).map((a) => `<div class="src-act${ed ? " src-act-ed" : ""}" data-act="${esc(a.id)}" ${ed ? `title="Click to edit"` : ""}><span class="src-act-date">${esc(fmtDay(a.at) || "—")}</span>${a.type ? `<span class="src-act-type src-at-${esc(a.type)}">${esc(actionTypeLabel(a.type) || a.type)}</span>` : ""}<span class="src-act-text">${inlineFmt(a.text || "")}</span>${isMemberAction(a) ? (ed
+                ? `<button type="button" class="src-reqst src-reqst-${a.done ? "done" : "open"}" data-actdone="${esc(a.id)}" title="${a.done ? `Done${a.doneAt ? " " + esc(fmtDay(a.doneAt)) : ""} — click to re-open` : "Open — click once they've done it"}">${a.done ? "done" : "open"}</button>`
+                : `<span class="src-reqst src-reqst-${a.done ? "done" : "open"}">${a.done ? "done" : "open"}</span>`) : ""}${a.by ? `<span class="src-act-by">${esc(a.by)}</span>` : ""}</div>`).join("")}</div>`
         : `<p class="row-sub" style="margin:0">Nothing logged yet${ed ? " — one line per thing done: paid rent, placed a food order, made a commitment." : "."}</p>`}
     </div>
     <div class="src-d-cols">
@@ -619,17 +626,20 @@ function drawOpen() {
     box.querySelector(".src-act-form")?.remove();
     const f = document.createElement("div");
     f.className = "src-act-form";
-    f.innerHTML = `${L.typed ? `<select data-atype class="src-act-type-sel">${ACTION_TYPES.map(([k, l]) => `<option value="${k}"${(a?.type || "") === k ? " selected" : ""}>${l}</option>`).join("")}</select>` : ""}${L.status ? `<select data-ast class="src-act-type-sel src-reqst-sel"><option value="open"${(a?.status || "open") === "open" ? " selected" : ""}>Open</option><option value="closed"${a?.status === "closed" ? " selected" : ""}>Closed</option></select>` : ""}<input type="date" data-ad value="${esc(isoDate(a?.at || new Date().toISOString()))}"><input data-at class="src-in" placeholder="${esc(L.placeholder)}" autocomplete="off" value="${esc(a?.text || "")}">
+    f.innerHTML = `${L.typed ? `<select data-atype class="src-act-type-sel">${ACTION_TYPES.map(([k, l]) => `<option value="${k}"${(a?.type || "") === k ? " selected" : ""}>${l}</option>`).join("")}</select>` : ""}${L.status ? `<select data-ast class="src-act-type-sel src-reqst-sel"><option value="open"${(a?.status || "open") === "open" ? " selected" : ""}>Open</option><option value="closed"${a?.status === "closed" ? " selected" : ""}>Closed</option></select>` : ""}${L.typed ? `<select data-adone class="src-act-type-sel src-reqst-sel"${isMemberAction(a) ? "" : " hidden"}><option value="open"${a?.done ? "" : " selected"}>Open</option><option value="done"${a?.done ? " selected" : ""}>Done</option></select>` : ""}<input type="date" data-ad value="${esc(isoDate(a?.at || new Date().toISOString()))}"><input data-at class="src-in" placeholder="${esc(L.placeholder)}" autocomplete="off" value="${esc(a?.text || "")}">
       <span class="src-act-form-tools">${a ? `<button type="button" class="btn btn-sm btn-ghost btn-danger" data-x="delete" title="Delete this entry">✕</button>` : ""}<button type="button" class="btn btn-sm" data-x="cancel">Cancel</button><button type="button" class="btn btn-primary btn-sm" data-x="save">Save</button></span>`;
     if (a) slot.replaceWith(f); else slot.appendChild(f);
     const txt = f.querySelector("[data-at]"); txt.focus();
+    f.querySelector("[data-atype]")?.addEventListener("change", (e) => { const d = f.querySelector("[data-adone]"); if (d) d.hidden = e.target.value !== "member"; }); // Open / Done only matters for a Member Action
     const done = async (mode) => {
-      const text = txt.value.trim(), date = f.querySelector("[data-ad]").value, type = f.querySelector("[data-atype]")?.value || "", stv = f.querySelector("[data-ast]")?.value || "";
+      const text = txt.value.trim(), date = f.querySelector("[data-ad]").value, type = f.querySelector("[data-atype]")?.value || "", stv = f.querySelector("[data-ast]")?.value || "", dv = f.querySelector("[data-adone]")?.value || "";
       f.remove();
       if (mode === "save" && text) {
         const today = isoDate();
         const at = a && isoDate(a.at) === date ? a.at : (!date || date === today) && !a ? new Date().toISOString() : (date || today) + "T12:00:00";
         const stPatch = L.status ? { status: stv, closedAt: stv === "closed" ? (a?.status === "closed" && a.closedAt ? a.closedAt : new Date().toISOString()) : "" } : {};
+        if (L.typed && type === "member") { stPatch.done = dv === "done"; stPatch.doneAt = dv === "done" ? (a?.done && a.doneAt ? a.doneAt : new Date().toISOString()) : ""; }
+        else if (L.typed) { stPatch.done = false; stPatch.doneAt = ""; }
         const next = a ? L.list(c).map((x) => (x.id === a.id ? { ...x, text, at, ...(L.typed ? { type } : {}), ...stPatch } : x))
           : [...L.list(c), { id: L.prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), at, text, by: ctx.name || "", ...(L.typed ? { type } : {}), ...stPatch }];
         await L.save(next, a ? `${L.noun} saved` : `${L.noun} added`);
@@ -650,6 +660,14 @@ function drawOpen() {
     if (window.getSelection && String(window.getSelection())) return;
     const which = row.dataset.req ? "requests" : row.dataset.plan ? "plan" : "actions";
     const a = LOGS[which].list(c).find((x) => x.id === (row.dataset.req || row.dataset.plan || row.dataset.act)); if (a) logForm(which, row, a);
+  }));
+  // Open ⇄ Done on a member-action row (2026-10-11)
+  box.querySelectorAll("[data-actdone]").forEach((b) => b.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    const a = actionsOf(c).find((x) => x.id === b.dataset.actdone); if (!a) return;
+    const nowDone = !a.done;
+    await save({ actions: actionsOf(c).map((x) => (x.id === a.id ? { ...x, done: nowDone, doneAt: nowDone ? new Date().toISOString() : "" } : x)) }, nowDone ? "Marked done" : "Re-opened");
+    drawOpen();
   }));
   // Open ⇄ Closed on a request row; the card follows (2026-10-11)
   box.querySelectorAll("[data-reqst]").forEach((b) => b.addEventListener("click", async (e) => {
@@ -867,7 +885,7 @@ function printCase(c, r) {
     ${(c.bio || "").trim() ? `<p class="raw">${esc(c.bio)}</p>` : ""}
     ${requestsOf(c).length ? `<h2>Requests</h2><table>${requestsOf(c).map((q) => `<tr><td style="white-space:nowrap;padding-right:1rem">${esc(fmtDay(q.at) || "—")}</td><td style="white-space:nowrap;padding-right:1rem;text-transform:uppercase;font-size:.75em">${esc(q.status)}</td><td>${esc(plainLine(q.text || ""))}</td></tr>`).join("")}</table>` : ""}
     ${planOf(c).length ? `<h2>Plan</h2><table>${planOf(c).map((x) => `<tr><td style="white-space:nowrap;padding-right:1rem">${esc(fmtDay(x.at) || "—")}</td><td>${esc(plainLine(x.text || ""))}</td></tr>`).join("")}</table>` : ""}
-    ${actionsOf(c).length ? `<h2>Action log</h2><table>${actionsOf(c).map((a) => `<tr><td style="white-space:nowrap;padding-right:1rem">${esc(fmtDay(a.at) || "—")}</td><td style="white-space:nowrap;padding-right:1rem">${esc(actionTypeLabel(a.type))}</td><td>${esc(plainLine(a.text || ""))}</td></tr>`).join("")}</table>` : ""}
+    ${actionsOf(c).length ? `<h2>Action log</h2><table>${actionsOf(c).map((a) => `<tr><td style="white-space:nowrap;padding-right:1rem">${esc(fmtDay(a.at) || "—")}</td><td style="white-space:nowrap;padding-right:1rem">${esc(actionTypeLabel(a.type))}${isMemberAction(a) ? ` · ${a.done ? "done" : "open"}` : ""}</td><td>${esc(plainLine(a.text || ""))}</td></tr>`).join("")}</table>` : ""}
     ${(c.budgets || []).map((b, i) => { const bt = budgetTotals(b); const rowsOf = (ls) => (ls || []).map((l) => `<tr><td>${esc(l.label)}${l.note ? `<div class="raw">${esc(l.note)}</div>` : ""}</td><td class="n">${l.amount == null ? "cut" : fmtUsdC(l.amount)}</td></tr>`).join("");
       return `<h2>${i === 0 ? "Budget from the specialist" : "What-if"}: ${esc(b.title || "")}</h2>
         <div class="tiles"><div><span>Income</span><b>${fmtUsdC(bt.income)}</b></div><div><span>Expenses</span><b>${fmtUsdC(bt.expenses)}</b></div><div><span>Left over each month</span><b>${fmtUsdC(bt.net)}</b></div></div>

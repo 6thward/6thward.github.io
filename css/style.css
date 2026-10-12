@@ -2134,3 +2134,15 @@ button.src-reqst { cursor: pointer; } button.src-reqst:hover { filter: brightnes
 .src-grid-inner.src-drop-over { background: var(--brand-soft); box-shadow: 0 0 0 2px var(--brand); }
 .src-drop-hint { color: #9aa4b1; font-style: italic; }
 .src-card[draggable] { user-select: none; -webkit-user-select: none; } /* so a drag never turns into a text selection */
+
+/* Member Action (2026-10-11): something we asked them to do; open until marked done */
+.src-at-member { background: #d9f0ee; color: #0f6b63; }
+.src-reqst-done { background: #dff3e6; color: #22693f; }
+.src-tl-st-done { color: #22693f; }
+.src-card-b .src-openacts { height: 2.2rem; overflow: hidden; }
+.src-card-b .src-openact { height: 2.2rem; box-sizing: border-box; display: flex; align-items: center; gap: .5rem; background: #e6f4f2; border-left: 3px solid #1e9c8f; border-radius: 8px; padding: .3rem .6rem; font-size: .84rem; line-height: 1.3; white-space: nowrap; overflow: hidden; }
+.src-card-b .src-openact-lbl { flex: none; font-size: .62rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: #0f6b63; }
+.src-card-b .src-openact-txt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.src-card-b .src-openact-none { background: #f1f3f5; border-left-color: #c3c9d1; color: #8a94a1; font-size: .78rem; }
+.src-card-b.src-card-x .src-openacts, .src-card-b.src-card-x .src-openact { height: auto; white-space: normal; }
+.src-card-b.src-card-x .src-openact-txt { white-space: normal; overflow: visible; }
