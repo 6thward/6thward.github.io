@@ -3,13 +3,13 @@
 // added, renamed, reordered and removed. Data:
 //   boardColumns/{id}  { label, order }
 //   board/{id}         { name, notes, column, order, createdAt, updatedAt }
-import { db } from "./firebase-init.js?v=1791777570";
-import { ctx, can } from "./app.js?v=1791777570";
+import { db } from "./firebase-init.js?v=1791777716";
+import { ctx, can } from "./app.js?v=1791777716";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1791777570";
-import { notesHtml, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1791777570";
+import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1791777716";
+import { notesHtml, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1791777716";
 
 // Next ordinance a person is working toward — shown as a pill beside the name.
 const ORDINANCES = ["Sacrament", "Aaronic Priesthood", "Melchizedek Priesthood", "Endowment", "Sealing"];
@@ -138,6 +138,7 @@ function render() {
     row.addEventListener("click", (e) => {
       const k = cards.find((x) => x.id === row.dataset.id);
       if (!k) return;
+      if (e.target.closest("a.nt-link")) return; // a link in a recap just opens the link
       const tick = e.target.closest(".todo-tick");
       if (tick && editor) { e.stopPropagation(); archiveTodoFromCard(k, tick.dataset.tick); return; }
       const pill = e.target.closest(".todo-pill");

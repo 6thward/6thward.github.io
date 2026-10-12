@@ -8,7 +8,7 @@
 //   "## Name"               → a name card: the lines under it (until the next "## " or a "---" line)
 //                             sit inside a card headed by that name; cards in a row form a group (2026-10-11)
 // The text is stored exactly as typed, so it stays readable anywhere.
-import { esc } from "./ui.js?v=1791777570";
+import { esc } from "./ui.js?v=1791777716";
 
 const MAX_LEVEL = 3;
 const levelOf = (indent) => Math.min(MAX_LEVEL, Math.floor(String(indent || "").replace(/\t/g, "  ").length / 2));
@@ -26,7 +26,15 @@ function marks(text) {
   for (let pass = 0; pass < 2; pass++) { // twice = one level of nesting ({y:{red:x}})
     h = h.replace(COLOR_RE, (_, code, body) => (HL.has(code) ? `<mark class="nt-hl nt-hl-${code}">${body}</mark>` : `<span class="nt-c nt-c-${code}">${body}</span>`));
   }
-  return h.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+  h = h.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+  // web addresses become links, shown shortened (2026-10-11); the text is already escaped, so & is &amp; here
+  return h.replace(/https?:\/\/[^\s<]+/g, (url) => {
+    const clean = url.replace(/[.,;:!?)\]]+$/, ""), tail = url.slice(clean.length);
+    const href = clean.replace(/&amp;/g, "&");
+    const shown = clean.replace(/^https?:\/\//, "").replace(/^www\./, "");
+    const label = shown.length > 48 ? shown.slice(0, 30) + "…" + shown.slice(-14) : shown;
+    return `<a class="nt-link" href="${href}" target="_blank" rel="noopener" title="${href}">${label}</a>${tail}`;
+  });
 }
 
 // Inline text → HTML: marks, and a short lead-in before a colon is bold on its own

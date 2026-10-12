@@ -1924,3 +1924,6 @@ button.src-st { cursor: pointer; } button.src-st:hover { filter: brightness(.93)
 .releases-wrap { margin-top: 1.4rem; padding: .9rem 1rem 1rem; background: #f3f5f8; border: 1px solid var(--line); border-radius: 14px; }
 .releases-wrap .releases-board { margin-top: 0; }
 .releases-wrap .releases-board > .card { background: #fff; }
+/* links inside notes (2026-10-11) */
+.nt-link { color: var(--brand); text-decoration: underline; text-underline-offset: .12em; overflow-wrap: anywhere; }
+.nt-link:hover { color: #163a5c; }

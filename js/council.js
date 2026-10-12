@@ -9,14 +9,14 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1791777570";
-import { ctx, can } from "./app.js?v=1791777570";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1791777570";
-import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791777570";
+import { db } from "./firebase-init.js?v=1791777716";
+import { ctx, can } from "./app.js?v=1791777716";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1791777716";
+import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791777716";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1791777570";
+import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1791777716";
 
 let cards = [];
 let councils = {};    // date -> doc
@@ -510,7 +510,8 @@ function render() {
   }));
 
   // notes (per item or per meeting) — click to type, blur / ⌘Enter saves
-  body.querySelectorAll("[data-cnotes]").forEach((el) => el.addEventListener("click", () => {
+  body.querySelectorAll("[data-cnotes]").forEach((el) => el.addEventListener("click", (e) => {
+    if (e.target.closest("a")) return; // following a link isn't a request to edit
     if (el.parentElement.querySelector("textarea.wc-cnotes-ta")) return;
     const key = el.dataset.cnotes;
     const current = rawNotes.get(key) || "";
