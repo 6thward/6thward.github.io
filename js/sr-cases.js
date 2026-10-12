@@ -11,22 +11,25 @@
 //   summary  — the leader's own few lines, shown first on the card (bullets / to-dos / bold like council notes)
 //   log[]    — dated notes { id, at, by, text, editedAt }; the old single `notes` text shows as an undated note
 //   actions[] — the action log (2026-10-11): one dated headline per thing done { id, at, type, text, by } — type: food | check | meeting | noshow | call | visit | other
-//   requests[] — the request log (2026-10-11): every ask, dated { id, at, text, by }; the old single `requested` text shows as the first entry.
-//                A new request on a closed card re-opens it. `requested` is kept equal to the latest request for the card grid.
+//   requests[] — the request log (2026-10-11): every ask, dated { id, at, text, by, status: open|closed, closedAt }; the old single
+//                `requested` text shows as the first entry. Several requests can be open at once. The CARD's status is derived:
+//                open while any request is open, closed once they all are (c.status / closedAt are kept in step for sorting).
+//   bio        — a line or two on who they are (2026-10-11), shown under the name
+//   plan[]     — the plan, as dated notes { id, at, text, by } (2026-10-11)
 
 // Same privacy as the rest of this page: only the bishop and people given Self-Reliance.
-import { db } from "./firebase-init.js?v=1791781124";
-import { ctx, can, goTab } from "./app.js?v=1791781124";
+import { db } from "./firebase-init.js?v=1791782042";
+import { ctx, can, goTab } from "./app.js?v=1791782042";
 import {
   collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791781124";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine, inlineFmt } from "./notes.js?v=1791781124";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1791781124";
+import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791782042";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine, inlineFmt } from "./notes.js?v=1791782042";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1791782042";
 import {
   INC, EXP, QA, parseCsv, mapResponses, personKey, respTotals, fmtUsd, isBlank, writeupSections,
   parseBudgetCsv, parseMoney, budgetTotals, fmtUsdC,
-} from "./sr-import.js?v=1791781124";
+} from "./sr-import.js?v=1791782042";
 
 let mount = null, cases = [], started = false, openId = null, openRi = null;
 let loaded = null, markLoaded = null; // resolves once the cards have arrived (for opening one from another page)
@@ -39,7 +42,8 @@ const filter = { q: "" }; // open cards first; closed ones sit in their own sect
 // Open or Closed (2026-10-05). Anything saved under the earlier New / Reviewing / Helping counts as Open.
 const STATUS = [["open", "Open"], ["closed", "Closed"]];
 const STATUS_PILL = { open: "src-st-open", closed: "src-st-closed" };
-const statusOf = (c) => (c.status === "closed" ? "closed" : "open");
+// a card is open while any request is open; with no requests at all the stored status still counts (2026-10-11)
+const statusOf = (c) => (requestsOf(c).length ? (openRequests(c).length ? "open" : "closed") : (c.status === "closed" ? "closed" : "open"));
 
 const fmtDay = (iso) => { const d = iso ? new Date(iso) : null; return d && !isNaN(d) ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : ""; };
 const sorted = (c) => [...(c.responses || [])].sort((a, b) => String(a.at || "").localeCompare(String(b.at || "")));
@@ -91,8 +95,15 @@ export function initCases(el) {
 const actionsOf = (c) => [...(c.actions || [])].sort((a, b) => String(b.at).localeCompare(String(a.at))); // newest first
 const ACTION_TYPES = [["food", "Food"], ["check", "Check"], ["meeting", "Meeting"], ["noshow", "No Show"], ["call", "Call"], ["visit", "Visit"], ["other", "Other"]]; // No Show = a meeting they didn't come to (2026-10-11)
 const actionTypeLabel = (t) => (ACTION_TYPES.find(([k]) => k === t) || [])[1] || "";
-const requestsOf = (c) => [...(c.requests || []), ...((c.requested || "").trim() && !(c.requests || []).length ? [{ id: "legacy", at: c.created || "", text: c.requested, by: "" }] : [])]
-  .sort((a, b) => String(b.at).localeCompare(String(a.at)));
+const requestsOf = (c) => {
+  const raw = (c.requests || []).length ? [...c.requests] : ((c.requested || "").trim() ? [{ id: "legacy", at: c.created || "", text: c.requested, by: "" }] : []);
+  raw.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  // entries saved before requests carried their own status: the newest takes the card's status, older ones count as closed
+  return raw.map((q, i) => (q.status ? q : { ...q, status: i === 0 && c.status !== "closed" ? "open" : "closed" }));
+};
+const openRequests = (c) => requestsOf(c).filter((q) => q.status === "open");
+const planOf = (c) => [...(c.plan || [])].sort((a, b) => String(b.at).localeCompare(String(a.at))); // newest first
+const fmtShort = (iso) => { const d = iso ? new Date(iso) : null; return d && !isNaN(d) ? d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""; };
 const logOf = (c) => [...(c.log || []), ...((c.notes || "").trim() ? [{ id: "legacy", at: "", by: "", text: c.notes }] : [])]
   .sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")));
 const plainText = (t) => String(t || "").split("\n").map(plainLine).filter(Boolean).join(" · ");
@@ -127,37 +138,28 @@ function renderGrid() {
   }
   const rows = [...openRows, ...closedRows];
   const cardHtml = (c) => {
-
-    const r = latest(c), bud = (c.budgets || [])[0], n = (c.responses || []).length, st = statusOf(c);
+    // layout B + the plan (2026-10-11): name, who they are, every open request highlighted, one dated
+    // list of the newest actions and requests, the plan, and a footer with counts + left-over per month
+    const r = latest(c), bud = (c.budgets || [])[0], st = statusOf(c);
     const t = bud ? budgetTotals(bud) : r ? respTotals(r) : null; // the specialist's worked-out budget beats what the form said
-    const ex = wuExcerpt((writeupsOf(c)[0] || {}).text);
-    return `<div class="src-card${st === "closed" ? " src-card-closed" : ""}" data-id="${c.id}" tabindex="0">
-      <div class="src-card-top"><b class="src-name">${esc(c.name || "—")}</b>${editor()
-        ? `<button type="button" class="pill src-st ${STATUS_PILL[st]}" data-toggle="${c.id}" title="${st === "closed" ? `Closed${c.closedAt ? " " + fmtDay(c.closedAt) : ""} — click to reopen` : "Open — click to close"}">${st === "closed" ? "Closed" : "Open"}</button>`
-        : `<span class="pill src-st ${STATUS_PILL[st]}">${st === "closed" ? "Closed" : "Open"}</span>`}</div>
-      <div class="row-sub">${c.spouse ? `& ${esc(c.spouse)} · ` : ""}${r ? `plan ${esc(fmtDay(r.at))}` : "no plan on file"}${n > 1 ? ` · ${n} plans` : ""}${(c.files || []).length ? ` · 📎 ${(c.files || []).length}` : ""}</div>
-      ${r && !isBlank(r.raw?.needs) ? `<div class="src-need"><span>Needs</span>${esc(r.raw.needs)}</div>` : ""}
-      ${c.requested ? `<div class="src-need src-req"><span>Requested</span>${esc(c.requested)}</div>` : ""}
-      ${t ? tiles(t, true) : ""}
-      ${bud ? `<div class="src-tiles-cap">specialist’s budget${(c.budgets || []).length > 1 ? ` · ${(c.budgets || []).length - 1} what-if${(c.budgets || []).length > 2 ? "s" : ""}` : ""}</div>` : ""}
-      ${(c.summary || "").trim()
-        ? `<div class="src-wu src-wu-sum"><span>Summary</span>${esc(plainText(c.summary))}</div>`
-        : `<div class="src-wu${ex ? "" : " src-wu-none"}">${ex ? `<span>Specialist’s write-up</span>${esc(ex)}` : "No write-up yet"}</div>`}
+    const opens = openRequests(c), acts = actionsOf(c), reqs = requestsOf(c), plan = planOf(c);
+    const tl = [...acts.map((a) => ({ at: a.at, a })), ...reqs.map((q) => ({ at: q.at, q }))].sort((x, y) => String(y.at).localeCompare(String(x.at))).slice(0, 4);
+    const row = (e) => e.a
+      ? `<div class="src-tl-row"><span class="src-tl-d">${esc(fmtShort(e.a.at))}</span>${e.a.type ? `<span class="src-act-type src-at-${esc(e.a.type)}">${esc(actionTypeLabel(e.a.type) || e.a.type)}</span>` : ""}<span class="src-tl-t">${esc(plainLine(e.a.text || ""))}</span></div>`
+      : `<div class="src-tl-row src-tl-req${e.q.status === "open" ? " src-tl-open" : ""}"><span class="src-tl-d">${esc(fmtShort(e.q.at))}</span><span class="src-act-type src-at-req">Request</span><span class="src-tl-t">${esc(plainLine(e.q.text || ""))}</span><span class="src-tl-st src-tl-st-${e.q.status}">${e.q.status}</span></div>`;
+    return `<div class="src-card src-card-b${st === "closed" ? " src-card-closed" : ""}" data-id="${c.id}" tabindex="0">
+      <div class="src-card-top"><b class="src-name">${esc(c.name || "—")}${c.spouse ? ` <span class="src-spouse">& ${esc(c.spouse)}</span>` : ""}</b><span class="pill src-st ${STATUS_PILL[st]}" title="${st === "open" ? `${opens.length} open request${opens.length === 1 ? "" : "s"}` : `Closed${c.closedAt ? " " + fmtDay(c.closedAt) : ""} — no open request`}">${st === "closed" ? "Closed" : "Open"}</span></div>
+      ${(c.bio || "").trim() ? `<div class="src-bio">${esc(c.bio)}</div>` : ""}
+      ${opens.length ? opens.map((q) => `<div class="src-openreq"><span class="src-openreq-lbl">Open request · ${esc(fmtDay(q.at))}</span>${esc(plainLine(q.text || ""))}</div>`).join("") : `<div class="src-openreq src-openreq-none">No open request</div>`}
+      ${tl.length ? `<div class="src-tl"><span class="src-tl-h">Latest</span>${tl.map(row).join("")}</div>` : ""}
+      <div class="src-planbox"><span class="src-tl-h">Plan</span>${plan.length ? plan.slice(0, 3).map((x) => `<div class="src-planline">• ${esc(plainLine(x.text || ""))}</div>`).join("") + (plan.length > 3 ? `<div class="src-planline row-sub">+ ${plan.length - 3} more</div>` : "") : `<span class="row-sub">No plan yet</span>`}</div>
+      <div class="src-card-foot"><span>${acts.length} action${acts.length === 1 ? "" : "s"} · ${reqs.length} request${reqs.length === 1 ? "" : "s"}</span>${r ? `<span>plan ${esc(fmtDay(r.at))}</span>` : ""}${(c.files || []).length ? `<span>📎 ${(c.files || []).length}</span>` : ""}${t && t.net != null ? `<span class="src-foot-left ${t.net < 0 ? "neg" : "pos"}">${fmtUsd(t.net)}/mo</span>` : ""}</div>
     </div>`;
   };
   // open cards on top; closed ones keep their place in a section underneath
   grid.innerHTML = `<div class="src-grid-inner">${openRows.length ? openRows.map(cardHtml).join("") : `<div class="card empty-note" style="grid-column:1/-1">No open cards${q ? " match" : ""}.</div>`}</div>`
     + (closedRows.length ? `<h3 class="src-closed-head">Closed <span class="pill src-st src-st-closed">${closedRows.length}</span></h3><div class="src-grid-inner src-grid-closed">${closedRows.map(cardHtml).join("")}</div>` : "");
-  // Open ⇄ Closed right on the card
-  grid.querySelectorAll("[data-toggle]").forEach((b) => b.addEventListener("click", async (e) => {
-    e.stopPropagation();
-    const c = cases.find((x) => x.id === b.dataset.toggle); if (!c) return;
-    const closing = statusOf(c) === "open";
-    try {
-      await updateDoc(doc(db, "srCases", c.id), { status: closing ? "closed" : "open", closedAt: closing ? new Date().toISOString() : "", updatedAt: serverTimestamp() });
-      toast(closing ? `${c.name} — closed` : `${c.name} — reopened`);
-    } catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
-  }));
+  // (the Open ⇄ Closed toggle is gone — a card's status follows its requests, 2026-10-11)
   grid.querySelectorAll(".src-card").forEach((el) => {
     const go = () => openCase(el.dataset.id);
     el.addEventListener("click", go);
@@ -259,9 +261,12 @@ function detailHtml(c, ri) {
   return `
     <div class="src-d-head">
       <div><h3>${esc(c.name || "—")}</h3>
-        <div class="row-sub">${[c.spouse ? "& " + esc(c.spouse) : "", boardCards.some((k) => k.srCase === c.id) ? `<a href="#" class="src-board-link" data-board="${esc(boardCards.find((k) => k.srCase === c.id).id)}" title="Open their Member Board card">📋 Member Board</a>` : "", c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : ""].filter(Boolean).join(" · ")}</div></div>
+        <div class="row-sub">${[c.spouse ? "& " + esc(c.spouse) : "", boardCards.some((k) => k.srCase === c.id) ? `<a href="#" class="src-board-link" data-board="${esc(boardCards.find((k) => k.srCase === c.id).id)}" title="Open their Member Board card">📋 Member Board</a>` : "", c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : ""].filter(Boolean).join(" · ")}</div>
+        <div class="src-bio-line" id="srd-bio">${(c.bio || "").trim()
+          ? `<span class="src-bio${ed ? " src-bio-ed" : ""}"${ed ? ` data-bioedit title="Click to edit"` : ""}>${esc(c.bio)}</span>`
+          : ed ? `<span class="src-bio src-bio-empty" data-bioedit>+ Who they are — a line or two to jog your memory</span>` : ""}</div></div>
       <div class="src-d-tools">
-        ${ed ? `<select id="srd-status" class="src-st-sel ${STATUS_PILL[st]}" title="${st === "closed" && c.closedAt ? "Closed " + esc(fmtDay(c.closedAt)) : "Open or closed"}">${STATUS.map(([k, l]) => `<option value="${k}"${k === st ? " selected" : ""}>${l}</option>`).join("")}</select>` : `<span class="pill src-st ${STATUS_PILL[st]}">${esc(STATUS.find(([k]) => k === st)?.[1] || st)}</span>`}
+        <span class="pill src-st ${STATUS_PILL[st]}" title="${st === "open" ? `Open — ${openRequests(c).length} open request${openRequests(c).length === 1 ? "" : "s"}. Close the last open request to close the card.` : `Closed${c.closedAt ? " " + esc(fmtDay(c.closedAt)) : ""} — no open request. A new request re-opens it.`}">${esc(STATUS.find(([k]) => k === st)?.[1] || st)}</span>
         <button class="btn btn-sm" id="srd-print" type="button">🖨 Print</button>
       </div>
     </div>
@@ -285,8 +290,14 @@ function detailHtml(c, ri) {
       <div class="src-col src-col-leader">
         <div class="src-sec src-reqlog"><h4>Requests ${ed ? `<button class="btn btn-sm btn-ghost" id="srd-req-add" type="button" title="${st === "closed" ? "Log a new request — this re-opens the card" : "Log a new request"}">+ New request</button>` : ""}</h4>
           <div id="srd-req-new"></div>
-          ${requestsOf(c).length ? `<div class="src-act-list">${requestsOf(c).map((q, i) => `<div class="src-act src-req-row${ed ? " src-act-ed" : ""}${i === 0 ? " src-req-latest" : ""}" data-req="${esc(q.id)}" ${ed ? `title="Click to edit"` : ""}><span class="src-act-date">${esc(fmtDay(q.at) || "—")}</span><span class="src-act-text">${inlineFmt(q.text || "")}</span>${i === 0 && requestsOf(c).length > 1 ? `<span class="src-act-by">latest</span>` : ""}</div>`).join("")}</div>`
+          ${requestsOf(c).length ? `<div class="src-act-list">${requestsOf(c).map((q) => `<div class="src-act src-req-row${ed ? " src-act-ed" : ""}${q.status === "open" ? " src-req-open" : ""}" data-req="${esc(q.id)}" ${ed ? `title="Click to edit"` : ""}><span class="src-act-date">${esc(fmtDay(q.at) || "—")}</span><span class="src-act-text">${inlineFmt(q.text || "")}</span>${ed
+              ? `<button type="button" class="src-reqst src-reqst-${q.status}" data-reqst="${esc(q.id)}" title="${q.status === "open" ? "Open — click to close this request" : `Closed${q.closedAt ? " " + esc(fmtDay(q.closedAt)) : ""} — click to re-open it`}">${q.status}</button>`
+              : `<span class="src-reqst src-reqst-${q.status}">${q.status}</span>`}</div>`).join("")}</div>`
             : `<p class="row-sub" style="margin:0">No request logged yet${ed ? " — e.g. One month of rent ($1,950) + 1–2 food orders." : "."}</p>`}</div>
+        <div class="src-sec src-planlog"><h4>Plan ${ed ? `<button class="btn btn-sm btn-ghost" id="srd-plan-add" type="button">+ Add</button>` : ""}</h4>
+          <div id="srd-plan-new"></div>
+          ${planOf(c).length ? `<div class="src-act-list">${planOf(c).map((x) => `<div class="src-act src-plan-row${ed ? " src-act-ed" : ""}" data-plan="${esc(x.id)}" ${ed ? `title="Click to edit"` : ""}><span class="src-act-date">${esc(fmtDay(x.at) || "—")}</span><span class="src-act-text">${inlineFmt(x.text || "")}</span>${x.by ? `<span class="src-act-by">${esc(x.by)}</span>` : ""}</div>`).join("")}</div>`
+            : `<p class="row-sub" style="margin:0">No plan yet${ed ? " — add the steps you and the specialist agreed on, one line each." : "."}</p>`}</div>
         <div class="src-sec" id="srd-wus"><h4>Specialist’s write-ups ${ed ? `<button class="btn btn-sm btn-ghost" id="srd-wu-add" type="button">+ Add write-up</button>` : ""}</h4>
           <div id="srd-wu-new"></div>
           ${(() => { const list = writeupsOf(c); if (!list.length) return `<p class="row-sub" style="margin:0">No write-up yet${ed ? " — paste the specialist's report with “+ Add write-up”." : "."}</p>`;
@@ -395,7 +406,7 @@ function drawOpen() {
     deleteAttachment("srCases", meta).catch(() => {});
   }));
 
-  box.querySelector("#srd-status").addEventListener("change", (e) => save({ status: e.target.value, closedAt: e.target.value === "closed" ? new Date().toISOString() : "" }, e.target.value === "closed" ? "Closed" : "Reopened"));
+  // (status is no longer set by hand — it follows the requests, 2026-10-11)
   // --- budgets: import the specialist's sheet, add a what-if, edit lines ---
   const budgets = c.budgets || [];
   box.querySelector("#srb-edit")?.addEventListener("click", () => { budgetEditing = true; drawOpen(); });
@@ -508,33 +519,40 @@ function drawOpen() {
   const LOGS = {
     actions: { list: actionsOf, prefix: "a", typed: true, placeholder: "What was done — e.g. Paid $1,000 towards October rent", noun: "Entry",
       save: (next, msg) => save({ actions: next }, msg) },
-    requests: { list: requestsOf, prefix: "q", typed: false, placeholder: "What they're asking for — e.g. One month of rent ($1,950) + 1–2 food orders", noun: "Request",
-      save: (next, msg) => {
-        const latest = [...next].sort((a, b) => String(b.at).localeCompare(String(a.at)))[0];
-        const patch = { requests: next.map((q) => (q.id === "legacy" ? { ...q, id: "q" + Date.now().toString(36) + "old" } : q)), requested: latest ? latest.text : "" };
-        return save(patch, msg);
-      } },
+    requests: { list: requestsOf, prefix: "q", typed: false, status: true, placeholder: "What they're asking for — e.g. One month of rent ($1,950) + 1–2 food orders", noun: "Request",
+      save: (next, msg) => saveRequests(next, msg) },
+    plan: { list: planOf, prefix: "p", typed: false, placeholder: "A step in the plan — e.g. Rent split with daughter from November", noun: "Plan note",
+      save: (next, msg) => save({ plan: next }, msg) },
   };
+  // the card's status follows its requests: open while any is open; closedAt = when the last one closed
+  function saveRequests(next, msg) {
+    const list = next.map((q) => (q.id === "legacy" ? { ...q, id: "q" + Date.now().toString(36) + "old" } : q));
+    const anyOpen = list.some((q) => q.status === "open");
+    const latest = [...list].sort((a, b) => String(b.at).localeCompare(String(a.at)))[0];
+    const wasOpen = statusOf(c) === "open";
+    const patch = { requests: list, requested: latest ? latest.text : "", status: anyOpen || !list.length ? "open" : "closed", closedAt: anyOpen || !list.length ? "" : (c.closedAt || new Date().toISOString()) };
+    const note = anyOpen && !wasOpen ? " — card re-opened" : !anyOpen && wasOpen && list.length ? " — no open request, card closed" : "";
+    return save(patch, msg + note);
+  }
   const logForm = (which, slot, a) => {
     const L = LOGS[which];
     box.querySelector(".src-act-form")?.remove();
     const f = document.createElement("div");
     f.className = "src-act-form";
-    f.innerHTML = `${L.typed ? `<select data-atype class="src-act-type-sel">${ACTION_TYPES.map(([k, l]) => `<option value="${k}"${(a?.type || "") === k ? " selected" : ""}>${l}</option>`).join("")}</select>` : ""}<input type="date" data-ad value="${esc(isoDate(a?.at || new Date().toISOString()))}"><input data-at class="src-in" placeholder="${esc(L.placeholder)}" autocomplete="off" value="${esc(a?.text || "")}">
+    f.innerHTML = `${L.typed ? `<select data-atype class="src-act-type-sel">${ACTION_TYPES.map(([k, l]) => `<option value="${k}"${(a?.type || "") === k ? " selected" : ""}>${l}</option>`).join("")}</select>` : ""}${L.status ? `<select data-ast class="src-act-type-sel src-reqst-sel"><option value="open"${(a?.status || "open") === "open" ? " selected" : ""}>Open</option><option value="closed"${a?.status === "closed" ? " selected" : ""}>Closed</option></select>` : ""}<input type="date" data-ad value="${esc(isoDate(a?.at || new Date().toISOString()))}"><input data-at class="src-in" placeholder="${esc(L.placeholder)}" autocomplete="off" value="${esc(a?.text || "")}">
       <span class="src-act-form-tools">${a ? `<button type="button" class="btn btn-sm btn-ghost btn-danger" data-x="delete" title="Delete this entry">✕</button>` : ""}<button type="button" class="btn btn-sm" data-x="cancel">Cancel</button><button type="button" class="btn btn-primary btn-sm" data-x="save">Save</button></span>`;
     if (a) slot.replaceWith(f); else slot.appendChild(f);
     const txt = f.querySelector("[data-at]"); txt.focus();
     const done = async (mode) => {
-      const text = txt.value.trim(), date = f.querySelector("[data-ad]").value, type = f.querySelector("[data-atype]")?.value || "";
+      const text = txt.value.trim(), date = f.querySelector("[data-ad]").value, type = f.querySelector("[data-atype]")?.value || "", stv = f.querySelector("[data-ast]")?.value || "";
       f.remove();
       if (mode === "save" && text) {
         const today = isoDate();
         const at = a && isoDate(a.at) === date ? a.at : (!date || date === today) && !a ? new Date().toISOString() : (date || today) + "T12:00:00";
-        const next = a ? L.list(c).map((x) => (x.id === a.id ? { ...x, text, at, ...(L.typed ? { type } : {}) } : x))
-          : [...L.list(c), { id: L.prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), at, text, by: ctx.name || "", ...(L.typed ? { type } : {}) }];
-        const reopen = which === "requests" && !a && statusOf(c) === "closed";
-        if (reopen) await save({ status: "open", closedAt: "" });
-        await L.save(next, a ? `${L.noun} saved` : reopen ? "Request added — card re-opened" : `${L.noun} added`);
+        const stPatch = L.status ? { status: stv, closedAt: stv === "closed" ? (a?.status === "closed" && a.closedAt ? a.closedAt : new Date().toISOString()) : "" } : {};
+        const next = a ? L.list(c).map((x) => (x.id === a.id ? { ...x, text, at, ...(L.typed ? { type } : {}), ...stPatch } : x))
+          : [...L.list(c), { id: L.prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), at, text, by: ctx.name || "", ...(L.typed ? { type } : {}), ...stPatch }];
+        await L.save(next, a ? `${L.noun} saved` : `${L.noun} added`);
       } else if (mode === "delete") {
         if (!confirm(`Delete “${a.text}”?`)) { drawOpen(); return; }
         await L.save(L.list(c).filter((x) => x.id !== a.id), `${L.noun} deleted`);
@@ -546,11 +564,31 @@ function drawOpen() {
   };
   box.querySelector("#srd-act-add")?.addEventListener("click", () => logForm("actions", box.querySelector("#srd-act-new"), null));
   box.querySelector("#srd-req-add")?.addEventListener("click", () => logForm("requests", box.querySelector("#srd-req-new"), null));
-  box.querySelectorAll(".src-act-ed[data-act], .src-act-ed[data-req]").forEach((row) => row.addEventListener("click", (e) => {
-    if (e.target.closest("a")) return;
+  box.querySelector("#srd-plan-add")?.addEventListener("click", () => logForm("plan", box.querySelector("#srd-plan-new"), null));
+  box.querySelectorAll(".src-act-ed[data-act], .src-act-ed[data-req], .src-act-ed[data-plan]").forEach((row) => row.addEventListener("click", (e) => {
+    if (e.target.closest("a, button")) return;
     if (window.getSelection && String(window.getSelection())) return;
-    const which = row.dataset.req ? "requests" : "actions";
-    const a = LOGS[which].list(c).find((x) => x.id === (row.dataset.req || row.dataset.act)); if (a) logForm(which, row, a);
+    const which = row.dataset.req ? "requests" : row.dataset.plan ? "plan" : "actions";
+    const a = LOGS[which].list(c).find((x) => x.id === (row.dataset.req || row.dataset.plan || row.dataset.act)); if (a) logForm(which, row, a);
+  }));
+  // Open ⇄ Closed on a request row; the card follows (2026-10-11)
+  box.querySelectorAll("[data-reqst]").forEach((b) => b.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    const q = requestsOf(c).find((x) => x.id === b.dataset.reqst); if (!q) return;
+    const closing = q.status === "open";
+    await saveRequests(requestsOf(c).map((x) => (x.id === q.id ? { ...x, status: closing ? "closed" : "open", closedAt: closing ? new Date().toISOString() : "" } : x)), closing ? "Request closed" : "Request re-opened");
+    drawOpen();
+  }));
+  // who they are: a one-line bio under the name, edited in place (2026-10-11)
+  box.querySelectorAll("[data-bioedit]").forEach((el) => el.addEventListener("click", () => {
+    const line = box.querySelector("#srd-bio"); if (!line || line.querySelector("input")) return;
+    const initial = c.bio || "";
+    line.innerHTML = `<input class="src-in src-bio-input" placeholder="Who they are — family, work, who ministers to them…" autocomplete="off" maxlength="240">`;
+    const inp = line.querySelector("input"); inp.value = initial; inp.focus();
+    let done = false;
+    const finish = async (commit) => { if (done) return; done = true; const v = inp.value.trim(); if (commit && v !== initial) await save({ bio: v }, "Saved"); drawOpen(); };
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); finish(true); } if (e.key === "Escape") { e.preventDefault(); finish(false); } });
+    inp.addEventListener("blur", () => setTimeout(() => finish(true), 80));
   }));
   // to-do boxes in the summary / a note tick in place
   box.querySelectorAll("[data-rtodo]").forEach((cb) => cb.addEventListener("change", async () => {
@@ -728,7 +766,9 @@ function printCase(c, r) {
     <h1>${esc(c.name || "")}</h1>
     <p class="sub">${[c.spouse ? "& " + esc(c.spouse) : "", r ? "Self-Reliance Plan " + esc(fmtDay(r.at)) : "", "printed " + new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })].filter(Boolean).join(" · ")}</p>
     ${(c.summary || "").trim() ? `<h2>Summary</h2>${String(c.summary).split("\n").map((l) => l.trim()).filter(Boolean).map((l) => `<p>${/^(\s*)([-•*]|\[( |x|X)\])/.test(l) ? "• " : ""}${esc(plainLine(l))}</p>`).join("")}` : ""}
-    ${requestsOf(c).length ? `<h2>Requests</h2><table>${requestsOf(c).map((q) => `<tr><td style="white-space:nowrap;padding-right:1rem">${esc(fmtDay(q.at) || "—")}</td><td>${esc(plainLine(q.text || ""))}</td></tr>`).join("")}</table>` : ""}
+    ${(c.bio || "").trim() ? `<p class="raw">${esc(c.bio)}</p>` : ""}
+    ${requestsOf(c).length ? `<h2>Requests</h2><table>${requestsOf(c).map((q) => `<tr><td style="white-space:nowrap;padding-right:1rem">${esc(fmtDay(q.at) || "—")}</td><td style="white-space:nowrap;padding-right:1rem;text-transform:uppercase;font-size:.75em">${esc(q.status)}</td><td>${esc(plainLine(q.text || ""))}</td></tr>`).join("")}</table>` : ""}
+    ${planOf(c).length ? `<h2>Plan</h2><table>${planOf(c).map((x) => `<tr><td style="white-space:nowrap;padding-right:1rem">${esc(fmtDay(x.at) || "—")}</td><td>${esc(plainLine(x.text || ""))}</td></tr>`).join("")}</table>` : ""}
     ${actionsOf(c).length ? `<h2>Action log</h2><table>${actionsOf(c).map((a) => `<tr><td style="white-space:nowrap;padding-right:1rem">${esc(fmtDay(a.at) || "—")}</td><td style="white-space:nowrap;padding-right:1rem">${esc(actionTypeLabel(a.type))}</td><td>${esc(plainLine(a.text || ""))}</td></tr>`).join("")}</table>` : ""}
     ${(c.budgets || []).map((b, i) => { const bt = budgetTotals(b); const rowsOf = (ls) => (ls || []).map((l) => `<tr><td>${esc(l.label)}${l.note ? `<div class="raw">${esc(l.note)}</div>` : ""}</td><td class="n">${l.amount == null ? "cut" : fmtUsdC(l.amount)}</td></tr>`).join("");
       return `<h2>${i === 0 ? "Budget from the specialist" : "What-if"}: ${esc(b.title || "")}</h2>
