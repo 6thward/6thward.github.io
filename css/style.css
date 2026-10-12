@@ -2104,3 +2104,16 @@ button.src-reqst { cursor: pointer; } button.src-reqst:hover { filter: brightnes
 .src-card-b .src-card-foot { flex-wrap: nowrap; white-space: nowrap; overflow: hidden; }
 .src-card-b .src-card-foot > span { overflow: hidden; text-overflow: ellipsis; }
 .src-card-b .src-expand { flex: none; }
+
+/* cards (2026-10-11): shorter request banner (one line + label), a "+" to add a request, and closed cards stay visible */
+.src-card-b .src-openreqs { height: 3rem; position: relative; }
+.src-card-b .src-openreq { height: 3rem; padding-right: 2rem; }
+.src-card-b .src-openreq:not(.src-openreq-none) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.src-card-b .src-openreq-lbl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.src-addreq { position: absolute; right: .4rem; top: .4rem; z-index: 1; width: 1.5rem; height: 1.5rem; border-radius: 6px; border: 1px solid rgba(31,39,51,.15); background: rgba(255,255,255,.85); color: var(--ink-soft); font: inherit; font-size: 1rem; line-height: 1; padding: 0; cursor: pointer; }
+.src-addreq:hover { color: var(--brand); border-color: var(--brand); background: #fff; }
+.src-card-b.src-card-x .src-openreq:not(.src-openreq-none), .src-card-b.src-card-x .src-openreq-lbl { white-space: normal; overflow: visible; text-overflow: clip; }
+.src-card.src-card-closed { background: #fff; border-color: #d9dee4; }
+.src-card.src-card-closed .src-name { color: var(--ink); }
+.src-card.src-card-closed .src-openreq, .src-card.src-card-closed .src-tl, .src-card.src-card-closed .src-planbox { opacity: 1; }
+.src-card.src-card-closed .src-card-top::after { content: ""; }
