@@ -1912,3 +1912,8 @@ button.src-st { cursor: pointer; } button.src-st:hover { filter: brightness(.93)
 .st-inter .st-music-labelled .st-li-tag { flex: none; font-size: .74rem; font-weight: 600; color: var(--ink); }
 .st-inter .st-music-conf { position: absolute; right: .55rem; top: .35rem; }
 .st-inter .st-music-conf .st-li-ic { margin: 0; }
+/* Hymn lines: "#270 | I'll Go Where You Want Me to Go" — number centred, bar the full height, title wraps flush left (2026-10-11) */
+.st-line .st-li-name.st-li-hymn { display: flex; align-items: center; gap: .4rem; }
+.st-li-hymn .hymn-num { flex: none; white-space: nowrap; }
+.st-li-hymn .hymn-bar { flex: none; align-self: stretch; width: 1.5px; background: currentColor; opacity: .45; border-radius: 1px; }
+.st-li-hymn .hymn-title { flex: 1; min-width: 0; text-align: left; overflow-wrap: anywhere; }

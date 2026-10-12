@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1791765756";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1791765756";
+import { db } from "./firebase-init.js?v=1791765837";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1791765837";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1791765756";
-import { HYMNS } from "./hymns.js?v=1791765756";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1791765756";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1791765837";
+import { HYMNS } from "./hymns.js?v=1791765837";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1791765837";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -928,7 +928,7 @@ function statusChips(m, date) {
       const dragAttr = can && l.k && DRAG_KINDS.has(l.k) ? ` draggable="true" data-drag='${JSON.stringify({ k: l.k, o: l.o })}'` : "";
       // speakers get a small "topic" button on the right: shows the topic on hover, click to add / change it
       const topicBtn = l.topicable ? `<span class="st-topic${l.topic ? " has" : ""}" data-topic='${JSON.stringify({ k: l.k, o: l.o })}' title="${l.topic ? esc(l.topic) + (can ? " — click to change" : "") : (can ? "Add a topic" : "No topic yet")}">topic</span>` : "";
-      return `<span class="st-line${l.light ? " st-line-light" : ""}${dragAttr ? " st-drag" : ""}${l.name && !l.confirmed && !l.light ? " st-li-unconf" : ""}"${editAttr}${dragAttr}><span class="st-li-tag">${esc(l.tag)}:</span> <span class="st-li-name${l.light ? " st-li-light" : ""}">${l.name ? esc(l.name) : "—"}</span>${orgTag}${topicBtn}${l.light ? "" : dot}</span>`;
+      return `<span class="st-line${l.light ? " st-line-light" : ""}${dragAttr ? " st-drag" : ""}${l.name && !l.confirmed && !l.light ? " st-li-unconf" : ""}"${editAttr}${dragAttr}><span class="st-li-tag">${esc(l.tag)}:</span> <span class="st-li-name${l.light ? " st-li-light" : ""}${l.nameHtml ? " st-li-hymn" : ""}">${l.nameHtml || (l.name ? esc(l.name) : "—")}</span>${orgTag}${topicBtn}${l.light ? "" : dot}</span>`;
     }).join("");
     // no icon in the headline — the title stays cleanly centered; state
     // lives in the pill color and the per-line marks
@@ -956,6 +956,8 @@ function statusChips(m, date) {
     groupChip("Hymns", { t: "h" }, hymnItems.map((h) => ({
       tag: HYMN_TAGS[h.kind] || KINDS[h.kind]?.label || h.kind,
       name: [h.num ? "#" + h.num : "", h.title].filter(Boolean).join(" | "),
+      // number · bar · title: the bar spans a wrapped title and the number sits centred beside it (2026-10-11)
+      nameHtml: h.num && h.title ? `<span class="hymn-num">#${esc(h.num)}</span><span class="hymn-bar"></span><span class="hymn-title">${esc(h.title)}</span>` : "",
       confirmed: !!(h.num || h.title),
       light: true, // hymn titles stay unbolded so more of the name fits
       inlineEdit: { t: "hymn", k: h.kind, o: 0 },
