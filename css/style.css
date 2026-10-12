@@ -1969,3 +1969,11 @@ button.src-st { cursor: pointer; } button.src-st:hover { filter: brightness(.93)
 .board-col[draggable] .board-card, .board-col[draggable] input, .board-col[draggable] textarea, .board-col[draggable] .st-click, .board-col[draggable] button { cursor: auto; }
 .board-col[draggable] .board-card { cursor: grab; }
 .board-col-grip { font-size: 1.05rem; padding: 0 .15rem; }
+
+/* Additional special musical numbers inside Other Music (2026-10-11) */
+.st-sec.st-sec-extra { position: relative; }
+.st-sec-extra > .st-x-extra { position: absolute; right: .45rem; top: .3rem; font-size: .7rem; font-weight: 400; opacity: .35; cursor: pointer; padding: .1rem .3rem; border-radius: 6px; line-height: 1; }
+.st-sec-extra > .st-x-extra:hover { opacity: 1; background: rgba(0,0,0,.08); }
+.st-sec.st-sec-add { flex: none; padding: .15rem .35rem .4rem; background: transparent; }
+.st-sec.st-sec-add .st-add-row { margin-top: 0; }
+.st-sec.st-drag { cursor: grab; }

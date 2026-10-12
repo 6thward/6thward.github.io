@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1791778873";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1791778873";
+import { db } from "./firebase-init.js?v=1791779346";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1791779346";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1791778873";
-import { HYMNS } from "./hymns.js?v=1791778873";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1791778873";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1791779346";
+import { HYMNS } from "./hymns.js?v=1791779346";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1791779346";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -166,8 +166,8 @@ function speakerAnchors(items) {
 }
 // Move the intermediate slot (musical / choir / intermediate hymn) so it
 // falls before the speakers (after = 0) or after the Nth speaker anchor.
-function moveInterSlot(m, after) {
-  const si = m.items.findIndex((i) => ["intermediateHymn", "musical", "choir"].includes(i.kind));
+function moveInterSlot(m, after, idx) {
+  const si = idx != null ? idx : mainSlotIdx(m.items);
   if (si < 0) return;
   const [slot] = m.items.splice(si, 1);
   const sp = speakerAnchors(m.items).map((a) => a.idx);
@@ -483,6 +483,7 @@ export function initSacrament() {
 // A shared link (#sacrament/2026-09-20) opens that Sunday's readout after
 // sign-in — as soon as the plans have arrived. (2026-09-19)
 let pendingLink = null;
+let focusExtraFor = null; // card date whose newest additional musical number should take focus after the next render (2026-10-11)
 export function openMeetingLink(date) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date || "")) return;
   if (Object.keys(meetings).length) { if (meetings[date]) viewMeeting(date); else toast("That Sunday isn't planned yet"); }
@@ -886,7 +887,8 @@ function statusChips(m, date) {
   // Hymns pill = only the fixed hymns; the intermediate slot is its own pill
   const hymnItems = items.filter((i) => HYMN_KINDS.includes(i.kind) && i.kind !== "intermediateHymn");
   const slotInterHymn = items.find((i) => i.kind === "intermediateHymn");
-  const slotMusical = items.find((i) => i.kind === "musical");
+  const slotMusical = items.find((i) => i.kind === "musical" && !i.extra);
+  const extraMus = items.filter(isExtraMus); // additional special musical numbers (2026-10-11)
   const slotChoir = items.find((i) => i.kind === "choir");
   const inv = of("invocation")[0];
   const ben = of("benediction")[0];
@@ -973,15 +975,17 @@ function statusChips(m, date) {
   // Intermediate slot: its own pill right after Hymns, with its own editor
   // (Hymn / Special Musical # / Choir toggle lives there).
   // where the music number sits relative to the adult speakers (small subtext)
-  const slotPos = (() => {
-    const slotIdx = items.findIndex((i) => ["intermediateHymn", "musical", "choir"].includes(i.kind));
+  const posLabel = (slotIdx) => {
     const anchors = speakerAnchors(items);
     if (slotIdx < 0 || !anchors.length) return "";
     const before = anchors.filter((a) => a.idx < slotIdx).length;
     return before === 0 ? "before the speakers" : `after ${anchors[before - 1].label}`;
-  })();
+  };
+  const slotPos = posLabel(mainSlotIdx(items));
   // 2026-09-13 — placement ("after speaker 3") is its own pill; click to move the slot
-  const placePill = slotPos && planned ? `<span class="st-place${can ? " st-click" : ""}"${can ? ` data-place="1" title="Click to change where it falls in the program"` : ""}>${esc(slotPos)}</span>` : "";
+  // (data-po = which musical number, for the additional ones)
+  const placePillFor = (pos, o) => pos && planned ? `<span class="st-place${can ? " st-click" : ""}"${can ? ` data-place="1"${o != null ? ` data-po="${o}"` : ""} title="Click to change where it falls in the program"` : ""}>${esc(pos)}</span>` : "";
+  const placePill = placePillFor(slotPos);
   // 2026-09-20 — a Sunday can drop the Music Number box and/or the Youth
   // Speakers box entirely (m.hide.music / m.hide.youth); a small dashed chip
   // at the end of the row brings one back.
@@ -1029,15 +1033,38 @@ function statusChips(m, date) {
       : "";
     // one box, two parts that colour on their own (2026-10-04): prelude is green once it has
     // something in it (grey when empty — it's optional); the musical number keeps its red / amber / green
-    chips.push(`<span class="st st-inter st-split${dragAttr ? " st-drag" : ""}"${dragAttr}>
+    // additional special musical numbers, each its own section with Who: / Hymn:, a confirm dot,
+    // its own placement pill and a ✕; "+ musical number" at the bottom adds one (2026-10-11)
+    const musTotal = (mode === "musical" ? 1 : 0) + extraMus.length;
+    const mainLbl = mode === "musical" && musTotal > 1 ? "Special Musical Number 1" : "Special Musical Number";
+    const extrasHtml = extraMus.map((ex, i) => {
+      const o = musO(items, ex);
+      const filledX = !!(ex.who || ex.hymn);
+      const clsX = !filledX ? (planned ? "st-miss" : "st-off") : !isConf(ex) ? "st-pending" : "st-ok";
+      const lbl = musTotal > 1 ? `Special Musical Number ${i + 1 + (mode === "musical" ? 1 : 0)}` : "Special Musical Number";
+      const dragX = filledX ? ` draggable="true" data-drag='${JSON.stringify({ k: "musical", o })}'` : "";
+      const confX = filledX
+        ? `<span class="st-music-conf"><span class="st-li-ic st-confirm-dot${isConf(ex) ? "" : " st-unconf"}" data-confirm='${JSON.stringify({ k: "musical", o })}' title="${isConf(ex) ? "Confirmed — click if this still needs confirming" : "Not confirmed yet — click once it's confirmed"}">${isConf(ex) ? "✓" : "!"}</span></span>`
+        : "";
+      return `<span class="st-sec st-sec-main st-sec-extra ${clsX}${dragX ? " st-drag" : ""}"${dragX}>
+        <span class="st-x st-x-extra" data-rmmus="${o}" title="Remove this musical number">✕</span>
+        <span class="st-prelude-lbl st-sub-lbl">${lbl}</span>
+        <span class="st-music-fields">${pill("Who:", `<textarea class="st-in-title st-music-in st-music-ta" data-xmus="who" data-o="${o}" placeholder="person or group" rows="1" autocomplete="off">${esc(ex.who || "")}</textarea>`)}${pill("Hymn:", `<textarea class="st-in-title st-music-in st-music-ta" data-xmus="hymn" data-o="${o}" placeholder="song or piece" rows="1" autocomplete="off">${esc(ex.hymn || "")}</textarea>`)}${confX}</span>
+        ${placePillFor(posLabel(items.indexOf(ex)), o)}
+      </span>`;
+    }).join("");
+    const addMus = `<span class="st-sec st-sec-add"><span class="st-add-row"><span class="st-add" data-addmus="1" title="Add another special musical number">+ musical number</span></span></span>`;
+    chips.push(`<span class="st st-inter st-split">
       <span class="st-head st-click" data-qe='{"t":"inter"}' title="Click for the full editor">Other Music${xBtn("music", "Other Music")}</span>
       <span class="st-sec ${hasPrelude ? "st-ok" : "st-off"}">${preludeBlock}</span>
-      <span class="st-sec st-sec-main ${cls}">
-      <span class="st-prelude-lbl st-sub-lbl">Special Musical Number</span>
+      <span class="st-sec st-sec-main ${cls}${dragAttr ? " st-drag" : ""}"${dragAttr}>
+      <span class="st-prelude-lbl st-sub-lbl">${mainLbl}</span>
       <select class="st-mtype" data-mtype title="Type"><option value="none"${mode === "none" ? " selected" : ""}>— none —</option>${INTER_MODES.map(([k, l]) => `<option value="${k}"${mode === k ? " selected" : ""}>${l}</option>`).join("")}</select>
       ${field ? `<span class="st-music-fields">${field}${conf ? `<span class="st-music-conf">${conf}</span>` : ""}</span>` : ""}
       ${placePill}
       </span>
+      ${extrasHtml}
+      ${addMus}
     </span>`);
     preludeShown = true;
   } else if (slotMusical) {
@@ -1052,6 +1079,11 @@ function statusChips(m, date) {
     chips.push(`<span class="st st-off${can ? " st-click" : ""}"${can ? ` data-qe='{"t":"inter"}' title="Click to add"` : ""}><span class="st-head">Other Music</span></span>`);
   }
 
+  // additional musical numbers for viewers (and on Sundays without the editable box): one chip each (2026-10-11)
+  if (!preludeShown && !hide.music) extraMus.forEach((ex) => {
+    const o = musO(items, ex);
+    chips.push(chip("Special Musical Number", ex.who, { k: "musical", o }, isConf(ex), ex.confirmedBy, null, ex.hymn || "", { k: "musical", o }, placePillFor(posLabel(items.indexOf(ex)), o)));
+  });
   // no Music Number box this Sunday (fast Sunday, removed, or a read-only viewer): prelude gets its own pill
   if (!preludeShown && preludeBlock && !NO_MEETING(type)) {
     chips.push(`<span class="st st-inter st-prelude-only ${hasPrelude ? "st-ok" : "st-off"}"><span class="st-head">Prelude Music</span>${preludeBlock}</span>`);
@@ -1244,7 +1276,7 @@ function renderCards(wrap) {
       if (has && !confirm(`Remove the ${key === "music" ? "Other Music" : "Youth Speakers"} box for this Sunday? What's in it will be cleared.`)) return;
       patchMeeting(date, (mm) => {
         mm.hide = { ...(mm.hide || {}), [key]: true };
-        if (key === "music") setInterSlot(mm, "none", {}, "");
+        if (key === "music") { setInterSlot(mm, "none", {}, ""); mm.items = mm.items.filter((i) => !isExtraMus(i)); }
         else mm.items = mm.items.filter((i) => i.kind !== "primarySpeaker" && i.kind !== "youthSpeaker");
       });
     }));
@@ -1304,7 +1336,8 @@ function renderCards(wrap) {
       if (el.querySelector("select")) return;
       const date = el.closest("[data-date]").dataset.date;
       const its = itemsFor(meetings[date], date);
-      const slotIdx = its.findIndex((i) => ["intermediateHymn", "musical", "choir"].includes(i.kind));
+      const po = el.dataset.po != null ? Number(el.dataset.po) : null; // an additional musical number
+      const slotIdx = po != null ? its.indexOf(nthItem(its, "musical", po)) : mainSlotIdx(its);
       const anchors = speakerAnchors(its);
       const before = slotIdx < 0 ? 0 : anchors.filter((a) => a.idx < slotIdx).length;
       const opts = [`<option value="0"${before === 0 ? " selected" : ""}>before the speakers</option>`]
@@ -1315,7 +1348,7 @@ function renderCards(wrap) {
       let done = false;
       sel.addEventListener("click", (ev) => ev.stopPropagation());
       sel.addEventListener("mousedown", (ev) => ev.stopPropagation());
-      sel.addEventListener("change", () => { done = true; const after = Number(sel.value) || 0; patchMeeting(date, (mm) => moveInterSlot(mm, after)); });
+      sel.addEventListener("change", () => { done = true; const after = Number(sel.value) || 0; patchMeeting(date, (mm) => moveInterSlot(mm, after, po != null ? mm.items.indexOf(nthItem(mm.items, "musical", po)) : undefined)); });
       sel.addEventListener("keydown", (ev) => { if (ev.key === "Escape") { done = true; render(); } });
       sel.addEventListener("blur", () => setTimeout(() => { if (!done) render(); }, 120));
     }));
@@ -1370,6 +1403,49 @@ function renderCards(wrap) {
     inp.addEventListener("blur", () => setTimeout(commit, 80));
     inp.addEventListener("change", () => { if (mode === "hymn" && hymnCatalog().some((h) => hymnCombo(h.num, h.title) === inp.value)) { commit(); inp.blur(); } }); // datalist pick
   });
+  // additional special musical numbers (2026-10-11): Who: / Hymn: save on Enter / blur, Esc reverts;
+  // "+ musical number" adds one (and focuses it), ✕ removes one
+  wrap.querySelectorAll("[data-xmus]").forEach((inp) => {
+    ["click", "mousedown", "dragstart"].forEach((ev) => inp.addEventListener(ev, (e) => e.stopPropagation()));
+    const grow = () => { inp.style.height = "auto"; inp.style.height = inp.scrollHeight + "px"; };
+    inp.addEventListener("input", grow); grow(); requestAnimationFrame(grow);
+    const date = inp.closest("[data-date]").dataset.date, field = inp.dataset.xmus, o = Number(inp.dataset.o), initial = inp.value;
+    let done = false;
+    const commit = () => {
+      if (done) return; done = true;
+      if (inp.value.trim() === initial.trim()) return;
+      patchMeeting(date, (mm) => { const it = nthItem(mm.items, "musical", o); if (it) it[field] = inp.value.trim(); });
+    };
+    inp.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") { ev.preventDefault(); commit(); inp.blur(); }
+      if (ev.key === "Escape") { ev.preventDefault(); done = true; inp.value = initial; inp.blur(); }
+    });
+    inp.addEventListener("blur", () => setTimeout(commit, 80));
+  });
+  if (focusExtraFor) {
+    const list = wrap.querySelectorAll(`[data-date="${focusExtraFor}"] [data-xmus="who"]`);
+    focusExtraFor = null;
+    const last = list[list.length - 1];
+    if (last) { last.focus(); last.scrollIntoView({ block: "nearest" }); }
+  }
+  wrap.querySelectorAll("[data-addmus]").forEach((btn) => btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const date = btn.closest("[data-date]").dataset.date;
+    focusExtraFor = date;
+    patchMeeting(date, (mm) => {
+      const it = blankItem("musical", 3); it.extra = true;
+      let at = -1;
+      mm.items.forEach((x, i) => { if (SLOT_KINDS.includes(x.kind)) at = i; }); // lands right after the last music slot
+      if (at < 0) insertCanonical(mm.items, it); else mm.items.splice(at + 1, 0, it);
+    });
+  }));
+  wrap.querySelectorAll("[data-rmmus]").forEach((x) => x.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const date = x.closest("[data-date]").dataset.date, o = Number(x.dataset.rmmus);
+    const it = nthItem(itemsFor(meetings[date], date), "musical", o);
+    if (it && (it.who || it.hymn) && !confirm("Remove this musical number?")) return;
+    patchMeeting(date, (mm) => { const t = nthItem(mm.items, "musical", o); if (t) mm.items = mm.items.filter((i) => i !== t); });
+  }));
   // speaker "topic" button (2026-09-13): read-only users get the tooltip; editors get a tiny editor
   wrap.querySelectorAll("[data-topic]").forEach((el) =>
     el.addEventListener("click", (e) => {
@@ -1530,25 +1606,34 @@ function quickAddBaby(date, idx = null) {
 // optionally reposition it relative to the adult speakers. Shared by the
 // popup editor and the inline controls on the Music Number pill (2026-09-19).
 const SLOT_KINDS = ["intermediateHymn", "musical", "choir"];
+// Additional special musical numbers (2026-10-11): extra items of kind "musical"
+// flagged extra:true. The type select / full editor only ever touch the MAIN slot
+// (the first un-flagged slot item); extras are added, edited, placed and removed
+// on the card. nthItem(…, "musical", o) counts main + extras in agenda order.
+const isExtraMus = (i) => i.kind === "musical" && i.extra === true;
+const mainSlotIdx = (items) => items.findIndex((i) => SLOT_KINDS.includes(i.kind) && !i.extra);
+const musO = (items, it) => items.filter((i) => i.kind === "musical").indexOf(it);
 function setInterSlot(m, mode, interVal, posVal) {
-  if (mode === "none") { m.items = m.items.filter((i) => !SLOT_KINDS.includes(i.kind)); return; }
+  let mi = mainSlotIdx(m.items);
+  if (mode === "none") { if (mi >= 0) m.items.splice(mi, 1); return; }
   const targetKind = mode === "hymn" ? "intermediateHymn" : mode === "youthChoir" ? "choir" : mode;
-  const firstSlot = m.items.find((i) => SLOT_KINDS.includes(i.kind));
-  const time = firstSlot ? firstSlot.time : 3;
-  // drop any slot items of a different kind so the swap never leaves duplicates
-  m.items = m.items.filter((i) => !SLOT_KINDS.includes(i.kind) || i.kind === targetKind);
-  const existing = m.items.find((i) => i.kind === targetKind);
+  const main = mi >= 0 ? m.items[mi] : null;
+  const time = main ? main.time : 3;
+  // drop any stray duplicate main-slot items (extras stay) so the swap never leaves two
+  m.items = m.items.filter((i, k) => k === mi || !SLOT_KINDS.includes(i.kind) || i.extra);
   const vals = { ...(interVal || {}) };
   if (targetKind === "choir") vals.youth = mode === "youthChoir";
-  if (existing) {
-    Object.assign(existing, vals);
+  const base = targetKind === "intermediateHymn" ? {} : { confirmed: false, confirmedBy: "" };
+  if (main && main.kind === targetKind) {
+    Object.assign(main, vals);
+  } else if (main) {
+    m.items[mi] = { kind: targetKind, time, ...base, ...vals }; // swap kinds in place
   } else {
-    const base = targetKind === "intermediateHymn" ? {} : { confirmed: false, confirmedBy: "" };
     insertCanonical(m.items, { kind: targetKind, time, ...base, ...vals });
   }
   // reposition relative to the adult speakers per the Position select
   if (posVal) {
-    const slot = m.items.find((i) => i.kind === targetKind);
+    const slot = m.items.find((i) => i.kind === targetKind && !i.extra);
     m.items = m.items.filter((i) => i !== slot);
     const spks = speakerAnchors(m.items).map((a) => m.items[a.idx]);
     let at = -1;
@@ -1564,7 +1649,7 @@ function setInterSlot(m, mode, interVal, posVal) {
 const interModeOf = (items) => {
   const c = items.find((i) => i.kind === "choir");
   if (c) return c.youth ? "youthChoir" : "choir";
-  if (items.find((i) => i.kind === "musical")) return "musical";
+  if (items.find((i) => i.kind === "musical" && !i.extra)) return "musical";
   if (items.find((i) => i.kind === "intermediateHymn")) return "hymn";
   return "none";
 };
@@ -1598,7 +1683,7 @@ function quickEdit(date, q) {
     </label>`;
 
   if (q.t === "place") { /* kept for keyboard / legacy callers; the card pill edits inline now */
-    const slotIdx = items.findIndex((i) => ["intermediateHymn", "musical", "choir"].includes(i.kind));
+    const slotIdx = mainSlotIdx(items);
     const anchors = speakerAnchors(items);
     const before = slotIdx < 0 ? 0 : anchors.filter((a) => a.idx < slotIdx).length;
     const opts = [`<option value="0" ${before === 0 ? "selected" : ""}>Before the speakers</option>`]
@@ -1664,7 +1749,7 @@ function quickEdit(date, q) {
   } else if (q.t === "inter") {
     // the intermediate slot: a hymn, a special musical number, or the choir
     const interHymn = items.find((i) => i.kind === "intermediateHymn");
-    const interMusical = items.find((i) => i.kind === "musical");
+    const interMusical = items.find((i) => i.kind === "musical" && !i.extra);
     const interChoir = items.find((i) => i.kind === "choir");
     const interMode = interChoir ? (interChoir.youth ? "youthChoir" : "choir") : interMusical ? "musical" : "hymn";
     const modeBtn = (mode, label) =>
@@ -1672,7 +1757,7 @@ function quickEdit(date, q) {
     // where the number lands in the meeting, relative to the adult speakers
     const SLOT_KINDS_POS = ["intermediateHymn", "musical", "choir"];
     const anchors = speakerAnchors(items);
-    const slotIdx = items.findIndex((i) => SLOT_KINDS_POS.includes(i.kind));
+    const slotIdx = mainSlotIdx(items);
     let curPos = "spk:0";
     if (slotIdx >= 0 && anchors.length) {
       const before = anchors.filter((a) => a.idx < slotIdx).length;
