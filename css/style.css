@@ -1977,3 +1977,13 @@ button.src-st { cursor: pointer; } button.src-st:hover { filter: brightness(.93)
 .st-sec.st-sec-add { flex: none; padding: .15rem .35rem .4rem; background: transparent; }
 .st-sec.st-sec-add .st-add-row { margin-top: 0; }
 .st-sec.st-drag { cursor: grab; }
+/* Option E (2026-10-11, Jordan's pick): pill labels go quiet — thin, grey, a touch smaller — and the
+   names carry the pill in bold. Covers prayer / speaker lines, the Hymns box, the Organ / Conduct pills
+   and the Who: / Hymn: pills in Other Music. Late in the file on purpose so it wins over the older rules. */
+.st-line .st-li-tag, .st-line.st-drag .st-li-tag, .st-line.st-line-light .st-li-tag,
+.st-subhead.st-music .st-music-pill .st-li-tag, .st-inter .st-music-labelled .st-li-tag {
+  color: #9aa4b1; font-weight: 400; font-size: .76rem;
+}
+.st-off .st-li-tag { color: #b3bac4; }
+.st-line .st-li-name, .st-line.st-drag .st-li-name, .st-line.st-line-light .st-li-name,
+.st-subhead.st-music .st-music-pill .st-li-name, .st-inter .st-music-in { font-weight: 700; }
