@@ -1987,3 +1987,21 @@ button.src-st { cursor: pointer; } button.src-st:hover { filter: brightness(.93)
 .st-off .st-li-tag { color: #b3bac4 !important; }
 .st-line .st-li-name, .st-line.st-drag .st-li-name, .st-line.st-line-light .st-li-name,
 .st-subhead.st-music .st-music-pill .st-li-name, .st-inter .st-music-in { font-weight: 700; }
+
+/* Self-Reliance card: action log — dated one-line headlines under the summary (2026-10-11) */
+.src-actions { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: .7rem .95rem .75rem; margin-bottom: 1rem; }
+.src-actions h4 { margin: 0 0 .4rem; font-size: .78rem; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; color: var(--brand); display: flex; align-items: center; gap: .5rem; }
+.src-actions h4 .btn { margin-left: auto; text-transform: none; letter-spacing: 0; }
+.src-act-list { display: flex; flex-direction: column; }
+.src-act { display: flex; align-items: baseline; gap: .7rem; padding: .3rem .35rem; border-top: 1px solid #eef1f4; font-size: .92rem; }
+.src-act:first-child { border-top: none; }
+.src-act-ed { cursor: pointer; border-radius: 8px; }
+.src-act-ed:hover { background: #f4f7fa; }
+.src-act-date { flex: none; width: 6.2rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ink); }
+.src-act-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.src-act-by { flex: none; font-size: .74rem; color: var(--ink-soft); }
+.src-act-form { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; padding: .35rem .35rem .5rem; }
+.src-act-form input[type="date"] { font: inherit; font-size: .9rem; padding: .35rem .45rem; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.src-act-form .src-in { flex: 1 1 14rem; min-width: 10rem; }
+.src-act-form-tools { display: inline-flex; gap: .3rem; margin-left: auto; }
+@media (max-width: 640px) { .src-act { flex-wrap: wrap; } .src-act-date { width: auto; } }

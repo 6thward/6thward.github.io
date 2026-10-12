@@ -10,19 +10,21 @@
 //               the first is the current budget, the rest are "what if" versions compared against it
 //   summary  — the leader's own few lines, shown first on the card (bullets / to-dos / bold like council notes)
 //   log[]    — dated notes { id, at, by, text, editedAt }; the old single `notes` text shows as an undated note
+//   actions[] — the action log (2026-10-11): one dated headline per thing done { id, at, text, by } — "Paid $1,000 rent"
+
 // Same privacy as the rest of this page: only the bishop and people given Self-Reliance.
-import { db } from "./firebase-init.js?v=1791779706";
-import { ctx, can, goTab } from "./app.js?v=1791779706";
+import { db } from "./firebase-init.js?v=1791780123";
+import { ctx, can, goTab } from "./app.js?v=1791780123";
 import {
   collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791779706";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine, inlineFmt } from "./notes.js?v=1791779706";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1791779706";
+import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791780123";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine, inlineFmt } from "./notes.js?v=1791780123";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1791780123";
 import {
   INC, EXP, QA, parseCsv, mapResponses, personKey, respTotals, fmtUsd, isBlank, writeupSections,
   parseBudgetCsv, parseMoney, budgetTotals, fmtUsdC,
-} from "./sr-import.js?v=1791779706";
+} from "./sr-import.js?v=1791780123";
 
 let mount = null, cases = [], started = false, openId = null, openRi = null;
 let loaded = null, markLoaded = null; // resolves once the cards have arrived (for opening one from another page)
@@ -84,6 +86,7 @@ export function initCases(el) {
 }
 
 // dated notes, newest first; a card from before the log existed may still carry one undated `notes` text
+const actionsOf = (c) => [...(c.actions || [])].sort((a, b) => String(b.at).localeCompare(String(a.at))); // newest first
 const logOf = (c) => [...(c.log || []), ...((c.notes || "").trim() ? [{ id: "legacy", at: "", by: "", text: c.notes }] : [])]
   .sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")));
 const plainText = (t) => String(t || "").split("\n").map(plainLine).filter(Boolean).join(" · ");
@@ -262,6 +265,11 @@ function detailHtml(c, ri) {
         ? `<div class="src-rich${ed ? " src-rich-edit-ok" : ""}" data-rich="summary">${notesHtml(c.summary, "summary", ed, (i) => `data-rtodo="summary|${i}"`)}</div>`
         : ed ? `<div class="src-rich src-rich-empty src-rich-edit-ok" data-rich="summary">+ Add your summary — the few lines you want to see first when you open this card</div>` : `<p class="row-sub" style="margin:0">No summary yet.</p>`}
     </div>
+    <div class="src-actions"><h4>Action log ${ed ? `<button class="btn btn-sm btn-ghost" id="srd-act-add" type="button">+ Add</button>` : ""}</h4>
+      <div id="srd-act-new"></div>
+      ${actionsOf(c).length ? `<div class="src-act-list">${actionsOf(c).map((a) => `<div class="src-act${ed ? " src-act-ed" : ""}" data-act="${esc(a.id)}" ${ed ? `title="Click to edit"` : ""}><span class="src-act-date">${esc(fmtDay(a.at) || "—")}</span><span class="src-act-text">${inlineFmt(a.text || "")}</span>${a.by ? `<span class="src-act-by">${esc(a.by)}</span>` : ""}</div>`).join("")}</div>`
+        : `<p class="row-sub" style="margin:0">Nothing logged yet${ed ? " — one line per thing done: paid rent, placed a food order, made a commitment." : "."}</p>`}
+    </div>
     <div class="src-d-cols">
       <div class="src-col">
         ${budgetHtml(c)}
@@ -327,6 +335,7 @@ function refreshOpen() {
   if (!cases.some((x) => x.id === openId)) { closeModal(); openId = null; return; }
   if (box.querySelector(".src-rich-editor") || box.querySelector(".src-budget-editing")) return; // a summary / note / budget is being written
   if (box.querySelector(".src-wu-editor")) return;                                       // a write-up is being edited
+  if (box.querySelector(".src-act-form")) return;                                        // an action-log entry is being typed
   drawOpen();
 }
 function drawOpen() {
@@ -485,6 +494,40 @@ function drawOpen() {
     const n = noteById(b.dataset.ndel); if (!n) return;
     if (!confirm(`Delete this note${n.at ? " from " + fmtDay(n.at) : ""}?`)) return;
     await saveLog(logOf(c).filter((x) => x.id !== n.id), "Note deleted");
+  }));
+  // --- action log: one-line dated entries, added and edited in place (2026-10-11) ---
+  const saveActions = (next, msg) => save({ actions: next }, msg);
+  const actForm = (slot, a) => {
+    box.querySelector(".src-act-form")?.remove();
+    const f = document.createElement("div");
+    f.className = "src-act-form";
+    f.innerHTML = `<input type="date" data-ad value="${esc(isoDate(a?.at || new Date().toISOString()))}"><input data-at class="src-in" placeholder="What was done — e.g. Paid $1,000 towards October rent" autocomplete="off" value="${esc(a?.text || "")}">
+      <span class="src-act-form-tools">${a ? `<button type="button" class="btn btn-sm btn-ghost btn-danger" data-x="delete" title="Delete this entry">✕</button>` : ""}<button type="button" class="btn btn-sm" data-x="cancel">Cancel</button><button type="button" class="btn btn-primary btn-sm" data-x="save">Save</button></span>`;
+    if (a) slot.replaceWith(f); else slot.appendChild(f);
+    const txt = f.querySelector("[data-at]"); txt.focus();
+    const done = async (mode) => {
+      const text = txt.value.trim(), date = f.querySelector("[data-ad]").value;
+      f.remove();
+      if (mode === "save" && text) {
+        const today = isoDate();
+        const at = a && isoDate(a.at) === date ? a.at : (!date || date === today) && !a ? new Date().toISOString() : (date || today) + "T12:00:00";
+        const next = a ? actionsOf(c).map((x) => (x.id === a.id ? { ...x, text, at } : x))
+          : [...actionsOf(c), { id: "a" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), at, text, by: ctx.name || "" }];
+        await saveActions(next, a ? "Entry saved" : "Entry added");
+      } else if (mode === "delete") {
+        if (!confirm(`Delete “${a.text}”?`)) { drawOpen(); return; }
+        await saveActions(actionsOf(c).filter((x) => x.id !== a.id), "Entry deleted");
+      }
+      drawOpen();
+    };
+    f.querySelectorAll("[data-x]").forEach((b) => b.addEventListener("click", () => done(b.dataset.x)));
+    f.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); done("save"); } if (e.key === "Escape") { e.preventDefault(); done("cancel"); } });
+  };
+  box.querySelector("#srd-act-add")?.addEventListener("click", () => actForm(box.querySelector("#srd-act-new"), null));
+  box.querySelectorAll(".src-act-ed[data-act]").forEach((row) => row.addEventListener("click", (e) => {
+    if (e.target.closest("a")) return;
+    if (window.getSelection && String(window.getSelection())) return;
+    const a = actionsOf(c).find((x) => x.id === row.dataset.act); if (a) actForm(row, a);
   }));
   // to-do boxes in the summary / a note tick in place
   box.querySelectorAll("[data-rtodo]").forEach((cb) => cb.addEventListener("change", async () => {
@@ -663,6 +706,7 @@ function printCase(c, r) {
     <p class="sub">${[c.spouse ? "& " + esc(c.spouse) : "", r ? "Self-Reliance Plan " + esc(fmtDay(r.at)) : "", "printed " + new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })].filter(Boolean).join(" · ")}</p>
     ${(c.summary || "").trim() ? `<h2>Summary</h2>${String(c.summary).split("\n").map((l) => l.trim()).filter(Boolean).map((l) => `<p>${/^(\s*)([-•*]|\[( |x|X)\])/.test(l) ? "• " : ""}${esc(plainLine(l))}</p>`).join("")}` : ""}
     ${c.requested ? `<h2>Request</h2><p>${esc(c.requested)}</p>` : ""}
+    ${actionsOf(c).length ? `<h2>Action log</h2><table>${actionsOf(c).map((a) => `<tr><td style="white-space:nowrap;padding-right:1rem">${esc(fmtDay(a.at) || "—")}</td><td>${esc(plainLine(a.text || ""))}</td></tr>`).join("")}</table>` : ""}
     ${(c.budgets || []).map((b, i) => { const bt = budgetTotals(b); const rowsOf = (ls) => (ls || []).map((l) => `<tr><td>${esc(l.label)}${l.note ? `<div class="raw">${esc(l.note)}</div>` : ""}</td><td class="n">${l.amount == null ? "cut" : fmtUsdC(l.amount)}</td></tr>`).join("");
       return `<h2>${i === 0 ? "Budget from the specialist" : "What-if"}: ${esc(b.title || "")}</h2>
         <div class="tiles"><div><span>Income</span><b>${fmtUsdC(bt.income)}</b></div><div><span>Expenses</span><b>${fmtUsdC(bt.expenses)}</b></div><div><span>Left over each month</span><b>${fmtUsdC(bt.net)}</b></div></div>
