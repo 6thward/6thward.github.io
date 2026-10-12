@@ -2011,6 +2011,7 @@ button.src-st { cursor: pointer; } button.src-st:hover { filter: brightness(.93)
 .src-at-food { background: #dff3e6; color: #22693f; }
 .src-at-check { background: #dbe9f7; color: #1f4e79; }
 .src-at-meeting { background: #fdf0c9; color: #8a6500; }
+.src-at-noshow { background: #fde0e0; color: #a12a2a; }
 .src-at-call { background: #ece6f7; color: #5b3fa0; }
 .src-at-visit { background: #fde3d6; color: #a0472a; }
 .src-act-type-sel { font: inherit; font-size: .88rem; padding: .35rem .45rem; border: 1px solid var(--line); border-radius: 8px; background: #fff; }

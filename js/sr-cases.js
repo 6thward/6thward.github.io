@@ -10,23 +10,23 @@
 //               the first is the current budget, the rest are "what if" versions compared against it
 //   summary  — the leader's own few lines, shown first on the card (bullets / to-dos / bold like council notes)
 //   log[]    — dated notes { id, at, by, text, editedAt }; the old single `notes` text shows as an undated note
-//   actions[] — the action log (2026-10-11): one dated headline per thing done { id, at, type, text, by } — type: food | check | meeting | call | visit | other
+//   actions[] — the action log (2026-10-11): one dated headline per thing done { id, at, type, text, by } — type: food | check | meeting | noshow | call | visit | other
 //   requests[] — the request log (2026-10-11): every ask, dated { id, at, text, by }; the old single `requested` text shows as the first entry.
 //                A new request on a closed card re-opens it. `requested` is kept equal to the latest request for the card grid.
 
 // Same privacy as the rest of this page: only the bishop and people given Self-Reliance.
-import { db } from "./firebase-init.js?v=1791780812";
-import { ctx, can, goTab } from "./app.js?v=1791780812";
+import { db } from "./firebase-init.js?v=1791781124";
+import { ctx, can, goTab } from "./app.js?v=1791781124";
 import {
   collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791780812";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine, inlineFmt } from "./notes.js?v=1791780812";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1791780812";
+import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1791781124";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine, inlineFmt } from "./notes.js?v=1791781124";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1791781124";
 import {
   INC, EXP, QA, parseCsv, mapResponses, personKey, respTotals, fmtUsd, isBlank, writeupSections,
   parseBudgetCsv, parseMoney, budgetTotals, fmtUsdC,
-} from "./sr-import.js?v=1791780812";
+} from "./sr-import.js?v=1791781124";
 
 let mount = null, cases = [], started = false, openId = null, openRi = null;
 let loaded = null, markLoaded = null; // resolves once the cards have arrived (for opening one from another page)
@@ -89,7 +89,7 @@ export function initCases(el) {
 
 // dated notes, newest first; a card from before the log existed may still carry one undated `notes` text
 const actionsOf = (c) => [...(c.actions || [])].sort((a, b) => String(b.at).localeCompare(String(a.at))); // newest first
-const ACTION_TYPES = [["food", "Food"], ["check", "Check"], ["meeting", "Meeting"], ["call", "Call"], ["visit", "Visit"], ["other", "Other"]];
+const ACTION_TYPES = [["food", "Food"], ["check", "Check"], ["meeting", "Meeting"], ["noshow", "No Show"], ["call", "Call"], ["visit", "Visit"], ["other", "Other"]]; // No Show = a meeting they didn't come to (2026-10-11)
 const actionTypeLabel = (t) => (ACTION_TYPES.find(([k]) => k === t) || [])[1] || "";
 const requestsOf = (c) => [...(c.requests || []), ...((c.requested || "").trim() && !(c.requests || []).length ? [{ id: "legacy", at: c.created || "", text: c.requested, by: "" }] : [])]
   .sort((a, b) => String(b.at).localeCompare(String(a.at)));
