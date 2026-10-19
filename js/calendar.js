@@ -2,18 +2,18 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792387089";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792387089";
+import { db } from "./firebase-init.js?v=1792387226";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792387226";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792387089";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792387089";
-import { openCouncilDate } from "./council.js?v=1792387089";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792387089";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792387226";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792387226";
+import { openCouncilDate } from "./council.js?v=1792387226";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792387226";
 
 let events = [];
-let viewYear, viewMonth; // 0-based month
+let viewStart; // ISO date of the Sunday the grid starts on — the current week by default, so past weeks aren't shown (2026-10-18)
 let started = false;
 let calView = "all";          // all | ward | bishop
 let season = null, signups = {}, unsubSignups = null; // tithing declaration (only loads for people who can see it)
@@ -22,9 +22,7 @@ const calOf = (e) => (e.cal === "bishop" ? "bishop" : "ward");
 export function initCalendar() {
   if (started) return;
   started = true;
-  const now = new Date();
-  viewYear = now.getFullYear();
-  viewMonth = now.getMonth();
+  viewStart = weekStartOf(todayISO());
 
   const panel = document.getElementById("panel-calendar");
   panel.innerHTML = `
@@ -45,9 +43,10 @@ export function initCalendar() {
     </div>
     <div class="card">
       <div class="cal-head">
-        <button class="btn btn-sm" id="cal-prev">‹</button>
+        <button class="btn btn-sm" id="cal-prev" title="Back 4 weeks">‹</button>
         <h3 id="cal-title"></h3>
-        <button class="btn btn-sm" id="cal-next">›</button>
+        <button class="btn btn-sm" id="cal-next" title="Ahead 4 weeks">›</button>
+        <button class="btn btn-sm" id="cal-today" title="Back to this week">Today</button>
       </div>
       <div class="cal-grid" id="cal-grid"></div>
     </div>
@@ -58,6 +57,7 @@ export function initCalendar() {
 
   panel.querySelector("#cal-prev").addEventListener("click", () => shiftMonth(-1));
   panel.querySelector("#cal-next").addEventListener("click", () => shiftMonth(1));
+  panel.querySelector("#cal-today").addEventListener("click", () => { viewStart = weekStartOf(todayISO()); render(); });
   panel.querySelector("#btn-new-event").addEventListener("click", () => editEvent(null, todayISO()));
   panel.querySelector("#btn-standing")?.addEventListener("click", editStanding);
   watchBishopCal(() => { render(); if (season) syncBusy(events); });
@@ -115,29 +115,31 @@ async function syncBusy(nextEvents) {
   catch (e) { console.warn("[calendar] tithing busy sync", e); }
 }
 
+// the grid is a rolling six weeks starting on a Sunday; ‹ › page it four weeks at a time
 function shiftMonth(delta) {
-  viewMonth += delta;
-  if (viewMonth < 0) { viewMonth = 11; viewYear--; }
-  if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+  viewStart = addDaysIso(viewStart, 28 * delta);
   render();
 }
 
 const iso = (y, m, d) =>
   `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+const weekStartOf = (isoDate) => { const d = new Date(isoDate + "T12:00:00"); return addDaysIso(isoDate, -d.getDay()); };
+const monthLabel = (isoDate, withYear) => new Date(isoDate + "T12:00:00").toLocaleDateString("en-US", withYear ? { month: "long", year: "numeric" } : { month: "long" });
 
 function render() {
   if (openDay && document.getElementById("dv-grid")) drawDay(); // the open day view follows live changes (2026-10-18)
   const grid = document.getElementById("cal-grid");
   if (!grid) return;
+  const gridDates = Array.from({ length: 42 }, (_, i) => addDaysIso(viewStart, i));
+  const lastDate = gridDates[41];
+  // "October 2026" when the six weeks sit in one month, else "October – November 2026" (or "December 2026 – January 2027")
   document.getElementById("cal-title").textContent =
-    new Date(viewYear, viewMonth, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    viewStart.slice(0, 7) === lastDate.slice(0, 7) ? monthLabel(viewStart, true)
+    : viewStart.slice(0, 4) === lastDate.slice(0, 4) ? `${monthLabel(viewStart)} – ${monthLabel(lastDate, true)}`
+    : `${monthLabel(viewStart, true)} – ${monthLabel(lastDate, true)}`;
 
-  const firstDow = new Date(viewYear, viewMonth, 1).getDay();
-  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-  const daysInPrev = new Date(viewYear, viewMonth, 0).getDate();
   const today = todayISO();
   const byDate = {};
-  const gridDates = []; { const first = new Date(viewYear, viewMonth, 1); first.setDate(1 - first.getDay()); for (let i = 0; i < 42; i++) { const d = new Date(first); d.setDate(first.getDate() + i); gridDates.push(iso(d.getFullYear(), d.getMonth(), d.getDate())); } }
   [...events, ...standingEvents(gridDates)].filter(showIt).forEach((e) => (byDate[e.date] = byDate[e.date] || []).push(e));
   if (calView !== "ward" && season) (season.windows || []).forEach((w) => { if (!byDate[w.date] || !byDate[w.date].some((x) => x.tithing)) tithingItems(w.date).forEach((t) => (byDate[w.date] = byDate[w.date] || []).push(t)); });
   Object.values(byDate).forEach((l) => l.sort((a, b) => (a.startTime || "") < (b.startTime || "") ? -1 : 1));
@@ -147,24 +149,14 @@ function render() {
 
   const cells = 42;
   for (let i = 0; i < cells; i++) {
-    const dayNum = i - firstDow + 1;
-    let cellDate, otherMonth = false, displayNum;
-    if (dayNum < 1) {
-      otherMonth = true; displayNum = daysInPrev + dayNum;
-      const m = viewMonth === 0 ? 11 : viewMonth - 1;
-      cellDate = iso(viewMonth === 0 ? viewYear - 1 : viewYear, m, displayNum);
-    } else if (dayNum > daysInMonth) {
-      otherMonth = true; displayNum = dayNum - daysInMonth;
-      const m = viewMonth === 11 ? 0 : viewMonth + 1;
-      cellDate = iso(viewMonth === 11 ? viewYear + 1 : viewYear, m, displayNum);
-    } else {
-      displayNum = dayNum;
-      cellDate = iso(viewYear, viewMonth, dayNum);
-    }
+    const cellDate = gridDates[i];
+    const dayNum = Number(cellDate.slice(8));
+    // the 1st of a month (and the very first cell) carries its month name so the rolling weeks still read as dates
+    const displayNum = dayNum === 1 || i === 0 ? `${new Date(cellDate + "T12:00:00").toLocaleDateString("en-US", { month: "short" })} ${dayNum}` : dayNum;
     const evs = byDate[cellDate] || [];
     const isSunday = i % 7 === 0;
     html += `
-      <div class="cal-cell ${otherMonth ? "other-month" : ""} ${cellDate === today ? "today" : ""}" data-date="${cellDate}">
+      <div class="cal-cell ${cellDate < today ? "other-month" : ""} ${cellDate === today ? "today" : ""}" data-date="${cellDate}">
         <span class="cal-daynum">${displayNum}</span>
         ${evs.slice(0, 7).map((e) => `
           <div class="cal-event ${isSunday ? "ev-sunday" : ""}${e.tithing ? " ev-tithing" : calOf(e) === "bishop" ? " ev-bishop" : ""}${e.standing ? " ev-standing" : ""}${e.color ? " ev-colored" : ""}"${evStyle(e)} title="${esc(e.title)}${e.sub ? " · " + esc(e.sub) : ""}">

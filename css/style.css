@@ -202,9 +202,11 @@ label.field input:focus, label.field select:focus, label.field textarea:focus {
 .cal-cell.today .cal-daynum { background: var(--brand); color: #fff; }
 .cal-daynum {
   font-size: .78rem; font-weight: 600;
-  width: 1.5rem; height: 1.5rem; border-radius: 50%;
+  min-width: 1.5rem; height: 1.5rem; border-radius: .75rem; padding: 0 .3rem; white-space: nowrap;
   display: inline-flex; align-items: center; justify-content: center;
 }
+.cal-head { gap: .5rem; }
+.cal-head h3 { flex: 1; text-align: center; }
 .cal-event {
   font-size: .7rem; line-height: 1.25;
   background: var(--brand-soft); color: var(--brand);
