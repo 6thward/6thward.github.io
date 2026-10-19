@@ -1841,10 +1841,10 @@ button.src-st { cursor: pointer; } button.src-st:hover { filter: brightness(.93)
 /* Calendar: Ward / Bishop calendars + tithing declaration items (2026-10-11) */
 .chip.chip-bishop.active { background: #5b3a8e; border-color: #5b3a8e; }
 .cal-event.ev-bishop { background: #efe6fa; color: #4a2a7a; border-left: 3px solid #7a4fb5; }
-.cal-event.ev-tithing { background: #e0f2f1; color: #0f5c57; border-left: 3px solid #1f8a83; }
+.cal-event.ev-tithing { background: #fdf3da; color: #6e5100; border-left: 3px solid #e6c35c; } /* amber, same as the day-view block (2026-10-18) */
 .cal-tag { display: inline-block; font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; border-radius: 99px; padding: .05rem .45rem; vertical-align: middle; }
 .cal-tag-bishop { background: #efe6fa; color: #5b3a8e; }
-.list-row-tithing { background: #f0faf9; border-radius: 8px; }
+.list-row-tithing { background: #fdf3da; border-radius: 8px; } /* amber like the day block (2026-10-18) */
 .cal-booked { display: flex; flex-wrap: wrap; gap: .3rem .8rem; font-size: .88rem; margin-top: .25rem; }
 .cal-clash { background: #fdf3da; border: 1px solid #f0dca0; border-radius: 10px; padding: .55rem .7rem; font-size: .9rem; display: flex; flex-direction: column; gap: .25rem; }
 .cal-clash-hit { color: #8a3b00; }
@@ -2508,3 +2508,12 @@ tr.us-menu-open td { background: #f7f9fb; }
 .dv-opts label.dv-check { flex-direction: row; align-items: center; gap: .4rem; text-transform: none; letter-spacing: 0; font-size: .9rem; font-weight: 600; color: var(--ink); }
 .dv-opts label.dv-check input { width: auto; margin: 0; }
 .td-pri-lbl { display: flex; align-items: center; gap: .35rem; align-self: end; padding-bottom: .4rem; font-weight: 600; }
+/* priority wording preview on the block panel (2026-10-18) */
+.dv-pri-wrap { margin-top: .35rem; } .dv-pri-wrap[hidden] { display: none; }
+.dv-pri-preview { background: #fdf1d6; color: #5c3d00; border-radius: 8px; padding: .45rem .6rem; font-size: .85rem; line-height: 1.35; cursor: text; position: relative; }
+.dv-pri-preview[hidden] { display: none; }
+.dv-pri-preview .dv-pri-edit { display: block; font-size: .72rem; font-weight: 700; color: #8a5a00; margin-top: .2rem; }
+.dv-pri-preview .td-tag-note { margin-left: .3rem; font-size: .66rem; }
+#dv-f-priedit[hidden] { display: none; }
+#dv-f-pritext { width: 100%; box-sizing: border-box; font: inherit; font-size: .88rem; padding: .4rem .5rem; border: 1px solid #e6c35c; border-radius: 8px; background: #fffaf0; margin-top: .3rem; }
+.dv-opts label.dv-pri-def { font-weight: 500; font-size: .82rem; margin-top: .25rem; align-items: flex-start; }

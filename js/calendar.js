@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792389307";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792389307";
+import { db } from "./firebase-init.js?v=1792389525";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792389525";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority } from "./tithing-shared.js?v=1792389307";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792389307";
-import { openCouncilDate } from "./council.js?v=1792389307";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792389307";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT } from "./tithing-shared.js?v=1792389525";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792389525";
+import { openCouncilDate } from "./council.js?v=1792389525";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792389525";
 
 let events = [];
 let viewStart; // ISO date of the Sunday the grid starts on — the current week by default, so past weeks aren't shown (2026-10-18)
@@ -386,7 +386,15 @@ function focusHtml(date, blocks) {
       <div class="row-sub">${fmtClock(b.start)}–${fmtClock(b.end)}${w.place === "home" ? " · 🏠 home visits" : ""}${isPriority(w) ? " · 🔒 priority" : ""}</div>
       ${ed ? `<div class="dv-opts dv-opts-row"><label>Each visit<select id="dv-f-len">${TITHING_LENS.map((n) => `<option value="${n}"${Number(w.len) === n ? " selected" : ""}>${n} min</option>`).join("")}</select></label>
         <label>Where<select id="dv-f-place"><option value="office"${w.place !== "home" ? " selected" : ""}>Bishop's office</option><option value="home"${w.place === "home" ? " selected" : ""}>Home visits</option></select></label></div>
-        <div class="dv-opts"><label class="dv-check"><input type="checkbox" id="dv-f-pri" ${isPriority(w) ? "checked" : ""}> Priority <small>(marked on the sign-up page — the wording is in Tithing Declaration settings)</small></label></div>
+        <div class="dv-opts"><label class="dv-check"><input type="checkbox" id="dv-f-pri" ${isPriority(w) ? "checked" : ""}> Priority <small>(marked on the sign-up page)</small></label>
+          <div class="dv-pri-wrap" id="dv-f-priwrap"${isPriority(w) ? "" : " hidden"}>
+            <div class="dv-pri-preview" id="dv-f-pripreview" title="Click to change the wording">${esc(w.priorityText || season?.priorityText || PRIORITY_TEXT)}${w.priorityText ? ` <span class="td-tag td-tag-note">changed for this block</span>` : ""}<span class="dv-pri-edit">✎ edit</span></div>
+            <div id="dv-f-priedit" hidden>
+              <textarea id="dv-f-pritext" rows="3">${esc(w.priorityText || season?.priorityText || PRIORITY_TEXT)}</textarea>
+              <label class="dv-check dv-pri-def"><input type="checkbox" id="dv-f-pridef"> Make this the wording for all future weeks too <small>(saves it in Tithing Declaration settings)</small></label>
+              ${w.priorityText ? `<button type="button" class="btn btn-sm btn-ghost" id="dv-f-prireset">Use the default wording</button>` : ""}
+            </div>
+          </div></div>
         <div class="dv-opts dv-opts-row dv-f-repeat"><label>Repeat this block<select id="dv-f-rep">${repeatChoices(date).map(([v, l]) => `<option value="${v}">${esc(v === "0" ? "Doesn't repeat" : l)}</option>`).join("")}</select></label><label id="dv-f-until-wrap" hidden>Until<input type="date" id="dv-f-until" value="${esc(addDaysIso(date, 56))}"></label></div>
         ${pickDaysHtml(date, "dv-f-pick")}` : ""}
       <h4 class="dv-side-h">Times <span class="pill pill-role-member">${booked.length} of ${b.slots.filter((s) => !s.blocked || signups[s.id]).length} booked</span></h4>
@@ -438,12 +446,21 @@ function wireSide(date, blocks, keep) {
     side.querySelector("#dv-save").addEventListener("click", () => saveDesignation(date, kindNow(), side));
   }
   // tithing block details
+  side.querySelector("#dv-f-pri")?.addEventListener("change", (e) => { const wrap = side.querySelector("#dv-f-priwrap"); if (wrap) wrap.hidden = !e.target.checked; });
+  side.querySelector("#dv-f-pripreview")?.addEventListener("click", () => { side.querySelector("#dv-f-pripreview").hidden = true; side.querySelector("#dv-f-priedit").hidden = false; side.querySelector("#dv-f-pritext").focus(); });
+  side.querySelector("#dv-f-prireset")?.addEventListener("click", () => { side.querySelector("#dv-f-pritext").value = season?.priorityText || PRIORITY_TEXT; toast("Default wording — press Save"); });
   // Save writes the block's settings and, if a repeat is chosen, adds the block on those days too (Jordan 10/18: "we need a save button")
   side.querySelector("#dv-f-save")?.addEventListener("click", async () => {
     const id = dvFocus.slice(2), priority = !!side.querySelector("#dv-f-pri")?.checked;
     const w0 = (season.windows || []).find((x) => x.id === id); if (!w0) return;
     const { note: _n, group: _g, ...rest } = w0; // the old reserved-for note / group are folded into the checkbox
     const edited = { ...rest, group: "", len: Number(side.querySelector("#dv-f-len").value), place: side.querySelector("#dv-f-place").value, ...(priority ? { priority: true } : {}) };
+    // priority wording: the default from settings, or this block's own; "all future weeks" makes it the new default
+    delete edited.priorityText;
+    const txt = (side.querySelector("#dv-f-pritext")?.value || "").trim(), makeDefault = !!side.querySelector("#dv-f-pridef")?.checked;
+    const seasonDefault = season.priorityText || PRIORITY_TEXT;
+    if (priority && txt && makeDefault && txt !== seasonDefault) { try { await updateDoc(doc(db, "tithing", season.token), { priorityText: txt }); season = { ...season, priorityText: txt }; } catch (e) { return toast("Couldn't save the wording: " + (e.code || e.message)); } }
+    else if (priority && txt && txt !== seasonDefault) edited.priorityText = txt;
     const cur = (season.windows || []).map((w) => (w.id === id ? edited : w));
     const rule = side.querySelector("#dv-f-rep")?.value || "0", until = side.querySelector("#dv-f-until")?.value || "";
     const dates = rule === "0" ? [] : repeatDates(edited.date, rule, until, pickedDays(side.querySelector("#dv-f-pick"))).slice(1)

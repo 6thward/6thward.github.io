@@ -2,13 +2,13 @@
 // No sign-in. Anyone with the link sees the open times (never who took the
 // others), picks one, and leaves a name — plus a phone number if they'd like
 // a text reminder.
-import { db } from "./firebase-init.js?v=1792389307";
+import { db } from "./firebase-init.js?v=1792389525";
 import {
   doc, getDoc, collection, onSnapshot, writeBatch, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import {
   GROUPS, PLACES, esc, fmtClock, fmtLongDay, slotsOf, sortWindows, parseSlotId, todayIso, nowMin, offList, isPriority, PRIORITY_TEXT,
-} from "./tithing-shared.js?v=1792389307";
+} from "./tithing-shared.js?v=1792389525";
 
 export async function initTithingForm(mount, token) {
   const fail = (title, msg) => { mount.innerHTML = `<div class="td-card td-msg"><h2>${esc(title)}</h2><p>${esc(msg)}</p></div>`; };
@@ -60,7 +60,7 @@ export async function initTithingForm(mount, token) {
         const pri = isPriority(w);
         return `
           <div class="td-win${pri ? " td-win-res" : ""}">
-            ${pri ? `<div class="td-res-h">🔒 Priority time slots</div>` : ""}
+            ${pri ? `<div class="td-res-h">🔒 Priority time slots</div>${w.priorityText && w.priorityText !== (season.priorityText || PRIORITY_TEXT) ? `<p class="td-res-txt">${esc(w.priorityText)}</p>` : ""}` : ""}
             <div class="td-win-head">
               ${w.place === "home" ? `<span class="td-place">🏠 ${esc(PLACES.home.pub)}</span>` : ""}
               <span class="td-len">${Number(w.len) || 15}-minute visits</span>
@@ -99,7 +99,7 @@ export async function initTithingForm(mount, token) {
     sheet.innerHTML = `
       <h2>${esc(fmtLongDay(s.date))}</h2>
       <p class="td-when">${fmtClock(s.min)} · ${s.len} minutes${s.place === "home" ? `<br>🏠 ${esc(whereLine(s))}` : ""}</p>
-      ${s.priority ? `<p class="td-flag td-flag-note td-flag-block">🔒 This is a priority time slot. ${esc(season.priorityText || PRIORITY_TEXT)}</p>` : ""}
+      ${s.priority ? `<p class="td-flag td-flag-note td-flag-block">🔒 This is a priority time slot. ${esc(s.priorityText || season.priorityText || PRIORITY_TEXT)}</p>` : ""}
       <label class="td-field"><span>Your name <i>(or family name)</i></span><input id="td-name" autocomplete="name" maxlength="80" placeholder="e.g. The Hansen family"></label>
       <label class="td-field"><span>Mobile number <i>(optional — only if you'd like a text reminder)</i></span><input id="td-phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="30" placeholder="(435) 555-0123"></label>
       ${s.place === "home" ? `<label class="td-field"><span>Your address <i>(optional)</i></span><input id="td-addr" autocomplete="street-address" maxlength="160" placeholder="Street address"></label>` : ""}

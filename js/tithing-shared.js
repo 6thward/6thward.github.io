@@ -7,6 +7,7 @@
 //   windows[]                     { id, date, start "HH:MM", end "HH:MM", len, place, group, note }
 //   priority = true marks a priority block (2026-10-18); the wording members see is tithing/{token}.priorityText (one text for all)
 //   (older blocks with a note or a families/widows group count as priority too)
+//   priorityText on a window = wording for that block only (changed from the calendar); else the season's text
 // tithing/{token}/taken/{slotId}  { len, at }           — public: only WHICH times are gone
 // tithing/{token}/signups/{slotId}{ name, phone, address, at } — private: who took them
 // slotId = "2026-12-06_1415"
@@ -48,7 +49,7 @@ export function slotsOf(windows, blocked) {
       const id = slotId(w.date, t);
       if (seen.has(id)) continue;
       seen.add(id);
-      out.push({ id, date: w.date, min: t, len, place: w.place || "office", group: w.group || "", priority: isPriority(w), win: w.id, blocked: off.has(id) });
+      out.push({ id, date: w.date, min: t, len, place: w.place || "office", group: w.group || "", priority: isPriority(w), priorityText: w.priorityText || "", win: w.id, blocked: off.has(id) });
     }
   });
   return out;
