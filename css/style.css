@@ -2410,3 +2410,10 @@ tr.us-menu-open td { background: #f7f9fb; }
 .wcd-time { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; background: #f7f9fb; border: 1px solid var(--line); border-radius: 10px; padding: .4rem .7rem; margin: 0 0 .7rem; }
 .wcd-time .cal-standing-on { margin-top: 0; } .wcd-time .cal-standing-times { padding-left: 0; }
 .wc-time-lbl { font-weight: 500; color: var(--ink-soft); }
+/* council dates: Quick pick as a small menu (2026-10-18) */
+.wcd-quick { position: relative; display: inline-block; margin: 0 0 .6rem; }
+.wcd-quick > summary { list-style: none; display: inline-block; cursor: pointer; } .wcd-quick > summary::-webkit-details-marker { display: none; }
+.wcd-quick-menu { position: absolute; left: 0; top: 2.1rem; z-index: 20; min-width: 13rem; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(20,30,45,.14); padding: .3rem; display: flex; flex-direction: column; }
+.wcd-quick-menu button { font: inherit; font-size: .9rem; text-align: left; background: none; border: none; border-radius: 7px; padding: .45rem .7rem; cursor: pointer; color: var(--ink); }
+.wcd-quick-menu button:hover { background: var(--brand-soft); color: var(--brand); }
+.wcd-quick-menu button.danger { color: var(--danger); } .wcd-quick-menu button.danger:hover { background: #fdf0ee; }

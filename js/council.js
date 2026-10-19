@@ -9,15 +9,15 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1792384704";
-import { ctx, can } from "./app.js?v=1792384704";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1792384704";
-import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1792384704";
+import { db } from "./firebase-init.js?v=1792384797";
+import { ctx, can } from "./app.js?v=1792384797";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1792384797";
+import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1792384797";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { watchBishopCal, bishopCalConfig } from "./bishop-cal.js?v=1792384704";
-import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1792384704";
+import { watchBishopCal, bishopCalConfig } from "./bishop-cal.js?v=1792384797";
+import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1792384797";
 
 let cards = [];
 let councils = {};    // date -> doc
@@ -113,14 +113,15 @@ function editDates(year) {
       <span class="row-sub">on every council Sunday — goes on the Bishop calendar and keeps tithing declaration sign-ups off those minutes.</span>
     </div>
     <p class="row-sub" style="margin:0 0 .6rem">Tick the Sundays that have ward council. Agendas exist only for those weeks, and flagged Member Board items wait for the next one.${hasSchedule() ? "" : " Nothing is chosen yet, so every Sunday currently counts."}</p>
-    <div class="wcd-quick">
-      <span class="row-sub">Quick pick:</span>
-      <button class="btn btn-sm" type="button" data-pat="1,3">1st &amp; 3rd</button>
-      <button class="btn btn-sm" type="button" data-pat="2,4">2nd &amp; 4th</button>
-      <button class="btn btn-sm" type="button" data-pat="1">1st only</button>
-      <button class="btn btn-sm" type="button" data-pat="1,2,3,4,5">Every Sunday</button>
-      <button class="btn btn-sm btn-ghost" type="button" data-pat="">Clear</button>
-    </div>
+    <details class="wcd-quick"><summary class="btn btn-sm">Quick pick ▾</summary>
+      <div class="wcd-quick-menu">
+        <button type="button" data-pat="1,3">1st &amp; 3rd Sundays</button>
+        <button type="button" data-pat="2,4">2nd &amp; 4th Sundays</button>
+        <button type="button" data-pat="1">1st Sunday only</button>
+        <button type="button" data-pat="1,2,3,4,5">Every Sunday</button>
+        <button type="button" class="danger" data-pat="">Clear ${year}</button>
+      </div>
+    </details>
     <div class="wcd-months">
       ${months.map((mk) => `
         <div class="wcd-month">
@@ -140,7 +141,9 @@ function editDates(year) {
     const want = new Set(b.dataset.pat.split(",").filter(Boolean));
     el.querySelectorAll(".wcd-day").forEach((d) => d.classList.toggle("on", want.has(d.dataset.nth)));
     count();
+    el.querySelector(".wcd-quick").open = false;
   }));
+  el.addEventListener("click", (e) => { const q = el.querySelector(".wcd-quick"); if (q?.open && !q.contains(e.target)) q.open = false; });
   el.querySelector("#wcd-cancel").addEventListener("click", closeModal);
   el.querySelector("#wcd-save").addEventListener("click", async () => {
     const dates = [...past, ...[...el.querySelectorAll(".wcd-day.on")].map((b) => b.dataset.d)].sort();
