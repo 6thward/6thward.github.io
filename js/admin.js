@@ -15,14 +15,15 @@
 // whose profile doc carries `alias: <googleUid>` plus a mirror of the name /
 // organization / calling / pages, so the rules see the same access either
 // way. The table shows one row; the mirror is kept in step on every save.
-import { db } from "./firebase-init.js?v=1792376483";
-import { ctx, AREAS, normalizePerms } from "./app.js?v=1792376483";
+import { db } from "./firebase-init.js?v=1792376862";
+import { ctx, AREAS, normalizePerms } from "./app.js?v=1792376862";
 import {
   collection, onSnapshot, updateDoc, setDoc, deleteDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { orgColor } from "./org-colors.js?v=1792376483";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1792376483";
-import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1792376483";
+import { fmtPhone, normPhone, smsLink } from "./phone.js?v=1792376862";
+import { orgColor } from "./org-colors.js?v=1792376862";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1792376862";
+import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1792376862";
 
 let sort = { key: "created", dir: 1 }; // default: oldest at the top; click a header for A→Z / Z→A (2026-09-19)
 let showPastUsers = (() => { try { return localStorage.getItem("sw-users-past") === "1"; } catch { return false; } })(); // Past users folded unless they chose to see them (2026-10-18)
@@ -540,15 +541,7 @@ function changePin(u) {
 // Pick who (ward council, an organization, a saved group, or people one by one), write the message,
 // and "Open in Messages" hands it to the phone's own texting app through an sms: link. Nothing is
 // sent by the app itself — it just fills in the numbers and the words.
-// "(435) 201-2105" for any US number however it was typed; anything else stays as typed (2026-10-18)
-const fmtPhone = (p) => { const d = String(p || "").replace(/\D/g, ""); const n = d.length === 11 && d[0] === "1" ? d.slice(1) : d; return n.length === 10 ? `(${n.slice(0, 3)}) ${n.slice(3, 6)}-${n.slice(6)}` : String(p || "").trim(); };
-const normPhone = (p) => { const d = String(p || "").replace(/\D/g, ""); return d.length === 10 ? "+1" + d : d.length === 11 && d[0] === "1" ? "+" + d : d ? "+" + d : ""; };
-const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-function smsLink(numbers, body) {
-  const nums = numbers.join(",");
-  const q = body ? (isIOS() ? "&" : "?") + "body=" + encodeURIComponent(body) : "";
-  return `sms:${nums}${q}`;
-}
+// phone helpers live in ./phone.js (shared with the Message page)
 function textTool() {
   const people = users.filter((u) => !u.revoked && u.role !== "pending").sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   const orgs = [...new Set(people.map((u) => (u.organization || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));

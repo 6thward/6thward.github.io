@@ -1,24 +1,25 @@
 // App shell: auth flow (Google + PIN), permission gating, tab routing.
-import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1792376483";
+import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1792376862";
 import {
   signInWithPopup, signInWithEmailAndPassword, signOut, onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
   doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast } from "./ui.js?v=1792376483";
-import { initTasks } from "./tasks.js?v=1792376483";
-import { initSacrament, openMeetingLink } from "./sacrament.js?v=1792376483";
-import { initCalendar } from "./calendar.js?v=1792376483";
-import { initCallings } from "./callings.js?v=1792376483";
-import { initConfidential } from "./confidential.js?v=1792376483";
-import { initAdmin } from "./admin.js?v=1792376483";
-import { initBoard } from "./board.js?v=1792376483";
-import { initHomeSacrament } from "./home-sacrament.js?v=1792376483";
-import { initCouncil } from "./council.js?v=1792376483";
-import { initTithingPage } from "./tithing.js?v=1792376483";
-import { initSelfReliance } from "./selfreliance.js?v=1792376483";
-import { QUICK_PIN_LENGTH, validQuickPin, derive, devicePins, rememberDevice, forgetDevice, createQuickAccount, changeQuickPin, deleteQuickAccount } from "./quick-pin.js?v=1792376483";
+import { openModal, closeModal, toast } from "./ui.js?v=1792376862";
+import { initTasks } from "./tasks.js?v=1792376862";
+import { initSacrament, openMeetingLink } from "./sacrament.js?v=1792376862";
+import { initCalendar } from "./calendar.js?v=1792376862";
+import { initCallings } from "./callings.js?v=1792376862";
+import { initConfidential } from "./confidential.js?v=1792376862";
+import { initAdmin } from "./admin.js?v=1792376862";
+import { initBoard } from "./board.js?v=1792376862";
+import { initHomeSacrament } from "./home-sacrament.js?v=1792376862";
+import { initCouncil } from "./council.js?v=1792376862";
+import { initMessage } from "./message.js?v=1792376862";
+import { initTithingPage } from "./tithing.js?v=1792376862";
+import { initSelfReliance } from "./selfreliance.js?v=1792376862";
+import { QUICK_PIN_LENGTH, validQuickPin, derive, devicePins, rememberDevice, forgetDevice, createQuickAccount, changeQuickPin, deleteQuickAccount } from "./quick-pin.js?v=1792376862";
 
 const ROLE_RANK = { pending: 0, member: 1, bishopric: 2, bishop: 3 };
 
@@ -36,6 +37,7 @@ export const AREAS = [
   { key: "confidential", label: "Bishop",         hint: "Bishop's private notes — grant with care" },
   { key: "selfreliance", label: "Self-Reliance",  hint: "Self-Reliance Plans people send in, with their bank and credit statements — grant with care" },
   { key: "tithing",      label: "Tithing Declaration", hint: "Set the bishop's available times, share the sign-up link, see who signed up and who came" },
+  { key: "message",      label: "Message",        hint: "Text the ward council, an organization, a saved group or anyone with a mobile number — opens in your Messages app" },
   { key: "tasks",        label: "Tasks",          hint: "Assignments and follow-ups" },
   { key: "users",        label: "Users",          hint: "Add people, set their access, revoke" },
 ];
@@ -437,6 +439,7 @@ onAuthStateChanged(auth, async (user) => {
   if (can("confidential")) initConfidential();
   if (can("selfreliance")) initSelfReliance();
   if (can("tithing")) initTithingPage();
+  if (can("message")) initMessage();
   if (can("users")) initAdmin();
 
   selectTab(localStorage.getItem("sw-tab") || "sacrament");

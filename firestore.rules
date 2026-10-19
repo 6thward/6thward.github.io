@@ -242,7 +242,7 @@ service cloud.firestore {
     // saved recipient sets for the Users → Text tool (2026-10-18)
     match /textGroups/{id} {
       allow read: if hasAccess();
-      allow write: if manages();
+      allow write: if manages() || canEdit('message');
     }
     match /boardColumns/{id} {
       allow read: if canView('board');
