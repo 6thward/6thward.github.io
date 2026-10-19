@@ -2239,3 +2239,13 @@ tr.us-menu-open td { background: #f7f9fb; }
 .call-card .call-card-line .btn.call-arrow.btn-primary { background: var(--brand); color: #fff; }
 .call-card .call-card-line .btn.call-arrow.btn-primary:hover { background: #163a5c; }
 .call-person.call-solo { background: #eef1f4; padding: .2rem .65rem; font-size: .92rem; border-radius: 8px; } /* no longer used — kept harmless */
+/* Column headlines, option D (2026-10-18): bold title, stage-coloured underline blue → green, count at the right edge, subtitle in the tooltip */
+.callings-board > .card:nth-child(1) { --sc: #1f4e79; } .callings-board > .card:nth-child(2) { --sc: #2f6690; }
+.callings-board > .card:nth-child(3) { --sc: #3b8a6e; } .callings-board > .card:nth-child(4) { --sc: #2e7d4f; }
+.releases-board > .card:nth-child(1) { --sc: #1f4e79; } .releases-board > .card:nth-child(2) { --sc: #3b8a6e; } .releases-board > .card:nth-child(3) { --sc: #2e7d4f; }
+.needy-wrap > .card { --sc: #4b5563; }
+.bb-col > h3, .callings-board > .card > h3, .releases-board > .card > h3, .needy-wrap > .card > h3 { font-size: 1rem !important; font-weight: 700 !important; text-transform: none; letter-spacing: 0; color: var(--ink); border-bottom: 3px solid var(--sc, var(--brand)); padding-bottom: .35rem; margin-bottom: .6rem; cursor: help; }
+.bb-col > h3 .pill-role-member, .callings-board > .card > h3 .pill-role-member, .releases-board > .card > h3 .pill-role-member, .needy-wrap > .card > h3 .pill-role-member { margin-left: auto; background: none; color: var(--sc, var(--brand)); font-weight: 700; font-size: .85rem; padding: 0; }
+.bb-col > h3 .btn, .callings-board > .card > h3 .btn { margin-left: .3rem !important; }
+.bb-col > h3 > span[style*="margin-left:auto"], .callings-board > .card > h3 > span[style*="margin-left:auto"] { margin-left: .3rem !important; }
+.bb-sub { display: none; }

@@ -2,7 +2,7 @@
 // Sunday (the dates chosen on the Ward Council page) and the weekly bishopric meeting.
 //   settings/bishopCal { council: { on, start, end }, bishopric: { on, weekday, start, end } }
 // They show on the Calendar like any bishop's event and block tithing-declaration times.
-import { db } from "./firebase-init.js?v=1792371603";
+import { db } from "./firebase-init.js?v=1792372178";
 import { doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 let cfg = null, councilDates = [], listeners = [], started = false;
