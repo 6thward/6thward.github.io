@@ -2467,3 +2467,10 @@ tr.us-menu-open td { background: #f7f9fb; }
 .up-day-h b { font-size: .95rem; color: var(--brand); }
 .up-row { padding: .4rem .6rem; }
 .up-row .row-title { font-size: .95rem; } .up-row .row-sub { font-size: .8rem; }
+/* event editor inside the day view (2026-10-18) */
+.ev-inline-wrap h3 { margin: 0 0 .5rem; font-size: 1rem; }
+.ev-inline-wrap .form-grid.ev-inline { gap: .5rem .6rem; }
+.ev-inline-wrap .field input, .ev-inline-wrap .field select, .ev-inline-wrap .field textarea { font-size: .9rem; padding: .35rem .5rem; }
+.ev-inline-wrap textarea { min-height: 4rem; }
+.ev-inline-wrap .modal-actions { margin-top: .6rem; }
+.ev-inline-hint { background: #f1f6fb; border-radius: 8px; padding: .4rem .6rem; }

@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792386707";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792386707";
+import { db } from "./firebase-init.js?v=1792387089";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792387089";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792386707";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792386707";
-import { openCouncilDate } from "./council.js?v=1792386707";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792386707";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792387089";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792387089";
+import { openCouncilDate } from "./council.js?v=1792387089";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792387089";
 
 let events = [];
 let viewYear, viewMonth; // 0-based month
@@ -332,8 +332,10 @@ function drawDay() {
     if (ev && ev.kind === "interviews") { const k = e.target.closest("[data-islot]")?.dataset.islot; dvFocus = "e:" + id; dvSel = null; drawDay(); if (k) document.getElementById("dv-side")?.querySelector(`[data-iname="${k}"]`)?.focus(); return; }
     if (ev) editEvent(ev);
   }));
-  // the side panel: the designate form while something is selected, a block's details when one is clicked, else the day's list
-  side.innerHTML = dvSel ? designateHtml(date) : dvFocus ? focusHtml(date, blocks) : listHtml(date, blocks, allDay);
+  // the side panel: the designate form while something is selected, a block's details when one is clicked, else the day's list.
+  // An inline event editor stays put across live redraws so nothing typed is lost; only its time boxes follow a drag.
+  if (dvFocus && dvFocus.startsWith("edit:") && side.querySelector("#ev-title")) { wireSide(date, blocks, true); return; }
+  side.innerHTML = dvSel && !(dvFocus && dvFocus.startsWith("edit:")) ? designateHtml(date) : dvFocus ? focusHtml(date, blocks) : listHtml(date, blocks, allDay);
   wireSide(date, blocks);
 }
 function listHtml(date, blocks, allDay) {
@@ -372,6 +374,11 @@ function optsHtml(kind) {
   return loc + color;
 }
 function focusHtml(date, blocks) {
+  if (dvFocus.startsWith("edit:")) {
+    const ev = events.find((x) => x.id === dvFocus.slice(5));
+    if (!ev) { dvFocus = null; return listHtml(date, blocks, []); }
+    return `<div class="ev-inline-wrap">${eventFormHtml(ev, date, can("calendar", "edit") || ev.createdBy === ctx.uid, true)}</div>`;
+  }
   const [t, id] = [dvFocus.slice(0, 1), dvFocus.slice(2)];
   const b = blocks.find((x) => (t === "t" ? x.kind === "tithing" : x.kind !== "tithing") && x.id === id);
   if (!b) { dvFocus = null; return listHtml(date, blocks, []); }
@@ -393,8 +400,13 @@ function focusHtml(date, blocks) {
     <div class="dv-irows">${rows.join("")}</div>
     <div class="dv-form-actions">${ed ? `<button type="button" class="btn" id="dv-f-edit">Edit…</button>` : ""}<button type="button" class="btn" id="dv-back">Back</button></div>`;
 }
-function wireSide(date, blocks) {
+function wireSide(date, blocks, keep) {
   const side = document.getElementById("dv-side"); if (!side) return;
+  if (keep) return; // the inline editor is already wired
+  if (dvFocus && dvFocus.startsWith("edit:") && side.querySelector("#ev-title")) {
+    const ev = events.find((x) => x.id === dvFocus.slice(5));
+    if (ev) { wireEventForm(side, ev, can("calendar", "edit") || ev.createdBy === ctx.uid, () => { dvFocus = null; drawDay(); }); return; }
+  }
   side.querySelector("#dv-back")?.addEventListener("click", () => { dvFocus = null; drawDay(); });
   // the day's list opens things too — the only handle for an all-day event, which has no block on the timeline (2026-10-18)
   side.querySelectorAll("[data-open]").forEach((row) => row.addEventListener("click", () => {
@@ -454,7 +466,8 @@ function wireDrag(grid) {
   const minAt = (e) => { const r = grid.getBoundingClientRect(); return clampDay(snap(DAY_START + (e.clientY - r.top + grid.parentElement.scrollTop * 0) / PX_MIN)); };
   grid.addEventListener("pointerdown", (e) => {
     if (e.button !== 0 || e.target.closest("[data-block], .dv-sel")) return;
-    startMin = minAt(e); moved = false; dvFocus = null;
+    startMin = minAt(e); moved = false;
+    if (!(dvFocus && dvFocus.startsWith("edit:"))) dvFocus = null; // an inline editor stays open: the drag is its new time
     dvSel = { a: startMin, b: startMin + SNAP, kind: "", len: dvSel?.len };
     grid.setPointerCapture(e.pointerId);
     drawDay();
@@ -471,8 +484,10 @@ function wireDrag(grid) {
     if (startMin == null) return;
     startMin = null;
     if (!moved || dvSel.b - dvSel.a < 10) dvSel = { ...dvSel, b: Math.min(DAY_END, dvSel.a + 60) }; // a tap gives an hour to start from
+    if (!dvRetime && dvFocus && dvFocus.startsWith("edit:")) dvRetime = dvFocus.slice(5); // editing in the side panel: a drag on empty time is this event's new time
     if (dvRetime) { // the editor asked for new times: apply them to that event and stop
       const id = dvRetime, { a, b } = dvSel; dvRetime = null; dvSel = null;
+      const side = document.getElementById("dv-side"); if (dvFocus === "edit:" + id && side?.querySelector("#ev-start")) { side.querySelector("#ev-start").value = hhmmOf(a); side.querySelector("#ev-end").value = hhmmOf(b); }
       try { await updateDoc(doc(db, "events", id), { startTime: hhmmOf(a), endTime: hhmmOf(b), updatedAt: serverTimestamp() }); toast(`Set to ${fmtClock(a)} – ${fmtClock(b)}`); syncBusy(events.map((x) => x.id === id ? { ...x, startTime: hhmmOf(a), endTime: hhmmOf(b) } : x)); }
       catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
       drawDay(); const h = document.getElementById("dv-hint"); if (h) h.textContent = "Drag across the timeline to add something.";
@@ -547,6 +562,8 @@ function wireBlockDrag(grid, timed) {
       const m = mode; mode = null;
       if (!moved) return; // a plain click — the click handler opens it
       e.stopPropagation(); dragJustHappened = true; setTimeout(() => { dragJustHappened = false; }, 300);
+      const side = document.getElementById("dv-side");
+      if (dvFocus === "edit:" + b.id && side?.querySelector("#ev-start")) { side.querySelector("#ev-start").value = hhmmOf(ns); side.querySelector("#ev-end").value = hhmmOf(ne); }
       try {
         await updateDoc(doc(db, "events", b.id), { startTime: hhmmOf(ns), endTime: hhmmOf(ne), updatedAt: serverTimestamp() });
         toast(m === "move" ? `Moved to ${fmtClock(ns)} – ${fmtClock(ne)}` : `Now ends at ${fmtClock(ne)}`);
@@ -658,12 +675,14 @@ function editStanding() {
   });
 }
 
-function editEvent(e, defaultDate) {
+// The event form: the same fields whether it opens as its own window or inside the day view's side
+// panel (2026-10-18 — Jordan: see the timeline and the settings at the same time). `root` is wherever
+// it was drawn; `done()` closes it.
+function eventFormHtml(e, defaultDate, canEdit, inline) {
   const isNew = !e;
-  const canEdit = isNew || can("calendar", "edit") || e.createdBy === ctx.uid;
-  const el = openModal(`
+  return `
     <h3>${isNew ? "New event" : canEdit ? "Edit event" : "Event"}</h3>
-    <div class="form-grid two-col">
+    <div class="form-grid two-col${inline ? " ev-inline" : ""}">
       <label class="field full">Title
         <input id="ev-title" value="${esc(e?.title || "")}" ${canEdit ? "" : "disabled"}>
       </label>
@@ -679,6 +698,7 @@ function editEvent(e, defaultDate) {
       <label class="field">End time
         <input type="time" id="ev-end" value="${e?.endTime || ""}" ${canEdit ? "" : "disabled"}>
       </label>
+      ${inline && canEdit ? `<div class="full row-sub ev-inline-hint">Drag the block on the timeline to move it, its bottom edge to stretch it, or drag across empty time to set it — the times fill in here.</div>` : ""}
       <label class="field full">Location <span class="row-sub">(optional)</span>
         <input id="ev-location" value="${esc(e?.location || "")}" ${canEdit ? "" : "disabled"}>
       </label>
@@ -689,45 +709,48 @@ function editEvent(e, defaultDate) {
       ${e?.series ? `<label class="field full ev-series"><input type="checkbox" id="ev-series"> <span>Also change the other repeats of this meeting (title, times, location, colour)</span></label>` : ""}
       <div class="full cal-clash hidden" id="ev-clash"></div>
     </div>
-    ${!isNew && canEdit ? `<div class="ev-agenda"><button type="button" class="btn btn-sm" id="ev-retime" title="Close this and drag the time on the day's timeline">⏱ Set the time on the timeline</button></div>` : ""}
+    ${!isNew && canEdit && !inline ? `<div class="ev-agenda"><button type="button" class="btn btn-sm" id="ev-retime" title="Open the day's timeline with this event ready to drag">⏱ Edit on the timeline</button></div>` : ""}
     ${!isNew && isCouncilThing(e) && can("council") ? `<div class="ev-agenda"><button type="button" class="btn btn-sm" id="ev-agenda">📋 Open this day's ward council agenda</button></div>` : ""}
     <div class="modal-actions">
       ${!isNew && canEdit ? `<button class="btn btn-ghost btn-danger" id="ev-delete">Delete</button>` : ""}
       <div class="right">
-        <button class="btn" id="ev-cancel">Close</button>
+        <button class="btn" id="ev-cancel">${inline ? "Back" : "Close"}</button>
         ${canEdit ? `<button class="btn btn-primary" id="ev-save">Save</button>` : ""}
       </div>
-    </div>`);
-  el.querySelector("#ev-cancel").addEventListener("click", closeModal);
-  el.querySelector("#ev-agenda")?.addEventListener("click", () => openAgenda(e.date));
-  el.querySelector("#ev-retime")?.addEventListener("click", () => { closeModal(); dvRetime = e.id; dayView(e.date); });
-  wireSwatches(el.querySelector("#ev-color"));
+    </div>`;
+}
+function wireEventForm(root, e, canEdit, done) {
+  const isNew = !e;
+  root.querySelector("#ev-cancel").addEventListener("click", done);
+  root.querySelector("#ev-agenda")?.addEventListener("click", () => openAgenda(e.date));
+  root.querySelector("#ev-retime")?.addEventListener("click", () => { closeModal(); dvFocus = "edit:" + e.id; dayView(e.date); });
+  wireSwatches(root.querySelector("#ev-color"));
   // a bishop's event on top of tithing-declaration times: say so, and show who is already booked there
   const clashNote = () => {
-    const box = el.querySelector("#ev-clash");
-    if (el.querySelector("#ev-cal").value !== "bishop" || !season) return box.classList.add("hidden");
-    const date = el.querySelector("#ev-date").value, start = el.querySelector("#ev-start").value, end = el.querySelector("#ev-end").value;
+    const box = root.querySelector("#ev-clash");
+    if (root.querySelector("#ev-cal").value !== "bishop" || !season) return box.classList.add("hidden");
+    const date = root.querySelector("#ev-date").value, start = root.querySelector("#ev-start").value, end = root.querySelector("#ev-end").value;
     const open = slotsOf(season.windows, offList(season)).filter((s) => s.date === date && !s.blocked && !signups[s.id] && (!start || (toMinutes(start) < s.min + s.len && s.min < (end ? toMinutes(end) : toMinutes(start) + 60)))).length;
     const hits = clashes(date, start, end);
     if (!open && !hits.length) return box.classList.add("hidden");
     box.classList.remove("hidden");
     box.innerHTML = `${open ? `<div>📅 Blocks <b>${open}</b> open tithing declaration time${open === 1 ? "" : "s"} that day${start ? "" : " (all day)"}.</div>` : ""}${hits.length ? `<div class="cal-clash-hit">⚠ Already booked in this time: ${hits.map(esc).join(" · ")}. They stay on the schedule — move them from the Tithing Declaration page if needed.</div>` : ""}`;
   };
-  ["#ev-cal", "#ev-date", "#ev-start", "#ev-end"].forEach((sel) => el.querySelector(sel).addEventListener("change", clashNote));
+  ["#ev-cal", "#ev-date", "#ev-start", "#ev-end"].forEach((sel) => root.querySelector(sel).addEventListener("change", clashNote));
   clashNote();
-  // Delete: a repeating meeting asks which ones — just this date, this and the later ones, or the whole series (2026-10-18)
-  el.querySelector("#ev-delete")?.addEventListener("click", async () => {
+  // Delete: a repeating meeting asks which ones — just this date, this and the later ones, or the whole series
+  root.querySelector("#ev-delete")?.addEventListener("click", async () => {
     const del = async (ids, msg) => {
       try {
         await Promise.all(ids.map((id) => deleteDoc(doc(db, "events", id))));
-        closeModal(); toast(msg);
+        done(); toast(msg);
         if (calOf(e) === "bishop") syncBusy(events.filter((x) => !ids.includes(x.id)));
       } catch (err) { toast("Couldn't delete: " + (err.code || err.message)); }
     };
     if (!e.series) { if (confirm("Delete this event?")) del([e.id], "Event deleted"); return; }
     const mine = events.filter((x) => x.series === e.series);
     const later = mine.filter((x) => x.date >= e.date);
-    const box = el.querySelector("#ev-delwrap") || (() => { const d = document.createElement("div"); d.id = "ev-delwrap"; d.className = "ev-delwrap"; el.querySelector(".modal-actions").before(d); return d; })();
+    const box = root.querySelector("#ev-delwrap") || (() => { const d = document.createElement("div"); d.id = "ev-delwrap"; d.className = "ev-delwrap"; root.querySelector(".modal-actions").before(d); return d; })();
     box.innerHTML = `<b>This meeting repeats (${mine.length} dates). Delete…</b>
       <div class="ev-delopts">
         <button type="button" class="btn btn-sm" data-del="one">Just this one (${esc(fmtDate(e.date))})</button>
@@ -743,37 +766,42 @@ function editEvent(e, defaultDate) {
       else del(mine.map((x) => x.id), `Removed all ${mine.length} dates`);
     }));
   });
-  el.querySelector("#ev-save")?.addEventListener("click", async () => {
-    const title = el.querySelector("#ev-title").value.trim();
+  root.querySelector("#ev-save")?.addEventListener("click", async () => {
+    const title = root.querySelector("#ev-title").value.trim();
     if (!title) { toast("Event needs a title"); return; }
     const data = {
       title,
-      date: el.querySelector("#ev-date").value,
-      startTime: el.querySelector("#ev-start").value || null,
-      endTime: el.querySelector("#ev-end").value || null,
-      location: el.querySelector("#ev-location").value.trim(),
-      color: swatchValue(el.querySelector("#ev-color")) || null,
-      notes: el.querySelector("#ev-notes").value.trim(),
-      cal: el.querySelector("#ev-cal").value === "bishop" ? "bishop" : "ward",
+      date: root.querySelector("#ev-date").value,
+      startTime: root.querySelector("#ev-start").value || null,
+      endTime: root.querySelector("#ev-end").value || null,
+      location: root.querySelector("#ev-location").value.trim(),
+      color: swatchValue(root.querySelector("#ev-color")) || null,
+      notes: root.querySelector("#ev-notes").value.trim(),
+      cal: root.querySelector("#ev-cal").value === "bishop" ? "bishop" : "ward",
       updatedAt: serverTimestamp(),
     };
     try {
       if (isNew) {
-        await addDoc(collection(db, "events"), {
-          ...data, createdBy: ctx.uid, createdAt: serverTimestamp(),
-        });
+        await addDoc(collection(db, "events"), { ...data, createdBy: ctx.uid, createdAt: serverTimestamp() });
       } else {
         await updateDoc(doc(db, "events", e.id), data);
-        if (e.series && el.querySelector("#ev-series")?.checked) { // the other repeats take everything but the date
+        if (e.series && root.querySelector("#ev-series")?.checked) { // the other repeats take everything but the date
           const { date: _d, ...shared } = data;
           await Promise.all(events.filter((x) => x.series === e.series && x.id !== e.id).map((x) => updateDoc(doc(db, "events", x.id), shared)));
         }
       }
-      closeModal(); toast("Saved");
+      done(); toast("Saved");
       // the bishop's calendar decides which tithing times are open, so bring the sign-up page up to date
       if (data.cal === "bishop" || (e && calOf(e) === "bishop")) syncBusy([...events.filter((x) => !e || x.id !== e.id), { ...data, id: e?.id || "new" }]);
     } catch (err) {
       toast("Couldn't save: " + (err.code || err.message));
     }
   });
+}
+// from the day view, an existing event edits in the side panel beside the timeline; elsewhere it's a window
+function editEvent(e, defaultDate) {
+  const canEdit = !e || can("calendar", "edit") || e.createdBy === ctx.uid;
+  if (e && openDay === e.date && document.getElementById("dv-grid")) { dvFocus = "edit:" + e.id; dvSel = null; drawDay(); return; }
+  const el = openModal(eventFormHtml(e, defaultDate, canEdit, false));
+  wireEventForm(el, e, canEdit, closeModal);
 }
