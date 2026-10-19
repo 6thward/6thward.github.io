@@ -2258,3 +2258,6 @@ tr.us-menu-open td { background: #f7f9fb; }
 .call-people-col .step-track { flex: 1 1 auto; min-width: 0; }
 .call-people-col .st-step { font-size: .72rem; gap: .25rem; }
 .call-people-col .st-seg { flex: 1 1 .5rem; min-width: .4rem; }
+/* Users: organization colours now come from the shared palette (same as Callings); text uses a darker shade (2026-10-18) */
+#users-table tr.us-group.us-org .us-group-name, #users-table tr.us-group.us-org .us-group-n { color: color-mix(in srgb, var(--org) 70%, #000); }
+#users-table tr.us-group.us-org .us-group-n { background: color-mix(in srgb, var(--org) 16%, #fff); filter: none; }

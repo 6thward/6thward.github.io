@@ -5,13 +5,14 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1792372384";
+import { db } from "./firebase-init.js?v=1792372623";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1792372384";
-import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1792372384";
+import { ORG_COLORS, orgColor } from "./org-colors.js?v=1792372623";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1792372623";
+import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1792372623";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
@@ -232,22 +233,8 @@ const stampAction = (label, ts, actionHtml) => {
 // ---- rows ----
 // each calling gets a consistently colored pill so it's easy to single out;
 // known organizations keep fixed colors, everything else hashes to one
-const ORG_COLORS = {
-  "relief society": "#cf6d96", "elders quorum": "#6b96c9", "primary": "#dd9257",
-  "young men": "#74a67f", "young women": "#a37fc0", "sunday school": "#b98a2f",
-  "bishopric": "#5b8fa8", "ward": "#5b8fa8",
-};
-const PILL_COLORS = ["#cf6d96", "#6b96c9", "#dd9257", "#74a67f", "#a37fc0", "#b98a2f", "#5b8fa8", "#c96b6b"];
-const callColor = (label, orgKey) => {
-  const key = (orgKey || label || "").toLowerCase().trim();
-  let bg = ORG_COLORS[key];
-  if (!bg) {
-    let h = 0;
-    for (const ch of key) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-    bg = PILL_COLORS[h % PILL_COLORS.length];
-  }
-  return bg;
-};
+// colours come from the shared org-colors module so Users and Callings match (2026-10-18)
+const callColor = (label, orgKey) => orgColor(orgKey, label);
 // the whole card is one big tinted pill in the calling's color
 const cardStyle = (label, orgKey) => {
   const col = callColor(label, orgKey);

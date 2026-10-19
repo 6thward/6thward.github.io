@@ -15,13 +15,14 @@
 // whose profile doc carries `alias: <googleUid>` plus a mirror of the name /
 // organization / calling / pages, so the rules see the same access either
 // way. The table shows one row; the mirror is kept in step on every save.
-import { db } from "./firebase-init.js?v=1792372384";
-import { ctx, AREAS, normalizePerms } from "./app.js?v=1792372384";
+import { db } from "./firebase-init.js?v=1792372623";
+import { ctx, AREAS, normalizePerms } from "./app.js?v=1792372623";
 import {
   collection, onSnapshot, updateDoc, setDoc, deleteDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1792372384";
-import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1792372384";
+import { orgColor } from "./org-colors.js?v=1792372623";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1792372623";
+import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1792372623";
 
 let sort = { key: "created", dir: 1 }; // default: oldest at the top; click a header for A→Z / Z→A (2026-09-19)
 let showPastUsers = (() => { try { return localStorage.getItem("sw-users-past") === "1"; } catch { return false; } })(); // Past users folded unless they chose to see them (2026-10-18)
@@ -168,7 +169,7 @@ function render() {
   const rank = (k) => (k === "bishopric" ? 0 : k === "" ? 2 : 1);
   const orgDir = sort.key === "organization" ? sort.dir : 1;
   const ordered = [...groups.entries()].sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b) * orgDir).map(([, g]) => g);
-  let orgCls = ""; // each organization section carries its own colour (2026-10-18)
+  let orgCls = "", orgStyle = ""; // each organization section carries its colour — the same one Callings uses (2026-10-18)
   const rowHtml = (u) => {
     const id = u.invite ? "inv:" + u.email : u.uid;
     const me = u.uid === ctx.uid;
@@ -183,7 +184,7 @@ function render() {
         : `<button type="button" class="danger" data-revoke="${esc(id)}">Revoke access</button>`,
     ].filter(Boolean);
     return `
-    <tr class="${orgCls}${u.revoked ? " us-revoked" : ""}${u.role === "pending" ? " us-waiting" : ""}">
+    <tr class="${orgCls}${u.revoked ? " us-revoked" : ""}${u.role === "pending" ? " us-waiting" : ""}"${orgStyle}>
       <td class="us-col-name"><b title="${esc(u.name || u.email || "")}">${esc(u.name || u.email || "—")}</b>${me ? " <span class='row-sub'>(you)</span>" : ""}</td>
       <td class="us-col-council">${u.councilMember ? `<span class="pill us-council-pill" title="Ward council member">Council</span>` : ""}</td>
       <td class="us-col-signin">${signInPill(u)}</td>
@@ -201,10 +202,9 @@ function render() {
       <button type="button" class="btn btn-sm btn-ghost us-past-toggle" data-pasttoggle>${showPastUsers ? "Hide" : "Show"}</button>
       ${showPastUsers ? "" : `<span class="row-sub us-past-names">${esc(pastSorted.map((u) => u.name || u.email || "—").join(" · "))}</span>`}</td></tr>
     ${showPastUsers ? pastSorted.map(rowHtml).join("") : ""}` : "";
-  const ORG_COLOURS = 8;
-  tbody.innerHTML = (ordered.length ? ordered.map((g, i) => { orgCls = `us-org us-org-${i % ORG_COLOURS}`; return `
-    <tr class="us-group ${orgCls}"><td colspan="${cols}"><span class="us-group-name">${esc(g.label || "No organization")}</span><span class="us-group-n">${g.list.length}</span></td></tr>
-    ${g.list.map(rowHtml).join("")}`; }).join("") : `<tr><td colspan="${cols}" class="empty-note">Nobody active — everyone is under Past users.</td></tr>`) + (orgCls = "", pastHtml);
+  tbody.innerHTML = (ordered.length ? ordered.map((g) => { const col = orgColor(g.label); orgCls = "us-org"; orgStyle = ` style="--org:${col};--org-soft:color-mix(in srgb, ${col} 9%, #fff)"`; return `
+    <tr class="us-group ${orgCls}"${orgStyle}><td colspan="${cols}"><span class="us-group-name">${esc(g.label || "No organization")}</span><span class="us-group-n">${g.list.length}</span></td></tr>
+    ${g.list.map(rowHtml).join("")}`; }).join("") : `<tr><td colspan="${cols}" class="empty-note">Nobody active — everyone is under Past users.</td></tr>`) + (orgCls = "", orgStyle = "", pastHtml);
   // ⋯ opens one small menu at a time; any click elsewhere closes it
   const closeMenus = () => tbody.querySelectorAll(".us-menu:not([hidden])").forEach((m) => { m.hidden = true; m.closest("tr").classList.remove("us-menu-open"); });
   tbody.querySelectorAll("[data-usmenu]").forEach((b) => b.addEventListener("click", (e) => {
