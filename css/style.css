@@ -2253,3 +2253,8 @@ tr.us-menu-open td { background: #f7f9fb; }
 .call-people-col .call-person-row { flex-direction: row; align-items: center; justify-content: space-between; gap: .4rem .8rem; flex-wrap: wrap; }
 .call-people-col .step-track { width: auto; align-self: center; margin: 0; flex: 1 1 9rem; justify-content: flex-end; }
 .call-people-col .st-seg { flex: 0 1 1.4rem; }
+.call-people-col .call-person-row { flex-wrap: nowrap; }
+.call-people-col .call-person { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.call-people-col .step-track { flex: 1 1 auto; min-width: 0; }
+.call-people-col .st-step { font-size: .72rem; gap: .25rem; }
+.call-people-col .st-seg { flex: 1 1 .5rem; min-width: .4rem; }
