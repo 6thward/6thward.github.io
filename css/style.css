@@ -2400,3 +2400,4 @@ tr.us-menu-open td { background: #f7f9fb; }
 .dv-irows { display: flex; flex-direction: column; gap: .25rem; max-height: 40vh; overflow: auto; }
 .dv-irow { display: grid; grid-template-columns: 5.2rem 1fr; align-items: center; gap: .4rem; font-size: .88rem; } .dv-irow b { font-variant-numeric: tabular-nums; color: var(--ink-soft); font-weight: 600; }
 .dv-irow input { font: inherit; font-size: .9rem; padding: .3rem .5rem; border: 1px solid var(--line); border-radius: 8px; }
+.dv-repeat { margin-top: .6rem; } .dv-repeat select, .dv-repeat input { min-width: 9rem; }

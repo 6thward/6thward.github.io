@@ -2,14 +2,14 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792383753";
-import { ctx, hasRole, can } from "./app.js?v=1792383753";
+import { db } from "./firebase-init.js?v=1792384400";
+import { ctx, hasRole, can } from "./app.js?v=1792384400";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792383753";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792383753";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792383753";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792384400";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792384400";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792384400";
 
 let events = [];
 let viewYear, viewMonth; // 0-based month
@@ -306,6 +306,7 @@ function designateHtml(date) {
     <div class="dv-time"><label>From<input type="time" id="dv-start" step="300" value="${hhmmOf(dvSel.a)}"></label><label>To<input type="time" id="dv-end" step="300" value="${hhmmOf(dvSel.b)}"></label></div>
     <div class="dv-kinds">${kinds.map(([k, l, hint], i) => `<label class="dv-kind${(dvSel.kind || kinds[0][0]) === k ? " on" : ""}"><input type="radio" name="dv-kind" value="${k}"${(dvSel.kind || kinds[0][0]) === k ? " checked" : ""}><span><b>${l}</b><small>${hint}</small></span></label>`).join("")}</div>
     <div class="dv-opts" id="dv-opts"></div>
+    <div class="dv-opts dv-opts-row dv-repeat"><label>Repeat<select id="dv-rep"><option value="0"${!dvSel.rep ? " selected" : ""}>Just this day</option><option value="7"${dvSel.rep === 7 ? " selected" : ""}>Every week</option><option value="14"${dvSel.rep === 14 ? " selected" : ""}>Every 2 weeks</option></select></label><label id="dv-until-wrap"${dvSel.rep ? "" : " hidden"}>Until<input type="date" id="dv-until" value="${esc(dvSel.until || addDaysIso(date, 56))}"></label></div>
     <div class="dv-form-actions"><button type="button" class="btn" id="dv-cancel">Cancel</button><button type="button" class="btn btn-primary" id="dv-save">Add</button></div>`;
 }
 function optsHtml(kind) {
@@ -352,6 +353,8 @@ function wireSide(date, blocks) {
     redrawOpts();
     const syncTimes = () => { const a = toMinutes(side.querySelector("#dv-start").value), b = toMinutes(side.querySelector("#dv-end").value); if (b > a) { dvSel.a = a; dvSel.b = b; const g = document.getElementById("dv-grid"); const selEl = g?.querySelector(".dv-sel"); if (selEl) { selEl.style.top = `${(a - DAY_START) * PX_MIN}px`; selEl.style.height = `${(b - a) * PX_MIN}px`; selEl.querySelector("span").textContent = `${fmtClock(a)} – ${fmtClock(b)}`; } } };
     side.querySelector("#dv-start").addEventListener("change", syncTimes); side.querySelector("#dv-end").addEventListener("change", syncTimes);
+    side.querySelector("#dv-rep").addEventListener("change", (e) => { dvSel.rep = Number(e.target.value) || 0; side.querySelector("#dv-until-wrap").hidden = !dvSel.rep; });
+    side.querySelector("#dv-until").addEventListener("change", (e) => { dvSel.until = e.target.value; });
     side.querySelector("#dv-save").addEventListener("click", () => saveDesignation(date, kindNow(), side));
   }
   // tithing block details
@@ -411,27 +414,42 @@ function wireDrag(grid) {
   grid.addEventListener("pointerup", finish);
   grid.addEventListener("pointercancel", finish);
 }
+// the days a repeat covers: this one, then every `step` days up to and including `until`
+const addDaysIso = (iso, n) => { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+function repeatDates(date, step, until) {
+  const out = [date];
+  if (!step) return out;
+  const stop = until && /^\d{4}-\d{2}-\d{2}$/.test(until) ? until : addDaysIso(date, 56);
+  for (let d = addDaysIso(date, step), i = 0; d <= stop && i < 60; d = addDaysIso(d, step), i++) out.push(d);
+  return out;
+}
 async function saveDesignation(date, kind, side) {
   const a = toMinutes(side.querySelector("#dv-start").value), b = toMinutes(side.querySelector("#dv-end").value);
   if (!(b > a)) return toast("The end has to be after the start");
+  const step = Number(side.querySelector("#dv-rep")?.value) || 0, until = side.querySelector("#dv-until")?.value || "";
+  if (step && until && until < date) return toast("The end date is before the first day");
+  const dates = repeatDates(date, step, until), many = dates.length > 1;
   try {
     if (kind === "tithing") {
       if (!can("tithing", "edit")) return toast("You can't change tithing declaration times");
       await ensureSeason();
-      const w = { id: "w" + Math.random().toString(36).slice(2, 9), date, start: hhmmOf(a), end: hhmmOf(b), len: Number(side.querySelector("#dv-len").value), place: side.querySelector("#dv-place").value, group: side.querySelector("#dv-group").value };
+      const len = Number(side.querySelector("#dv-len").value), place = side.querySelector("#dv-place").value, group = side.querySelector("#dv-group").value;
+      const adds = dates.map((d) => ({ id: "w" + Math.random().toString(36).slice(2, 9), date: d, start: hhmmOf(a), end: hhmmOf(b), len, place, group }));
       dvSel = null;
-      await saveTithingWindows([...(season.windows || []), w], "Tithing declaration times added — they're on the sign-up page now");
+      await saveTithingWindows([...(season.windows || []), ...adds], many ? `Tithing declaration times added on ${dates.length} days — they're on the sign-up page now` : "Tithing declaration times added — they're on the sign-up page now");
       return;
     }
     const title = kind === "council" ? "Ward council" : kind === "bishopric" ? "Bishopric meeting" : (side.querySelector("#dv-title")?.value.trim() || (kind === "interviews" ? "Interviews" : ""));
     if (!title) return toast("Give it a title");
-    const data = { title, date, startTime: hhmmOf(a), endTime: hhmmOf(b), location: "", notes: "", cal: "bishop", createdBy: ctx.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
-    if (kind === "interviews") { data.kind = "interviews"; data.len = Number(side.querySelector("#dv-len").value); data.slots = {}; }
+    const series = many ? "r" + Math.random().toString(36).slice(2, 9) : null; // the repeats know they belong together
+    const base = { title, startTime: hhmmOf(a), endTime: hhmmOf(b), location: "", notes: "", cal: "bishop", createdBy: ctx.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), ...(series ? { series } : {}) };
+    if (kind === "interviews") { base.kind = "interviews"; base.len = Number(side.querySelector("#dv-len").value); }
     dvSel = null;
-    const ref = await addDoc(collection(db, "events"), data);
-    toast(kind === "interviews" ? "Interview block added — click a slot to put a name on it" : "Added to the Bishop calendar");
-    if (kind === "interviews") { dvFocus = "e:" + ref.id; drawDay(); }
-    syncBusy([...events, { ...data, id: ref.id }]);
+    const made = [];
+    for (const d of dates) { const data = { ...base, date: d, ...(kind === "interviews" ? { slots: {} } : {}) }; const ref = await addDoc(collection(db, "events"), data); made.push({ ...data, id: ref.id }); }
+    toast(many ? `${title} added on ${dates.length} days` : kind === "interviews" ? "Interview block added — click a slot to put a name on it" : "Added to the Bishop calendar");
+    if (kind === "interviews") { dvFocus = "e:" + made[0].id; drawDay(); }
+    syncBusy([...events, ...made]);
   } catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
 }
 // tithing windows live on the season doc; busy + slots are recomputed so the sign-up page stays right

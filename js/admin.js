@@ -15,15 +15,15 @@
 // whose profile doc carries `alias: <googleUid>` plus a mirror of the name /
 // organization / calling / pages, so the rules see the same access either
 // way. The table shows one row; the mirror is kept in step on every save.
-import { db } from "./firebase-init.js?v=1792383753";
-import { ctx, AREAS, normalizePerms } from "./app.js?v=1792383753";
+import { db } from "./firebase-init.js?v=1792384400";
+import { ctx, AREAS, normalizePerms } from "./app.js?v=1792384400";
 import {
   collection, onSnapshot, updateDoc, setDoc, deleteDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { fmtPhone, normPhone, smsLink } from "./phone.js?v=1792383753";
-import { orgColor } from "./org-colors.js?v=1792383753";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1792383753";
-import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1792383753";
+import { fmtPhone, normPhone, smsLink } from "./phone.js?v=1792384400";
+import { orgColor } from "./org-colors.js?v=1792384400";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1792384400";
+import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1792384400";
 
 let sort = { key: "created", dir: 1 }; // default: oldest at the top; click a header for A→Z / Z→A (2026-09-19)
 let showPastUsers = (() => { try { return localStorage.getItem("sw-users-past") === "1"; } catch { return false; } })(); // Past users folded unless they chose to see them (2026-10-18)

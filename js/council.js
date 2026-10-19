@@ -9,14 +9,15 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1792383753";
-import { ctx, can } from "./app.js?v=1792383753";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1792383753";
-import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1792383753";
+import { db } from "./firebase-init.js?v=1792384400";
+import { ctx, can } from "./app.js?v=1792384400";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1792384400";
+import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1792384400";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1792383753";
+import { watchBishopCal, bishopCalConfig } from "./bishop-cal.js?v=1792384400";
+import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1792384400";
 
 let cards = [];
 let councils = {};    // date -> doc
@@ -59,11 +60,17 @@ export function initCouncil() {
       <div class="hs-date wc-date" id="wc-date"></div>
       <button class="btn btn-sm" id="wc-next" title="Next meeting">›</button>
       ${can("council", "edit") ? `<button class="btn btn-sm" id="wc-dates" title="Choose which Sundays have ward council">📅 Council dates</button>` : ""}
+      <button class="btn btn-sm" id="wc-time" title="When ward council meets — it goes on the Bishop calendar for every council Sunday">🕒 <span id="wc-time-lbl">Meeting time</span></button>
     </div>
     <div id="wc-body"><div class="empty-note">Loading…</div></div>`;
   panel.querySelector("#wc-prev").addEventListener("click", () => { date = stepDate(date, -1); render(); });
   panel.querySelector("#wc-next").addEventListener("click", () => { date = stepDate(date, 1); render(); });
   panel.querySelector("#wc-dates")?.addEventListener("click", editDates);
+  panel.querySelector("#wc-time").addEventListener("click", editMeetingTime);
+  watchBishopCal(() => { // the time shows on the button; the Calendar's standing-meeting setting is the same record (2026-10-18)
+    const co = bishopCalConfig().council || {}, lbl = panel.querySelector("#wc-time-lbl");
+    if (lbl) lbl.textContent = co.on && co.start ? `${clock12(co.start)}${co.end ? " – " + clock12(co.end) : ""}` : "Meeting time";
+  });
   onSnapshot(collection(db, "users"), (qs) => {
     const names = qs.docs.map((d) => d.data()).filter((u) => u.councilMember && !u.revoked && !u.alias && u.name).map((u) => u.name.trim());
     members = [...new Set(names)].sort((a, b) => a.localeCompare(b));
@@ -903,4 +910,27 @@ function render() {
       toast(act === "discussed" ? "Marked discussed" : act === "reopen" ? "Back on the agenda" : "Removed");
     } catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
   }));
+}
+
+
+// ---- when ward council meets (2026-10-18) ----
+// Saved to settings/bishopCal.council — the same record the Calendar's "Standing meetings" uses — so the
+// meeting shows on the Bishop calendar on every council Sunday and blocks tithing declaration times.
+const clock12 = (hhmm) => { const [h, m] = String(hhmm).split(":").map(Number); return `${h % 12 || 12}:${String(m || 0).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`; };
+function editMeetingTime() {
+  const co = bishopCalConfig().council || {};
+  const editable = can("council", "edit") || can("calendar", "edit");
+  const el = openModal(`
+    <h3>Ward council meeting time</h3>
+    <p class="row-sub" style="margin-top:-.6rem">Applies to every council Sunday${schedule.length ? "" : " (every Sunday, until you choose council dates)"}. It appears on the Bishop calendar and keeps tithing declaration sign-ups off those minutes.</p>
+    <label class="cal-standing-on"><input type="checkbox" id="wct-on" ${co.on ? "checked" : ""} ${editable ? "" : "disabled"}> <b>On the Bishop calendar</b></label>
+    <div class="cal-standing-times"><label>From<input type="time" id="wct-start" step="300" value="${esc(co.start || "07:30")}" ${editable ? "" : "disabled"}></label><label>To<input type="time" id="wct-end" step="300" value="${esc(co.end || "08:30")}" ${editable ? "" : "disabled"}></label></div>
+    <div class="modal-actions"><button class="btn" id="wct-cancel" type="button">Cancel</button>${editable ? `<button class="btn btn-primary" id="wct-save" type="button">Save</button>` : ""}</div>`);
+  el.querySelector("#wct-cancel").addEventListener("click", closeModal);
+  el.querySelector("#wct-save")?.addEventListener("click", async () => {
+    const start = el.querySelector("#wct-start").value, end = el.querySelector("#wct-end").value, on = el.querySelector("#wct-on").checked;
+    if (on && !start) return toast("Give it a start time");
+    try { await setDoc(doc(db, "settings", "bishopCal"), { council: { on, start, end }, updatedAt: serverTimestamp() }, { merge: true }); closeModal(); toast(on ? `Ward council ${clock12(start)}${end ? " – " + clock12(end) : ""} — on the Bishop calendar` : "Ward council taken off the Bishop calendar"); }
+    catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
+  });
 }

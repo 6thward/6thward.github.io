@@ -2,7 +2,7 @@
 // Sunday (the dates chosen on the Ward Council page) and the weekly bishopric meeting.
 //   settings/bishopCal { council: { on, start, end }, bishopric: { on, weekday, start, end } }
 // They show on the Calendar like any bishop's event and block tithing-declaration times.
-import { db } from "./firebase-init.js?v=1792383753";
+import { db } from "./firebase-init.js?v=1792384400";
 import { doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 let cfg = null, councilDates = [], listeners = [], started = false;
@@ -22,7 +22,7 @@ export const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday",
 export function standingEvents(dates) {
   const c = cfg || {}, out = [];
   [...new Set(dates || [])].forEach((d) => {
-    if (c.council?.on && c.council.start && councilDates.includes(d)) out.push({ id: "sc:" + d, standing: "council", cal: "bishop", date: d, startTime: c.council.start, endTime: c.council.end || "", title: "Ward council" });
+    if (c.council?.on && c.council.start && (councilDates.length ? councilDates.includes(d) : new Date(d + "T12:00:00").getDay() === 0)) out.push({ id: "sc:" + d, standing: "council", cal: "bishop", date: d, startTime: c.council.start, endTime: c.council.end || "", title: "Ward council" });
     if (c.bishopric?.on && c.bishopric.start && new Date(d + "T12:00:00").getDay() === Number(c.bishopric.weekday)) out.push({ id: "sb:" + d, standing: "bishopric", cal: "bishop", date: d, startTime: c.bishopric.start, endTime: c.bishopric.end || "", title: "Bishopric meeting" });
   });
   return out;
