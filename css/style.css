@@ -2517,3 +2517,12 @@ tr.us-menu-open td { background: #f7f9fb; }
 #dv-f-priedit[hidden] { display: none; }
 #dv-f-pritext { width: 100%; box-sizing: border-box; font: inherit; font-size: .88rem; padding: .4rem .5rem; border: 1px solid #e6c35c; border-radius: 8px; background: #fffaf0; margin-top: .3rem; }
 .dv-opts label.dv-pri-def { font-weight: 500; font-size: .82rem; margin-top: .25rem; align-items: flex-start; }
+/* People on an event (2026-10-19) */
+.ev-people { display: flex; flex-direction: column; gap: .35rem; }
+.ev-chips { display: flex; flex-wrap: wrap; gap: .3rem; }
+.ev-chips:empty { display: none; }
+.ev-chip { display: inline-flex; align-items: center; gap: .3rem; background: #eef1f5; border-radius: 99px; padding: .15rem .3rem .15rem .6rem; font-size: .85rem; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--ink); }
+.ev-chip-user { background: var(--brand-soft); color: var(--brand); }
+.ev-chip-x { border: 0; background: transparent; cursor: pointer; font-size: .7rem; line-height: 1; padding: .15rem .3rem; border-radius: 99px; color: inherit; opacity: .6; } .ev-chip-x:hover { opacity: 1; background: rgba(0,0,0,.08); }
+.ev-people-in { font: inherit; font-size: .9rem; padding: .35rem .5rem; border: 1px solid var(--line); border-radius: 8px; text-transform: none; letter-spacing: 0; font-weight: 400; }
+.dv-block-who { font-weight: 500; opacity: .8; margin-left: .3rem; font-size: .74rem; }
