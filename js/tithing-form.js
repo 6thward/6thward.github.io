@@ -2,13 +2,13 @@
 // No sign-in. Anyone with the link sees the open times (never who took the
 // others), picks one, and leaves a name — plus a phone number if they'd like
 // a text reminder.
-import { db } from "./firebase-init.js?v=1792388563";
+import { db } from "./firebase-init.js?v=1792388808";
 import {
   doc, getDoc, collection, onSnapshot, writeBatch, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import {
   GROUPS, PLACES, esc, fmtClock, fmtLongDay, slotsOf, sortWindows, parseSlotId, todayIso, nowMin, offList,
-} from "./tithing-shared.js?v=1792388563";
+} from "./tithing-shared.js?v=1792388808";
 
 export async function initTithingForm(mount, token) {
   const fail = (title, msg) => { mount.innerHTML = `<div class="td-card td-msg"><h2>${esc(title)}</h2><p>${esc(msg)}</p></div>`; };
@@ -57,12 +57,14 @@ export async function initTithingForm(mount, token) {
         const list = upcoming.filter((s) => s.win === w.id);
         if (!list.length) return "";
         const g = GROUPS[w.group];
+        // a reserved block (typed note, or an older families/widows setting) is an amber panel with its own heading (wireframe A, 2026-10-18);
+        // "At the Bishop's office" is left unsaid — only a home visit says where
+        const reserved = w.note || (g ? g.label : "");
         return `
-          <div class="td-win${g ? " td-win-" + g.cls : ""}">
+          <div class="td-win${reserved ? " td-win-res" : ""}">
+            ${reserved ? `<div class="td-res-h">🔒 Reserved for ${esc(reserved)}</div>` : ""}
             <div class="td-win-head">
-              <span class="td-place">${PLACES[w.place]?.icon || "🏛"} ${esc(PLACES[w.place]?.pub || PLACES.office.pub)}</span>
-              ${g ? `<span class="td-flag td-flag-${g.cls}">Set aside for ${esc(g.label.toLowerCase())}</span>` : ""}
-              ${w.note ? `<span class="td-flag td-flag-note">Reserved for ${esc(w.note)}</span>` : ""}
+              ${w.place === "home" ? `<span class="td-place">🏠 ${esc(PLACES.home.pub)}</span>` : ""}
               <span class="td-len">${Number(w.len) || 15}-minute visits</span>
             </div>
             <div class="td-slots">
