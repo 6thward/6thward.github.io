@@ -2441,3 +2441,12 @@ tr.us-menu-open td { background: #f7f9fb; }
 .dv-kindsel { margin-bottom: .5rem; } .dv-kindsel select { font-size: 1rem; }
 .ev-delwrap { margin-top: .8rem; padding: .6rem .8rem; background: #fdf0ee; border: 1px solid #f1c9c2; border-radius: 10px; font-size: .9rem; }
 .ev-delopts { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .45rem; }
+.ev-agenda { margin-top: .6rem; }
+/* bigger day view (2026-10-18): wider modal, taller timeline, tighter rows */
+.modal.cal-dayview { max-width: 84rem; width: min(84rem, 97vw); }
+.dv-wrap { grid-template-columns: minmax(0, 1.6fr) minmax(18rem, 1fr); }
+.dv-grid-wrap { max-height: 78vh; }
+.dv-block { font-size: .78rem; padding: .18rem .4rem; }
+.dv-block-title { font-size: .78rem; }
+.dv-slots { top: 1.2rem; }
+.ev-agenda { margin-top: .6rem; }

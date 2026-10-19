@@ -9,15 +9,15 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1792386029";
-import { ctx, can } from "./app.js?v=1792386029";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1792386029";
-import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1792386029";
+import { db } from "./firebase-init.js?v=1792386139";
+import { ctx, can } from "./app.js?v=1792386139";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1792386139";
+import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1792386139";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { watchBishopCal, bishopCalConfig } from "./bishop-cal.js?v=1792386029";
-import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1792386029";
+import { watchBishopCal, bishopCalConfig } from "./bishop-cal.js?v=1792386139";
+import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1792386139";
 
 let cards = [];
 let councils = {};    // date -> doc
@@ -48,6 +48,12 @@ function upcomingSunday(from = new Date()) {
 const shiftWeek = (isoDate, w) => { const d = new Date(isoDate + "T12:00:00"); d.setDate(d.getDate() + 7 * w); return iso(d); };
 const fmtDay = (v) => (v ? fmtDate(String(v).slice(0, 10), { year: true }) : "");
 
+// the Calendar links a ward council meeting to its agenda (2026-10-18)
+export function openCouncilDate(iso) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso || "")) return;
+  date = iso;
+  if (document.getElementById("wc-body")) render();
+}
 export function initCouncil() {
   if (started) return;
   started = true;

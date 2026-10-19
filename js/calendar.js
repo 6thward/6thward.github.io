@@ -2,14 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792386029";
-import { ctx, hasRole, can } from "./app.js?v=1792386029";
+import { db } from "./firebase-init.js?v=1792386139";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792386139";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792386029";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792386029";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792386029";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792386139";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792386139";
+import { openCouncilDate } from "./council.js?v=1792386139";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792386139";
 
 let events = [];
 let viewYear, viewMonth; // 0-based month
@@ -196,6 +197,7 @@ function render() {
   document.querySelectorAll("#upcoming-list .list-row").forEach((row) =>
     row.addEventListener("click", () => {
       if (row.dataset.id.startsWith("t:")) return dayView(up.find((x) => x.id === row.dataset.id)?.date);
+      if (/^sc:/.test(row.dataset.id) && openAgenda(row.dataset.id.slice(3))) return;
       if (/^s[cb]:/.test(row.dataset.id)) return can("calendar", "edit") ? editStanding() : undefined;
       const e = events.find((x) => x.id === row.dataset.id);
       if (e) editEvent(e);
@@ -207,7 +209,15 @@ function render() {
 // visits — members sign up for them), ward council, bishopric meeting, interviews (slots you put a
 // name on), or anything else. Existing events, standing meetings and tithing blocks sit on the same
 // timeline so you can see the whole day at once.
-const DAY_START = 7 * 60, DAY_END = 21 * 60, PX_MIN = 1.15, SNAP = 5;
+const DAY_START = 6 * 60, DAY_END = 22 * 60, PX_MIN = 1.0, SNAP = 5;
+// a ward council meeting on the calendar opens that day's agenda on the Ward Council page (2026-10-18)
+const isCouncilThing = (x) => x && (x.standing === "council" || /^sc:/.test(x.id || "") || /^ward council$/i.test(x.title || ""));
+function openAgenda(date) {
+  if (!can("council")) return false;
+  closeModal(); openDay = null;
+  openCouncilDate(date); goTab("council");
+  return true;
+}
 // what a stretch of the day can be (2026-10-18): a dropdown — tithing and interviews are special (slots),
 // the rest are plain Bishop-calendar meetings with a preset title and colour; "Something else" takes any title
 const KINDS = [
@@ -304,7 +314,7 @@ function drawDay() {
   grid.querySelectorAll("[data-block]").forEach((n) => n.addEventListener("click", (e) => {
     e.stopPropagation();
     const [t, id] = [n.dataset.block.slice(0, 1), n.dataset.block.slice(2)];
-    if (t === "s") return can("calendar", "edit") ? editStanding() : undefined;
+    if (t === "s") { if (/^sc:/.test(id) && openAgenda(openDay)) return; return can("calendar", "edit") ? editStanding() : undefined; }
     if (t === "t") { dvFocus = "t:" + id; dvSel = null; drawDay(); return; }
     const ev = events.find((x) => x.id === id);
     if (ev && ev.kind === "interviews") { const k = e.target.closest("[data-islot]")?.dataset.islot; dvFocus = "e:" + id; dvSel = null; drawDay(); if (k) document.getElementById("dv-side")?.querySelector(`[data-iname="${k}"]`)?.focus(); return; }
@@ -589,6 +599,7 @@ function editEvent(e, defaultDate) {
       ${e?.series ? `<label class="field full ev-series"><input type="checkbox" id="ev-series"> <span>Also change the other repeats of this meeting (title, times, location, colour)</span></label>` : ""}
       <div class="full cal-clash hidden" id="ev-clash"></div>
     </div>
+    ${!isNew && isCouncilThing(e) && can("council") ? `<div class="ev-agenda"><button type="button" class="btn btn-sm" id="ev-agenda">📋 Open this day's ward council agenda</button></div>` : ""}
     <div class="modal-actions">
       ${!isNew && canEdit ? `<button class="btn btn-ghost btn-danger" id="ev-delete">Delete</button>` : ""}
       <div class="right">
@@ -597,6 +608,7 @@ function editEvent(e, defaultDate) {
       </div>
     </div>`);
   el.querySelector("#ev-cancel").addEventListener("click", closeModal);
+  el.querySelector("#ev-agenda")?.addEventListener("click", () => openAgenda(e.date));
   wireSwatches(el.querySelector("#ev-color"));
   // a bishop's event on top of tithing-declaration times: say so, and show who is already booked there
   const clashNote = () => {
