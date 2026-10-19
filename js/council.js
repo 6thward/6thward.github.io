@@ -9,15 +9,15 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1792384400";
-import { ctx, can } from "./app.js?v=1792384400";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1792384400";
-import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1792384400";
+import { db } from "./firebase-init.js?v=1792384604";
+import { ctx, can } from "./app.js?v=1792384604";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1792384604";
+import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1792384604";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { watchBishopCal, bishopCalConfig } from "./bishop-cal.js?v=1792384400";
-import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1792384400";
+import { watchBishopCal, bishopCalConfig } from "./bishop-cal.js?v=1792384604";
+import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1792384604";
 
 let cards = [];
 let councils = {};    // date -> doc
@@ -65,7 +65,7 @@ export function initCouncil() {
     <div id="wc-body"><div class="empty-note">Loading…</div></div>`;
   panel.querySelector("#wc-prev").addEventListener("click", () => { date = stepDate(date, -1); render(); });
   panel.querySelector("#wc-next").addEventListener("click", () => { date = stepDate(date, 1); render(); });
-  panel.querySelector("#wc-dates")?.addEventListener("click", editDates);
+  panel.querySelector("#wc-dates")?.addEventListener("click", () => editDates());
   panel.querySelector("#wc-time").addEventListener("click", editMeetingTime);
   watchBishopCal(() => { // the time shows on the button; the Calendar's standing-meeting setting is the same record (2026-10-18)
     const co = bishopCalConfig().council || {}, lbl = panel.querySelector("#wc-time-lbl");
@@ -93,16 +93,21 @@ export function initCouncil() {
 }
 
 // ---- choose the council Sundays ----
-function editDates() {
-  const start = upcomingSunday();
-  const sundays = Array.from({ length: 40 }, (_, i) => shiftWeek(start, i)); // ~9 months ahead
-  const chosen = new Set(schedule.filter((d) => d >= start));
-  const past = schedule.filter((d) => d < start);
+function editDates(year) {
+  // by year (2026-10-18, Jordan): every Sunday of one year at a time; other years keep their dates
+  year = Number(year) || new Date().getFullYear();
+  const sundays = [];
+  for (let d = new Date(year, 0, 1); d.getFullYear() === year; d.setDate(d.getDate() + 1)) if (d.getDay() === 0) sundays.push(`${year}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+  const inYear = (d) => d.startsWith(String(year) + "-");
+  const chosen = new Set(schedule.filter(inYear));
+  const past = schedule.filter((d) => !inYear(d)); // dates in other years ride along untouched
+  const thisYear = new Date().getFullYear();
+  const yearTabs = [thisYear, thisYear + 1, thisYear + 2].map((y) => `<button type="button" class="chip${y === year ? " active" : ""}" data-year="${y}">${y}${schedule.some((d) => d.startsWith(y + "-")) ? ` <span class="wcd-year-n">${schedule.filter((d) => d.startsWith(y + "-")).length}</span>` : ""}</button>`).join("");
   const nth = (d) => Math.ceil(new Date(d + "T12:00:00").getDate() / 7);
   const monthKey = (d) => d.slice(0, 7);
   const months = [...new Set(sundays.map(monthKey))];
   const el = openModal(`
-    <h3>Ward council dates</h3>
+    <h3>Ward council dates <span class="view-toggle wcd-years">${yearTabs}</span></h3>
     <p class="row-sub" style="margin:0 0 .6rem">Tick the Sundays that have ward council. Agendas exist only for those weeks, and flagged Member Board items wait for the next one.${hasSchedule() ? "" : " Nothing is chosen yet, so every Sunday currently counts."}</p>
     <div class="wcd-quick">
       <span class="row-sub">Quick pick:</span>
@@ -123,7 +128,8 @@ function editDates() {
       <span class="row-sub" id="wcd-count"></span>
       <div class="right"><button class="btn" id="wcd-cancel">Cancel</button><button class="btn btn-primary" id="wcd-save">Save dates</button></div>
     </div>`);
-  const count = () => { el.querySelector("#wcd-count").textContent = `${el.querySelectorAll(".wcd-day.on").length} council Sundays chosen`; };
+  const count = () => { el.querySelector("#wcd-count").textContent = `${el.querySelectorAll(".wcd-day.on").length} council Sundays in ${year}`; };
+  el.querySelectorAll("[data-year]").forEach((b) => b.addEventListener("click", () => { closeModal(); editDates(Number(b.dataset.year)); })); // switching years drops unsaved ticks — save first
   count();
   el.querySelectorAll(".wcd-day").forEach((b) => b.addEventListener("click", () => { b.classList.toggle("on"); count(); }));
   el.querySelectorAll("[data-pat]").forEach((b) => b.addEventListener("click", () => {

@@ -2401,3 +2401,8 @@ tr.us-menu-open td { background: #f7f9fb; }
 .dv-irow { display: grid; grid-template-columns: 5.2rem 1fr; align-items: center; gap: .4rem; font-size: .88rem; } .dv-irow b { font-variant-numeric: tabular-nums; color: var(--ink-soft); font-weight: 600; }
 .dv-irow input { font: inherit; font-size: .9rem; padding: .3rem .5rem; border: 1px solid var(--line); border-radius: 8px; }
 .dv-repeat { margin-top: .6rem; } .dv-repeat select, .dv-repeat input { min-width: 9rem; }
+/* Ward council dates: pick by year (2026-10-18) */
+.wcd-years { margin-left: .8rem; vertical-align: middle; font-size: .8rem; }
+.wcd-years .chip { padding: .18rem .6rem; }
+.wcd-year-n { font-size: .68rem; opacity: .75; }
+.wcd-months { max-height: 56vh; overflow: auto; }
