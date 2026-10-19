@@ -2,14 +2,14 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792385961";
-import { ctx, hasRole, can } from "./app.js?v=1792385961";
+import { db } from "./firebase-init.js?v=1792386029";
+import { ctx, hasRole, can } from "./app.js?v=1792386029";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792385961";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792385961";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792385961";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792386029";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792386029";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792386029";
 
 let events = [];
 let viewYear, viewMonth; // 0-based month
@@ -611,11 +611,33 @@ function editEvent(e, defaultDate) {
   };
   ["#ev-cal", "#ev-date", "#ev-start", "#ev-end"].forEach((sel) => el.querySelector(sel).addEventListener("change", clashNote));
   clashNote();
+  // Delete: a repeating meeting asks which ones — just this date, this and the later ones, or the whole series (2026-10-18)
   el.querySelector("#ev-delete")?.addEventListener("click", async () => {
-    if (!confirm("Delete this event?")) return;
-    await deleteDoc(doc(db, "events", e.id));
-    closeModal(); toast("Event deleted");
-    if (calOf(e) === "bishop") syncBusy(events.filter((x) => x.id !== e.id));
+    const del = async (ids, msg) => {
+      try {
+        await Promise.all(ids.map((id) => deleteDoc(doc(db, "events", id))));
+        closeModal(); toast(msg);
+        if (calOf(e) === "bishop") syncBusy(events.filter((x) => !ids.includes(x.id)));
+      } catch (err) { toast("Couldn't delete: " + (err.code || err.message)); }
+    };
+    if (!e.series) { if (confirm("Delete this event?")) del([e.id], "Event deleted"); return; }
+    const mine = events.filter((x) => x.series === e.series);
+    const later = mine.filter((x) => x.date >= e.date);
+    const box = el.querySelector("#ev-delwrap") || (() => { const d = document.createElement("div"); d.id = "ev-delwrap"; d.className = "ev-delwrap"; el.querySelector(".modal-actions").before(d); return d; })();
+    box.innerHTML = `<b>This meeting repeats (${mine.length} dates). Delete…</b>
+      <div class="ev-delopts">
+        <button type="button" class="btn btn-sm" data-del="one">Just this one (${esc(fmtDate(e.date))})</button>
+        <button type="button" class="btn btn-sm" data-del="later">This and the later ones (${later.length})</button>
+        <button type="button" class="btn btn-sm btn-ghost btn-danger" data-del="all">All ${mine.length}</button>
+        <button type="button" class="btn btn-sm btn-ghost" data-del="cancel">Keep it</button>
+      </div>`;
+    box.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", () => {
+      const w = b.dataset.del;
+      if (w === "cancel") { box.remove(); return; }
+      if (w === "one") del([e.id], "Removed this date only — the other repeats stay");
+      else if (w === "later") del(later.map((x) => x.id), `Removed ${later.length} dates from ${fmtDate(e.date)} on`);
+      else del(mine.map((x) => x.id), `Removed all ${mine.length} dates`);
+    }));
   });
   el.querySelector("#ev-save")?.addEventListener("click", async () => {
     const title = el.querySelector("#ev-title").value.trim();

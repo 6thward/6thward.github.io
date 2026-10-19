@@ -2439,3 +2439,5 @@ tr.us-menu-open td { background: #f7f9fb; }
 .cal-tag-bishop[style] { background: color-mix(in srgb, var(--evc) 18%, #fff); color: color-mix(in srgb, var(--evc) 72%, #000); }
 .ev-series { display: flex; align-items: center; gap: .5rem; font-size: .88rem; }
 .dv-kindsel { margin-bottom: .5rem; } .dv-kindsel select { font-size: 1rem; }
+.ev-delwrap { margin-top: .8rem; padding: .6rem .8rem; background: #fdf0ee; border: 1px solid #f1c9c2; border-radius: 10px; font-size: .9rem; }
+.ev-delopts { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .45rem; }
