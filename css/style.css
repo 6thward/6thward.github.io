@@ -1492,7 +1492,7 @@ mark.nt-hl { padding: 0 .15em; border-radius: 3px; color: inherit; }
 .us-council { display: flex; gap: .55rem; align-items: flex-start; margin-top: .9rem; padding: .55rem .7rem; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
 .us-council:has(input:checked) { border-color: var(--brand); background: var(--brand-soft); }
 .us-council input { margin-top: .2rem; width: 1.05rem; height: 1.05rem; }
-.us-council-pill { background: #1f2733; color: #fff; }
+.us-council-pill { background: #e8edf3; color: #3b4a5c; } /* softer — the black pill was too loud (2026-10-18) */
 .wc-assign { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .6rem .9rem; }
 .wc-asg { display: flex; flex-direction: column; gap: .2rem; }
 .wc-asg > span { font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); }
