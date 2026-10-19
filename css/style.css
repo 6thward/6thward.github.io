@@ -2504,3 +2504,7 @@ tr.us-menu-open td { background: #f7f9fb; }
 .dv-tphone { font-size: .72rem; white-space: nowrap; }
 .dv-block-tag.dv-block-note { top: 18px; background: #fdf1d6; color: #8a5a00; opacity: 1; }
 .dv-item .td-tag-note { display: inline-block; margin: .1rem 0 .1rem; }
+/* Priority checkbox in the day view forms (2026-10-18) */
+.dv-opts label.dv-check { flex-direction: row; align-items: center; gap: .4rem; text-transform: none; letter-spacing: 0; font-size: .9rem; font-weight: 600; color: var(--ink); }
+.dv-opts label.dv-check input { width: auto; margin: 0; }
+.td-pri-lbl { display: flex; align-items: center; gap: .35rem; align-self: end; padding-bottom: .4rem; font-weight: 600; }

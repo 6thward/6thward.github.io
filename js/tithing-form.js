@@ -2,13 +2,13 @@
 // No sign-in. Anyone with the link sees the open times (never who took the
 // others), picks one, and leaves a name — plus a phone number if they'd like
 // a text reminder.
-import { db } from "./firebase-init.js?v=1792389015";
+import { db } from "./firebase-init.js?v=1792389307";
 import {
   doc, getDoc, collection, onSnapshot, writeBatch, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import {
-  GROUPS, PLACES, esc, fmtClock, fmtLongDay, slotsOf, sortWindows, parseSlotId, todayIso, nowMin, offList,
-} from "./tithing-shared.js?v=1792389015";
+  GROUPS, PLACES, esc, fmtClock, fmtLongDay, slotsOf, sortWindows, parseSlotId, todayIso, nowMin, offList, isPriority, PRIORITY_TEXT,
+} from "./tithing-shared.js?v=1792389307";
 
 export async function initTithingForm(mount, token) {
   const fail = (title, msg) => { mount.innerHTML = `<div class="td-card td-msg"><h2>${esc(title)}</h2><p>${esc(msg)}</p></div>`; };
@@ -46,8 +46,7 @@ export async function initTithingForm(mount, token) {
     const upcoming = slots.filter((s) => !isPast(s));
     const mine = justBooked || readMine();
     const mineSlot = mine && slots.find((s) => s.id === mine.id);
-    const flagged = [...new Set(upcoming.map((s) => s.group).filter(Boolean))];
-    const noted = [...new Set(upcoming.map((s) => s.note).filter(Boolean))]; // "Reserved for …" wording the bishop typed on a block
+    const anyPriority = upcoming.some((s) => s.priority);
     const days = [...new Set(upcoming.map((s) => s.date))];
     const openCount = upcoming.filter((s) => !isTaken(s)).length;
 
@@ -56,13 +55,12 @@ export async function initTithingForm(mount, token) {
       const blocks = wins.map((w) => {
         const list = upcoming.filter((s) => s.win === w.id);
         if (!list.length) return "";
-        const g = GROUPS[w.group];
-        // a reserved block (typed note, or an older families/widows setting) is an amber panel with its own heading (wireframe A, 2026-10-18);
+        // a priority block is an amber panel with its own heading (wireframe A, 2026-10-18); the wording is in the intro
         // "At the Bishop's office" is left unsaid — only a home visit says where
-        const reserved = w.note || (g ? g.label : "");
+        const pri = isPriority(w);
         return `
-          <div class="td-win${reserved ? " td-win-res" : ""}">
-            ${reserved ? `<div class="td-res-h">🔒 Reserved for ${esc(reserved)}</div>` : ""}
+          <div class="td-win${pri ? " td-win-res" : ""}">
+            ${pri ? `<div class="td-res-h">🔒 Priority time slots</div>` : ""}
             <div class="td-win-head">
               ${w.place === "home" ? `<span class="td-place">🏠 ${esc(PLACES.home.pub)}</span>` : ""}
               <span class="td-len">${Number(w.len) || 15}-minute visits</span>
@@ -83,7 +81,7 @@ export async function initTithingForm(mount, token) {
         <p class="td-ward">${esc(season.ward || "6th Ward")}</p>
         ${season.note ? `<p class="td-note">${esc(season.note)}</p>` : ""}
         <p>Pick a time that works for you and your family, then add your name. That's it.</p>
-        ${flagged.length || noted.length ? `<p class="td-legend">Some time slots are reserved for families with children at home and individuals who could be blessed by a time right after church due to mobility issues, health, or age. Feel free to use those priority time slots based on your situation.</p>` : ""}
+        ${anyPriority ? `<p class="td-legend">${esc(season.priorityText || PRIORITY_TEXT)}</p>` : ""}
       </div>
       ${mineSlot ? `<div class="td-card td-mine"><div class="td-tick">✓</div><div><b>You're signed up${mine.name ? ", " + esc(mine.name) : ""}.</b><div>${esc(describe(mineSlot))}</div><div class="td-sub">${esc(whereLine(mineSlot))}. Need to change it? Contact the bishop or the executive secretary.</div></div></div>` : ""}
       ${dayHtml || `<div class="td-card td-msg"><h2>No open times right now</h2><p>Please check back, or contact the bishop or the executive secretary.</p></div>`}
@@ -97,13 +95,11 @@ export async function initTithingForm(mount, token) {
   function openSheet(s) {
     if (!s) return;
     const bg = mount.querySelector("#td-sheet-bg"), sheet = mount.querySelector("#td-sheet");
-    const g = GROUPS[s.group];
     const prev = readMine();
     sheet.innerHTML = `
       <h2>${esc(fmtLongDay(s.date))}</h2>
-      <p class="td-when">${fmtClock(s.min)} · ${s.len} minutes<br>${PLACES[s.place]?.icon || ""} ${esc(whereLine(s))}</p>
-      ${g ? `<p class="td-flag td-flag-${g.cls} td-flag-block">This time is set aside for ${esc(g.label.toLowerCase())}. If that's you, go right ahead.</p>` : ""}
-      ${s.note ? `<p class="td-flag td-flag-note td-flag-block">This time is reserved for ${esc(s.note)}. If that's you, go right ahead.</p>` : ""}
+      <p class="td-when">${fmtClock(s.min)} · ${s.len} minutes${s.place === "home" ? `<br>🏠 ${esc(whereLine(s))}` : ""}</p>
+      ${s.priority ? `<p class="td-flag td-flag-note td-flag-block">🔒 This is a priority time slot. ${esc(season.priorityText || PRIORITY_TEXT)}</p>` : ""}
       <label class="td-field"><span>Your name <i>(or family name)</i></span><input id="td-name" autocomplete="name" maxlength="80" placeholder="e.g. The Hansen family"></label>
       <label class="td-field"><span>Mobile number <i>(optional — only if you'd like a text reminder)</i></span><input id="td-phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="30" placeholder="(435) 555-0123"></label>
       ${s.place === "home" ? `<label class="td-field"><span>Your address <i>(optional)</i></span><input id="td-addr" autocomplete="street-address" maxlength="160" placeholder="Street address"></label>` : ""}

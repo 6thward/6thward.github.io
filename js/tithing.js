@@ -1,17 +1,17 @@
 // Tithing declaration sign-ups (2026-10-04) — the bishop's side, its own page
 // ("Tithing Declaration" tab, area key "tithing"): set when you're available, share the link / QR code, and see
 // who signed up. The public page is tithing.html (js/tithing-form.js).
-import { db } from "./firebase-init.js?v=1792389015";
-import { ctx, can } from "./app.js?v=1792389015";
+import { db } from "./firebase-init.js?v=1792389307";
+import { ctx, can } from "./app.js?v=1792389307";
 import {
   collection, doc, onSnapshot, setDoc, updateDoc, writeBatch, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { watchBishopCal, standingEvents } from "./bishop-cal.js?v=1792389015";
-import { openModal, closeModal, toast } from "./ui.js?v=1792389015";
+import { watchBishopCal, standingEvents } from "./bishop-cal.js?v=1792389307";
+import { openModal, closeModal, toast } from "./ui.js?v=1792389307";
 import {
-  GROUPS, PLACES, SLOT_LENGTHS, esc, toMin, fmtClock, fmtLongDay, fmtShortDay, slotsOf, slotMap,
+  GROUPS, PLACES, SLOT_LENGTHS, esc, toMin, fmtClock, fmtLongDay, fmtShortDay, slotsOf, slotMap, isPriority, PRIORITY_TEXT,
   sortWindows, overlaps, newToken, parseSlotId, todayIso, addDays, hhmm, busyFromEvents, sameBusy, offList,
-} from "./tithing-shared.js?v=1792389015";
+} from "./tithing-shared.js?v=1792389307";
 
 let mount = null, season = null, signups = [], unsubSignups = null, started = false, dirty = false;
 let events = null; // the ward calendar (events with cal: "bishop" block sign-up times); null until it loads
@@ -20,7 +20,7 @@ let schedView = "cols"; // schedule: every day side by side in columns, or one l
 let listFilter = "all"; // the year list: all | attended | pending | noshow
 const STATUS = { attended: "Attended", noshow: "Didn't come" };
 // the "add a time period" form keeps its values between adds (handy for several Sundays in a row)
-const form = { date: "", start: "14:00", end: "16:00", len: 15, place: "office", group: "", note: "", repeat: [], repOpen: false };
+const form = { date: "", start: "14:00", end: "16:00", len: 15, place: "office", group: "", priority: false, repeat: [], repOpen: false };
 const REPEAT_WEEKS = 12; // how many following weeks the "Repeat on" list offers
 const mdDay = (iso) => { const d = new Date(iso + "T12:00:00"); return `${d.toLocaleDateString("en-US", { weekday: "short" })} ${d.getMonth() + 1}/${d.getDate()}`; };
 
@@ -157,7 +157,9 @@ function render() {
           ${editor ? `<label class="td-open"><input type="checkbox" id="td-open" ${season.open ? "checked" : ""}> Sign-ups open</label>` : ""}
         </div>
         ${editor ? `<label class="td-note-lbl">Note shown at the top of the sign-up page <span class="row-sub">(optional)</span>
-          <textarea id="td-note" rows="2" placeholder="e.g. Please bring your whole family. Text Brother Coburn at 435-555-0123 if none of these times work.">${esc(season.note || "")}</textarea></label>` : ""}
+          <textarea id="td-note" rows="2" placeholder="e.g. Please bring your whole family. Text Brother Coburn at 435-555-0123 if none of these times work.">${esc(season.note || "")}</textarea></label>
+        <label class="td-note-lbl">Priority time slots — what the sign-up page says about them <span class="row-sub">(shows when any block is marked Priority)</span>
+          <textarea id="td-pritext" rows="3">${esc(season.priorityText || PRIORITY_TEXT)}</textarea></label>` : ""}
       </div>
       <div class="td-qr" id="td-qr" title="Scan to open the sign-up page"><span class="row-sub">QR code…</span></div>
     </div>`;
@@ -171,7 +173,7 @@ function render() {
       <label>To<input type="time" id="tdf-end" step="300" value="${esc(form.end)}"></label>
       <label>Each visit<select id="tdf-len">${SLOT_LENGTHS.map((n) => opt(n, n + " minutes", form.len)).join("")}</select></label>
       <label>Where<select id="tdf-place">${Object.entries(PLACES).map(([k, p]) => opt(k, p.icon + " " + p.label, form.place)).join("")}</select></label>
-      <label title="Shows on the sign-up page as 'Reserved for …'">Reserved for <small>(optional)</small><input id="tdf-note" maxlength="60" value="${esc(form.note)}" placeholder="e.g. Primary parents"></label>
+      <label class="td-pri-lbl" title="Marks these times as priority on the sign-up page"><input type="checkbox" id="tdf-pri" ${form.priority ? "checked" : ""}> Priority</label>
       <div class="td-rep-wrap" title="Add the same hours on other weeks too"><span class="td-rep-lbl">Repeat on</span><details class="td-rep" id="tdf-rep"${form.repOpen ? " open" : ""}></details></div>
       <button class="btn btn-primary" id="tdf-add" type="button">+ Add</button>
     </div>` : "";
@@ -183,9 +185,8 @@ function render() {
       <b class="td-win-day">${esc(fmtShortDay(w.date))}</b>
       <span class="td-win-time">${rangeText(w)}</span>
       <span class="pill td-pill-len">${Number(w.len) || 15} min</span>
-      <span class="pill td-pill-place td-place-${esc(w.place || "office")}">${PLACES[w.place]?.icon || "🏛"} ${esc(PLACES[w.place]?.label || PLACES.office.label)}</span>
-      ${g ? `<span class="pill td-pill-${g.cls}">${esc(g.label)}</span>` : ""}
-      ${w.note ? `<span class="pill td-pill-note" title="Reserved for">${esc(w.note)}</span>` : ""}
+      ${w.place === "home" ? `<span class="pill td-pill-place td-place-home">🏠 ${esc(PLACES.home.label)}</span>` : ""}
+      ${isPriority(w) ? `<span class="pill td-pill-note">🔒 Priority</span>` : ""}
       <span class="row-sub td-win-count">${took} of ${list.length} taken${nOff ? ` · ${nOff} unavailable` : ""}</span>
       ${editor ? `<button class="btn btn-sm" data-divide="${esc(w.id)}" type="button" title="Split this block into periods with different visit lengths (15 / 10 minutes), or set part of it aside for a group">✂ Divide</button>
       <button class="btn btn-sm btn-ghost td-x" data-rmwin="${esc(w.id)}" title="Remove this time period">✕</button>` : ""}
@@ -213,7 +214,7 @@ function render() {
       <div class="td-sday-head"><b>${esc(fmtLongDay(d))}</b><span class="row-sub">${took} of ${live} filled</span></div>
       ${list.map((s) => {
         const su = byId[s.id], g = GROUPS[s.group];
-        const tags = `${s.place === "home" ? `<span class="td-tag td-tag-home" title="Home visit">🏠</span>` : ""}${g ? `<span class="td-tag td-tag-${g.cls}" title="Set aside for ${esc(g.label.toLowerCase())}">${esc(g.label)}</span>` : ""}${s.note ? `<span class="td-tag td-tag-note" title="Reserved for">${esc(s.note)}</span>` : ""}`;
+        const tags = `${s.place === "home" ? `<span class="td-tag td-tag-home" title="Home visit">🏠</span>` : ""}${s.priority ? `<span class="td-tag td-tag-note">Priority</span>` : ""}`;
         if (!su && s.blocked && busyOf(s.id)) return `<div class="td-srow td-srow-blocked td-srow-busy" data-slot="${s.id}"><span class="td-grip td-grip-none"></span><span class="td-stime">${fmtClock(s.min)}</span><span class="td-sname row-sub" title="On the bishop's calendar — change or move that event on the Calendar page to free this time">📅 ${esc(busyOf(s.id))}</span></div>`;
         if (!su && s.blocked) return `<div class="td-srow td-srow-blocked" data-slot="${s.id}"><span class="td-grip td-grip-none"></span><span class="td-stime">${fmtClock(s.min)}</span><span class="td-sname row-sub">blocked out</span>${editor ? `<button class="btn btn-sm btn-ghost" data-block="${s.id}" data-on="0" type="button" title="Open this time back up for sign-ups">unblock</button>` : ""}</div>`;
         if (!su) return `<div class="td-srow td-srow-open" data-slot="${s.id}"><span class="td-grip td-grip-none"></span><span class="td-stime">${fmtClock(s.min)}</span><span class="td-sname row-sub">open ${tags}</span>${editor ? `<button class="btn btn-sm btn-ghost" data-addname="${s.id}" type="button" title="Put someone in this time yourself">+ add name</button><button class="btn btn-sm btn-ghost td-blk" data-block="${s.id}" data-on="1" type="button" title="Block out this time so nobody can sign up for it">⊘<span class="td-st-lbl"> block</span></button>` : ""}</div>`;
@@ -351,6 +352,10 @@ function render() {
     try { await updateDoc(seasonRef(), { open: e.target.checked }); toast(e.target.checked ? "Sign-ups are open" : "Sign-ups are closed"); }
     catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
   });
+  mount.querySelector("#td-pritext")?.addEventListener("change", async (e) => {
+    try { await updateDoc(seasonRef(), { priorityText: e.target.value.trim() }); toast("Priority text saved"); }
+    catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
+  });
   mount.querySelector("#td-note").addEventListener("change", async (e) => {
     try { await updateDoc(seasonRef(), { note: e.target.value.trim() }); toast("Note saved"); }
     catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
@@ -360,7 +365,7 @@ function render() {
     form.date = mount.querySelector("#tdf-date").value; form.start = mount.querySelector("#tdf-start").value; form.end = mount.querySelector("#tdf-end").value;
     form.len = Number(mount.querySelector("#tdf-len").value); form.place = mount.querySelector("#tdf-place").value;
     form.group = "";
-    form.note = mount.querySelector("#tdf-note").value.trim();
+    form.priority = mount.querySelector("#tdf-pri").checked;
   };
   mount.querySelectorAll(".td-add > label input, .td-add > label select").forEach((i) => i.addEventListener("change", read));
 
@@ -390,7 +395,7 @@ function render() {
     if (!form.date) return toast("Pick a day");
     if (!form.start || !form.end || toMin(form.end) <= toMin(form.start)) return toast("The end time needs to be after the start");
     if (toMin(form.end) - toMin(form.start) < form.len) return toast(`That's shorter than one ${form.len}-minute visit`);
-    const adds = [form.date, ...form.repeat].sort().map((date) => ({ id: "w" + Math.random().toString(36).slice(2, 9), date, start: form.start, end: form.end, len: form.len, place: form.place, group: form.group, ...(form.note ? { note: form.note } : {}) }));
+    const adds = [form.date, ...form.repeat].sort().map((date) => ({ id: "w" + Math.random().toString(36).slice(2, 9), date, start: form.start, end: form.end, len: form.len, place: form.place, group: form.group, ...(form.priority ? { priority: true } : {}) }));
     const cur = season.windows || [];
     const clash = adds.find((n) => cur.some((w) => overlaps(n, w)));
     if (clash) { const w = cur.find((x) => overlaps(clash, x)); return toast(`${fmtShortDay(clash.date)} overlaps a block you already have (${rangeText(w)})`); }
@@ -515,7 +520,7 @@ function divideWindow(w, took) {
     }
     if (parts.every((p) => p.group === "off")) return showErr("Everything is blocked out — to drop the whole block, cancel and use ✕ on its row instead.");
     // a blocked-out period just isn't saved: it becomes a gap between the periods around it
-    const made = parts.map((p, i) => ({ id: "w" + Math.random().toString(36).slice(2, 9), date: w.date, start: startOf(i), end: p.end, len: p.len, place: w.place || "office", group: p.group, ...(w.note ? { note: w.note } : {}) })).filter((x) => x.group !== "off");
+    const made = parts.map((p, i) => ({ id: "w" + Math.random().toString(36).slice(2, 9), date: w.date, start: startOf(i), end: p.end, len: p.len, place: w.place || "office", group: p.group, ...(isPriority(w) ? { priority: true } : {}) })).filter((x) => x.group !== "off");
     made[0].id = w.id;
     try {
       await saveWindows([...(season.windows || []).filter((x) => x.id !== w.id), ...made]);

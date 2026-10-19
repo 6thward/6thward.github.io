@@ -5,7 +5,8 @@
 //   busy = sign-up times covered by something on the bishop's calendar (events with cal: "bishop"); kept in
 //   step by the app whenever his calendar or the availability changes, since the public page can't read events
 //   windows[]                     { id, date, start "HH:MM", end "HH:MM", len, place, group, note }
-//   note = "reserved for" wording the sign-up page shows on that block (2026-10-18), e.g. "Primary parents"
+//   priority = true marks a priority block (2026-10-18); the wording members see is tithing/{token}.priorityText (one text for all)
+//   (older blocks with a note or a families/widows group count as priority too)
 // tithing/{token}/taken/{slotId}  { len, at }           — public: only WHICH times are gone
 // tithing/{token}/signups/{slotId}{ name, phone, address, at } — private: who took them
 // slotId = "2026-12-06_1415"
@@ -32,6 +33,8 @@ export const todayIso = () => { const d = new Date(); return `${d.getFullYear()}
 export const nowMin = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
 export const addDays = (iso, n) => { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 
+export const isPriority = (w) => !!(w && (w.priority || w.note || w.group));
+export const PRIORITY_TEXT = "Some time slots are reserved for families with children at home and individuals who could be blessed by a time right after church due to mobility issues, health, or age. Feel free to use those priority time slots based on your situation.";
 export const sortWindows = (windows) => [...(windows || [])].sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
 export const overlaps = (a, b) => a.date === b.date && toMin(a.start) < toMin(b.end) && toMin(b.start) < toMin(a.end);
 
@@ -45,7 +48,7 @@ export function slotsOf(windows, blocked) {
       const id = slotId(w.date, t);
       if (seen.has(id)) continue;
       seen.add(id);
-      out.push({ id, date: w.date, min: t, len, place: w.place || "office", group: w.group || "", note: w.note || "", win: w.id, blocked: off.has(id) });
+      out.push({ id, date: w.date, min: t, len, place: w.place || "office", group: w.group || "", priority: isPriority(w), win: w.id, blocked: off.has(id) });
     }
   });
   return out;
