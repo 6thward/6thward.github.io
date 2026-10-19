@@ -2406,3 +2406,7 @@ tr.us-menu-open td { background: #f7f9fb; }
 .wcd-years .chip { padding: .18rem .6rem; }
 .wcd-year-n { font-size: .68rem; opacity: .75; }
 .wcd-months { max-height: 56vh; overflow: auto; }
+/* council dates dialog: meeting time row (2026-10-18) */
+.wcd-time { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; background: #f7f9fb; border: 1px solid var(--line); border-radius: 10px; padding: .4rem .7rem; margin: 0 0 .7rem; }
+.wcd-time .cal-standing-on { margin-top: 0; } .wcd-time .cal-standing-times { padding-left: 0; }
+.wc-time-lbl { font-weight: 500; color: var(--ink-soft); }
