@@ -2417,3 +2417,4 @@ tr.us-menu-open td { background: #f7f9fb; }
 .wcd-quick-menu button { font: inherit; font-size: .9rem; text-align: left; background: none; border: none; border-radius: 7px; padding: .45rem .7rem; cursor: pointer; color: var(--ink); }
 .wcd-quick-menu button:hover { background: var(--brand-soft); color: var(--brand); }
 .wcd-quick-menu button.danger { color: var(--danger); } .wcd-quick-menu button.danger:hover { background: #fdf0ee; }
+.dv-opts label[hidden] { display: none; } /* Until only shows once a repeat is chosen (2026-10-18) */
