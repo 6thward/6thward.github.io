@@ -2,14 +2,14 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792385910";
-import { ctx, hasRole, can } from "./app.js?v=1792385910";
+import { db } from "./firebase-init.js?v=1792385961";
+import { ctx, hasRole, can } from "./app.js?v=1792385961";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792385910";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792385910";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792385910";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792385961";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792385961";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792385961";
 
 let events = [];
 let viewYear, viewMonth; // 0-based month
@@ -573,14 +573,14 @@ function editEvent(e, defaultDate) {
       <label class="field">Calendar
         <select id="ev-cal" ${canEdit ? "" : "disabled"}><option value="ward"${calOf(e || {}) === "ward" && !(isNew && calView === "bishop") ? " selected" : ""}>Ward</option><option value="bishop"${calOf(e || {}) === "bishop" || (isNew && calView === "bishop") ? " selected" : ""}>Bishop</option></select>
       </label>
-      <label class="field">Location
-        <input id="ev-location" value="${esc(e?.location || "")}" ${canEdit ? "" : "disabled"}>
-      </label>
       <label class="field">Start time
         <input type="time" id="ev-start" value="${e?.startTime || ""}" ${canEdit ? "" : "disabled"}>
       </label>
       <label class="field">End time
         <input type="time" id="ev-end" value="${e?.endTime || ""}" ${canEdit ? "" : "disabled"}>
+      </label>
+      <label class="field full">Location <span class="row-sub">(optional)</span>
+        <input id="ev-location" value="${esc(e?.location || "")}" ${canEdit ? "" : "disabled"}>
       </label>
       <label class="field full">Notes
         <textarea id="ev-notes" ${canEdit ? "" : "disabled"}>${esc(e?.notes || "")}</textarea>
