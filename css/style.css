@@ -2249,3 +2249,7 @@ tr.us-menu-open td { background: #f7f9fb; }
 .bb-col > h3 .btn, .callings-board > .card > h3 .btn { margin-left: .3rem !important; }
 .bb-col > h3 > span[style*="margin-left:auto"], .callings-board > .card > h3 > span[style*="margin-left:auto"] { margin-left: .3rem !important; }
 .bb-sub { display: none; }
+/* Set Apart & MLS: the track sits on the same row as the name (2026-10-18) */
+.call-people-col .call-person-row { flex-direction: row; align-items: center; justify-content: space-between; gap: .4rem .8rem; flex-wrap: wrap; }
+.call-people-col .step-track { width: auto; align-self: center; margin: 0; flex: 1 1 9rem; justify-content: flex-end; }
+.call-people-col .st-seg { flex: 0 1 1.4rem; }

@@ -1,11 +1,11 @@
 // Tasks tab: assignable tasks with status tracking.
-import { db } from "./firebase-init.js?v=1792372178";
-import { ctx, hasRole, can } from "./app.js?v=1792372178";
+import { db } from "./firebase-init.js?v=1792372345";
+import { ctx, hasRole, can } from "./app.js?v=1792372345";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp, getDocs,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1792372178";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1792372345";
 
 const STATUSES = [
   ["open", "Open"],
