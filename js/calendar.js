@@ -2,14 +2,14 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792385725";
-import { ctx, hasRole, can } from "./app.js?v=1792385725";
+import { db } from "./firebase-init.js?v=1792385896";
+import { ctx, hasRole, can } from "./app.js?v=1792385896";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792385725";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792385725";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792385725";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792385896";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792385896";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792385896";
 
 let events = [];
 let viewYear, viewMonth; // 0-based month
@@ -166,7 +166,7 @@ function render() {
       <div class="cal-cell ${otherMonth ? "other-month" : ""} ${cellDate === today ? "today" : ""}" data-date="${cellDate}">
         <span class="cal-daynum">${displayNum}</span>
         ${evs.slice(0, 3).map((e) => `
-          <div class="cal-event ${isSunday ? "ev-sunday" : ""}${e.tithing ? " ev-tithing" : calOf(e) === "bishop" ? " ev-bishop" : ""}${e.standing ? " ev-standing" : ""}" title="${esc(e.title)}${e.sub ? " · " + esc(e.sub) : ""}">
+          <div class="cal-event ${isSunday ? "ev-sunday" : ""}${e.tithing ? " ev-tithing" : calOf(e) === "bishop" ? " ev-bishop" : ""}${e.standing ? " ev-standing" : ""}${e.color ? " ev-colored" : ""}"${evStyle(e)} title="${esc(e.title)}${e.sub ? " · " + esc(e.sub) : ""}">
             ${e.startTime ? fmtTime(e.startTime) + " " : ""}${esc(e.title)}
           </div>`).join("")}
         ${evs.length > 3 ? `<div class="cal-event">+${evs.length - 3} more</div>` : ""}
@@ -186,9 +186,9 @@ function render() {
     .sort((a, b) => (a.date + (a.startTime || "")) < (b.date + (b.startTime || "")) ? -1 : 1);
   document.getElementById("upcoming-list").innerHTML = up.length
     ? up.map((e) => `
-      <div class="list-row${e.tithing ? " list-row-tithing" : ""}" data-id="${e.id}">
+      <div class="list-row${e.tithing ? " list-row-tithing" : ""}${e.color ? " list-row-colored" : ""}" data-id="${e.id}"${evStyle(e)}>
         <div class="row-main">
-          <div class="row-title">${e.tithing ? "🗓 " : calOf(e) === "bishop" ? `<span class="cal-tag cal-tag-bishop">Bishop</span> ` : ""}${esc(e.title)}</div>
+          <div class="row-title">${e.tithing ? "🗓 " : calOf(e) === "bishop" ? `<span class="cal-tag cal-tag-bishop"${evStyle(e)}>Bishop</span> ` : ""}${esc(e.title)}</div>
           <div class="row-sub">${fmtDate(e.date)}${e.startTime ? " · " + fmtTime(e.startTime) : ""}${e.endTime ? "–" + fmtTime(e.endTime) : ""}${e.location ? " · " + esc(e.location) : ""}${e.sub ? " · " + esc(e.sub) : ""}</div>
         </div>
       </div>`).join("")
@@ -216,6 +216,12 @@ const KINDS = [
   ["other", "Something else", "Any other appointment on the Bishop calendar"],
 ];
 const TITHING_LENS = [10, 15, 20, 30], INTERVIEW_LENS = [10, 15, 20, 30, 60];
+// colours a meeting can wear on the calendar (2026-10-18); the same colour shows in the month grid, the day timeline and Coming up
+const EV_COLORS = [["#7a4fb5", "Purple"], ["#1f4e79", "Blue"], ["#1f8a83", "Teal"], ["#2e7d4f", "Green"], ["#b98a2f", "Gold"], ["#dd9257", "Orange"], ["#c0392b", "Red"], ["#cf6d96", "Pink"], ["#4b5563", "Grey"]];
+const swatches = (id, cur) => `<div class="ev-swatches" id="${id}">${EV_COLORS.map(([c, n]) => `<button type="button" class="ev-swatch${(cur || "") === c ? " on" : ""}" data-color="${c}" style="--c:${c}" title="${n}"></button>`).join("")}</div>`;
+const wireSwatches = (box) => box?.querySelectorAll(".ev-swatch").forEach((b) => b.addEventListener("click", () => { const on = b.classList.contains("on"); box.querySelectorAll(".ev-swatch").forEach((x) => x.classList.remove("on")); if (!on) b.classList.add("on"); }));
+const swatchValue = (box) => box?.querySelector(".ev-swatch.on")?.dataset.color || "";
+const evStyle = (e) => (e && e.color ? ` style="--evc:${esc(e.color)}"` : "");
 let openDay = null, dvSel = null, dvFocus = null; // the day that's open, the dragged selection, the block being looked at
 const hhmmOf = (min) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 const snap = (min) => Math.round(min / SNAP) * SNAP;
@@ -274,10 +280,11 @@ function drawDay() {
     if (b.kind === "interviews") {
       const len = Number(b.ev.len) || 15, names = b.ev.slots || {}; const ticks = [];
       for (let m = b.start; m + len <= b.end; m += len) { const k = hhmmOf(m); ticks.push(`<div class="dv-slot${names[k] ? " booked" : ""}" data-islot="${k}" style="top:${(m - b.start) * PX_MIN}px;height:${len * PX_MIN}px" title="${fmtClock(m)}${names[k] ? " · " + esc(names[k]) : " · open — click to add a name"}">${names[k] ? `<span>${esc(names[k])}</span>` : ""}</div>`); }
-      return `<div class="dv-block dv-interviews${dvFocus === "e:" + b.id ? " dv-focus" : ""}" data-block="e:${esc(b.id)}" style="${style}"><div class="dv-block-title">${esc(b.title)} <span>${fmtClock(b.start)}–${fmtClock(b.end)} · ${len} min</span></div><div class="dv-slots">${ticks.join("")}</div></div>`;
+      return `<div class="dv-block dv-interviews${dvFocus === "e:" + b.id ? " dv-focus" : ""}${b.ev.color ? " dv-colored" : ""}" data-block="e:${esc(b.id)}" style="${style}${b.ev.color ? `;--evc:${b.ev.color}` : ""}"><div class="dv-block-title">${esc(b.title)} <span>${fmtClock(b.start)}–${fmtClock(b.end)} · ${len} min</span></div><div class="dv-slots">${ticks.join("")}</div></div>`;
     }
     const cls = b.kind === "standing" ? "dv-standing" : b.cal === "bishop" ? "dv-bishop" : "dv-ward";
-    return `<div class="dv-block ${cls}" data-block="${b.kind === "standing" ? "s:" : "e:"}${esc(b.id)}" style="${style}" title="${esc(b.title)}"><div class="dv-block-title">${esc(b.title)} <span>${fmtClock(b.start)}–${fmtClock(b.end)}</span></div></div>`;
+    const colored = b.ev?.color ? `;--evc:${b.ev.color}` : "";
+    return `<div class="dv-block ${cls}${colored ? " dv-colored" : ""}" data-block="${b.kind === "standing" ? "s:" : "e:"}${esc(b.id)}" style="${style}${colored}" title="${esc(b.title)}"><div class="dv-block-title">${esc(b.title)} <span>${fmtClock(b.start)}–${fmtClock(b.end)}</span></div></div>`;
   };
   const selHtml = dvSel ? `<div class="dv-sel" style="top:${top(dvSel.a)}px;height:${h(dvSel.a, dvSel.b)}px"><span>${fmtClock(dvSel.a)} – ${fmtClock(dvSel.b)}</span></div>` : "";
   grid.style.height = `${(DAY_END - DAY_START) * PX_MIN + 20}px`;
@@ -298,7 +305,7 @@ function drawDay() {
 function listHtml(date, blocks, allDay) {
   const all = [...allDay, ...blocks.filter((b) => b.start != null)].sort((a, b) => (a.start ?? -1) - (b.start ?? -1));
   if (!all.length) return `<div class="empty-note">Nothing on this day yet.${can("calendar", "edit") ? "<br>Drag across the timeline to add something." : ""}</div>`;
-  return `<h4 class="dv-side-h">This day</h4>${all.map((b) => `<div class="dv-item dv-item-${b.kind === "tithing" ? "tithing" : b.kind === "standing" ? "standing" : b.cal}"><b>${esc(b.title)}</b><span class="row-sub">${b.start == null ? "All day" : `${fmtClock(b.start)}–${fmtClock(b.end)}`}${b.kind === "tithing" ? ` · ${b.slots.filter((s) => signups[s.id]).length} booked` : ""}</span></div>`).join("")}`;
+  return `<h4 class="dv-side-h">This day</h4>${all.map((b) => `<div class="dv-item dv-item-${b.kind === "tithing" ? "tithing" : b.kind === "standing" ? "standing" : b.cal}"${b.ev?.color ? ` style="border-left-color:${esc(b.ev.color)}"` : ""}><b>${esc(b.title)}</b><span class="row-sub">${b.start == null ? "All day" : `${fmtClock(b.start)}–${fmtClock(b.end)}`}${b.kind === "tithing" ? ` · ${b.slots.filter((s) => signups[s.id]).length} booked` : ""}</span></div>`).join("")}`;
 }
 function designateHtml(date) {
   const kinds = KINDS.filter(([k]) => k !== "tithing" || can("tithing", "edit"));
@@ -323,9 +330,10 @@ function optsHtml(kind) {
   if (kind === "tithing") return `<label>Each visit<select id="dv-len">${TITHING_LENS.map((n) => opt(n, n + " minutes", dvSel.len || 15)).join("")}</select></label>
     <label>Where<select id="dv-place"><option value="office">🏛 Bishop's office</option><option value="home">🏠 Home visits</option></select></label>
     <label>Set aside for<select id="dv-group"><option value="">Anyone</option><option value="families">Families with kids at home</option><option value="widows">Widows</option></select></label>`;
-  if (kind === "interviews") return `<label>Each interview<select id="dv-len">${INTERVIEW_LENS.map((n) => opt(n, n + " minutes", dvSel.len || 15)).join("")}</select></label><label>Label<input id="dv-title" value="Interviews" autocomplete="off"></label>`;
-  if (kind === "other") return `<label>Title<input id="dv-title" placeholder="e.g. Sacrament meeting, Temple recommend — Hansen" autocomplete="off"></label><label>Location <small>(optional)</small><input id="dv-loc" placeholder="e.g. Chapel — leave blank if it doesn't matter" autocomplete="off"></label>`;
-  return "";
+  if (kind === "interviews") return `<label>Each interview<select id="dv-len">${INTERVIEW_LENS.map((n) => opt(n, n + " minutes", dvSel.len || 15)).join("")}</select></label><label>Label<input id="dv-title" value="Interviews" autocomplete="off"></label><label>Colour <small>(optional)</small>${swatches("dv-color", dvSel.color)}</label>`;
+  const color = `<label>Colour <small>(optional)</small>${swatches("dv-color", dvSel.color)}</label>`;
+  if (kind === "other") return `<label>Title<input id="dv-title" placeholder="e.g. Sacrament meeting, Temple recommend — Hansen" autocomplete="off"></label><label>Location <small>(optional)</small><input id="dv-loc" placeholder="e.g. Chapel — leave blank if it doesn't matter" autocomplete="off"></label>${color}`;
+  return color;
 }
 function focusHtml(date, blocks) {
   const [t, id] = [dvFocus.slice(0, 1), dvFocus.slice(2)];
@@ -358,7 +366,7 @@ function wireSide(date, blocks) {
     const opts = side.querySelector("#dv-opts");
     const kindNow = () => side.querySelector("input[name=dv-kind]:checked")?.value || "";
     // nothing is picked to start with: the extra fields (visit length, where, who for) only appear for the kind that needs them
-    const redrawOpts = () => { dvSel.kind = kindNow(); opts.innerHTML = dvSel.kind ? optsHtml(dvSel.kind) : ""; side.querySelectorAll(".dv-kind").forEach((l) => l.classList.toggle("on", l.querySelector("input").checked)); const sv = side.querySelector("#dv-save"); if (sv) sv.disabled = !dvSel.kind; side.querySelector(".dv-repeat")?.classList.toggle("hidden", !dvSel.kind); };
+    const redrawOpts = () => { dvSel.kind = kindNow(); opts.innerHTML = dvSel.kind ? optsHtml(dvSel.kind) : ""; wireSwatches(opts.querySelector("#dv-color")); side.querySelectorAll(".dv-kind").forEach((l) => l.classList.toggle("on", l.querySelector("input").checked)); const sv = side.querySelector("#dv-save"); if (sv) sv.disabled = !dvSel.kind; side.querySelector(".dv-repeat")?.classList.toggle("hidden", !dvSel.kind); };
     side.querySelectorAll("input[name=dv-kind]").forEach((r) => r.addEventListener("change", redrawOpts));
     redrawOpts();
     const syncTimes = () => { const a = toMinutes(side.querySelector("#dv-start").value), b = toMinutes(side.querySelector("#dv-end").value); if (b > a) { dvSel.a = a; dvSel.b = b; const g = document.getElementById("dv-grid"); const selEl = g?.querySelector(".dv-sel"); if (selEl) { selEl.style.top = `${(a - DAY_START) * PX_MIN}px`; selEl.style.height = `${(b - a) * PX_MIN}px`; selEl.querySelector("span").textContent = `${fmtClock(a)} – ${fmtClock(b)}`; } } };
@@ -481,7 +489,8 @@ async function saveDesignation(date, kind, side) {
     const title = kind === "council" ? "Ward council" : kind === "bishopric" ? "Bishopric meeting" : (side.querySelector("#dv-title")?.value.trim() || (kind === "interviews" ? "Interviews" : ""));
     if (!title) { if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "Add"; } return toast("Give it a title"); }
     const series = many ? "r" + Math.random().toString(36).slice(2, 9) : null; // the repeats know they belong together
-    const base = { title, startTime: hhmmOf(a), endTime: hhmmOf(b), location: side.querySelector("#dv-loc")?.value.trim() || "", notes: "", cal: "bishop", createdBy: ctx.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), ...(series ? { series } : {}) };
+    const color = swatchValue(side.querySelector("#dv-color"));
+    const base = { title, startTime: hhmmOf(a), endTime: hhmmOf(b), location: side.querySelector("#dv-loc")?.value.trim() || "", notes: "", ...(color ? { color } : {}), cal: "bishop", createdBy: ctx.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), ...(series ? { series } : {}) };
     if (kind === "interviews") { base.kind = "interviews"; base.len = Number(side.querySelector("#dv-len").value); }
     const made = [];
     for (const d of dates) { const data = { ...base, date: d, ...(kind === "interviews" ? { slots: {} } : {}) }; const ref = await addDoc(collection(db, "events"), data); made.push({ ...data, id: ref.id }); }
@@ -562,6 +571,8 @@ function editEvent(e, defaultDate) {
       <label class="field full">Notes
         <textarea id="ev-notes" ${canEdit ? "" : "disabled"}>${esc(e?.notes || "")}</textarea>
       </label>
+      <div class="field full"><span>Colour <span class="row-sub">(optional)</span></span>${swatches("ev-color", e?.color)}</div>
+      ${e?.series ? `<label class="field full ev-series"><input type="checkbox" id="ev-series"> <span>Also change the other repeats of this meeting (title, times, location, colour)</span></label>` : ""}
       <div class="full cal-clash hidden" id="ev-clash"></div>
     </div>
     <div class="modal-actions">
@@ -572,6 +583,7 @@ function editEvent(e, defaultDate) {
       </div>
     </div>`);
   el.querySelector("#ev-cancel").addEventListener("click", closeModal);
+  wireSwatches(el.querySelector("#ev-color"));
   // a bishop's event on top of tithing-declaration times: say so, and show who is already booked there
   const clashNote = () => {
     const box = el.querySelector("#ev-clash");
@@ -600,6 +612,7 @@ function editEvent(e, defaultDate) {
       startTime: el.querySelector("#ev-start").value || null,
       endTime: el.querySelector("#ev-end").value || null,
       location: el.querySelector("#ev-location").value.trim(),
+      color: swatchValue(el.querySelector("#ev-color")) || null,
       notes: el.querySelector("#ev-notes").value.trim(),
       cal: el.querySelector("#ev-cal").value === "bishop" ? "bishop" : "ward",
       updatedAt: serverTimestamp(),
@@ -611,6 +624,10 @@ function editEvent(e, defaultDate) {
         });
       } else {
         await updateDoc(doc(db, "events", e.id), data);
+        if (e.series && el.querySelector("#ev-series")?.checked) { // the other repeats take everything but the date
+          const { date: _d, ...shared } = data;
+          await Promise.all(events.filter((x) => x.series === e.series && x.id !== e.id).map((x) => updateDoc(doc(db, "events", x.id), shared)));
+        }
       }
       closeModal(); toast("Saved");
       // the bishop's calendar decides which tithing times are open, so bring the sign-up page up to date

@@ -2428,3 +2428,13 @@ tr.us-menu-open td { background: #f7f9fb; }
 .wc-foldall .btn { font-size: .78rem; }
 .dv-repeat.hidden { display: none; }
 .dv-opts label small { font-weight: 500; text-transform: none; letter-spacing: 0; }
+/* Calendar: a colour per meeting, shared by month grid, day timeline and Coming up (2026-10-18) */
+.ev-swatches { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .2rem; }
+.ev-swatch { width: 1.5rem; height: 1.5rem; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px #c3c9d1; background: var(--c); cursor: pointer; padding: 0; }
+.ev-swatch:hover { box-shadow: 0 0 0 2px var(--c); }
+.ev-swatch.on { box-shadow: 0 0 0 2.5px var(--ink); }
+.cal-event.ev-colored { background: color-mix(in srgb, var(--evc) 16%, #fff) !important; color: color-mix(in srgb, var(--evc) 72%, #000) !important; border-left: 3px solid var(--evc) !important; }
+.dv-block.dv-colored { background: color-mix(in srgb, var(--evc) 16%, #fff); border-color: color-mix(in srgb, var(--evc) 50%, #fff); color: color-mix(in srgb, var(--evc) 72%, #000); }
+.list-row-colored { border-left: 3px solid var(--evc); }
+.cal-tag-bishop[style] { background: color-mix(in srgb, var(--evc) 18%, #fff); color: color-mix(in srgb, var(--evc) 72%, #000); }
+.ev-series { display: flex; align-items: center; gap: .5rem; font-size: .88rem; }
