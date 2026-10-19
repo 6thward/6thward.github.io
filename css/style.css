@@ -2455,3 +2455,8 @@ tr.us-menu-open td { background: #f7f9fb; }
 .cal-event { font-size: .72rem; line-height: 1.3; padding: .12rem .35rem; margin-top: .14rem; }
 @media (max-width: 760px) { .cal-cell { min-height: 6rem; } }
 .dv-item-click { cursor: pointer; } .dv-item-click:hover { background: #eef3f8; }
+/* day view: movable blocks (2026-10-18) */
+.dv-block.dv-movable { cursor: grab; touch-action: none; }
+.dv-block.dv-movable:active { cursor: grabbing; }
+.dv-resize { position: absolute; left: 0; right: 0; bottom: 0; height: 7px; cursor: ns-resize; border-radius: 0 0 8px 8px; }
+.dv-resize:hover { background: rgba(0,0,0,.12); }
