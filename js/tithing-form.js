@@ -2,13 +2,13 @@
 // No sign-in. Anyone with the link sees the open times (never who took the
 // others), picks one, and leaves a name — plus a phone number if they'd like
 // a text reminder.
-import { db } from "./firebase-init.js?v=1792388085";
+import { db } from "./firebase-init.js?v=1792388563";
 import {
   doc, getDoc, collection, onSnapshot, writeBatch, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import {
   GROUPS, PLACES, esc, fmtClock, fmtLongDay, slotsOf, sortWindows, parseSlotId, todayIso, nowMin, offList,
-} from "./tithing-shared.js?v=1792388085";
+} from "./tithing-shared.js?v=1792388563";
 
 export async function initTithingForm(mount, token) {
   const fail = (title, msg) => { mount.innerHTML = `<div class="td-card td-msg"><h2>${esc(title)}</h2><p>${esc(msg)}</p></div>`; };
@@ -47,6 +47,7 @@ export async function initTithingForm(mount, token) {
     const mine = justBooked || readMine();
     const mineSlot = mine && slots.find((s) => s.id === mine.id);
     const flagged = [...new Set(upcoming.map((s) => s.group).filter(Boolean))];
+    const noted = [...new Set(upcoming.map((s) => s.note).filter(Boolean))]; // "Reserved for …" wording the bishop typed on a block
     const days = [...new Set(upcoming.map((s) => s.date))];
     const openCount = upcoming.filter((s) => !isTaken(s)).length;
 
@@ -80,7 +81,7 @@ export async function initTithingForm(mount, token) {
         <p class="td-ward">${esc(season.ward || "6th Ward")}</p>
         ${season.note ? `<p class="td-note">${esc(season.note)}</p>` : ""}
         <p>Pick a time that works for you and your family, then add your name. That's it.</p>
-        ${flagged.length ? `<p class="td-legend">Some times are set aside for ${flagged.map((k) => `<b>${esc(GROUPS[k].label.toLowerCase())}</b>`).join(" or ")}. If that's you, please use one of those — everyone is welcome at the unmarked times.</p>` : ""}
+        ${flagged.length || noted.length ? `<p class="td-legend">Some times are set aside for ${[...flagged.map((k) => GROUPS[k].label.toLowerCase()), ...noted].map((t) => `<b>${esc(t)}</b>`).join(" or ")}. If that's you, please use one of those — everyone is welcome at the unmarked times.</p>` : ""}
       </div>
       ${mineSlot ? `<div class="td-card td-mine"><div class="td-tick">✓</div><div><b>You're signed up${mine.name ? ", " + esc(mine.name) : ""}.</b><div>${esc(describe(mineSlot))}</div><div class="td-sub">${esc(whereLine(mineSlot))}. Need to change it? Contact the bishop or the executive secretary.</div></div></div>` : ""}
       ${dayHtml || `<div class="td-card td-msg"><h2>No open times right now</h2><p>Please check back, or contact the bishop or the executive secretary.</p></div>`}

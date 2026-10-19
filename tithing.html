@@ -26,6 +26,7 @@
   .td-flag { display: inline-block; font-size: .78rem; font-weight: 700; border-radius: 99px; padding: .12rem .6rem; }
   .td-flag-fam { color: var(--fam); background: var(--fam-soft); }
   .td-flag-wid { color: var(--wid); background: var(--wid-soft); }
+  .td-flag-note { color: #8a5a00; background: #fdf1d6; }
   .td-flag-block { display: block; border-radius: 10px; padding: .55rem .7rem; font-size: .9rem; font-weight: 600; margin: .6rem 0 0; }
   .td-slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(5.6rem, 1fr)); gap: .45rem; }
   .td-slot { font: inherit; font-weight: 600; font-variant-numeric: tabular-nums; text-align: center; padding: .6rem .2rem; border-radius: 10px; border: 1.5px solid var(--brand); background: #fff; color: var(--brand); cursor: pointer; }
@@ -64,7 +65,7 @@
 <body>
 <div id="td"><div class="td-loading">Opening the sign-up…</div></div>
 <script type="module">
-  import { initTithingForm } from "./js/tithing-form.js?v=1792388085";
+  import { initTithingForm } from "./js/tithing-form.js?v=1792388563";
   initTithingForm(document.getElementById("td"), new URLSearchParams(location.search).get("k") || "");
 </script>
 </body>

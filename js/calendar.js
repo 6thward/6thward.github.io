@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792388085";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792388085";
+import { db } from "./firebase-init.js?v=1792388563";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792388563";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792388085";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792388085";
-import { openCouncilDate } from "./council.js?v=1792388085";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792388085";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792388563";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792388563";
+import { openCouncilDate } from "./council.js?v=1792388563";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792388563";
 
 let events = [];
 let viewStart; // ISO date of the Sunday the grid starts on — the current week by default, so past weeks aren't shown (2026-10-18)
@@ -95,7 +95,7 @@ function tithingItems(date) {
   return (season.windows || []).filter((w) => w.date === date).map((w) => {
     const mine = slots.filter((s) => s.win === w.id), booked = mine.filter((s) => signups[s.id]);
     return { tithing: true, id: "t:" + w.id, date, startTime: w.start, endTime: w.end, cal: "bishop",
-      title: "Tithing declaration", sub: `${booked.length} of ${mine.filter((s) => !s.blocked || signups[s.id]).length} booked${w.place === "home" ? " · home visits" : ""}`,
+      title: `Tithing declaration${w.note ? " — " + w.note : ""}`, note: w.note || "", sub: `${booked.length} of ${mine.filter((s) => !s.blocked || signups[s.id]).length} booked${w.place === "home" ? " · home visits" : ""}`,
       booked: booked.map((s) => ({ min: s.min, name: signups[s.id].name })) };
   });
 }
@@ -303,7 +303,7 @@ function drawDay() {
       // every sign-up time is its own row: "11:05 (10 min) The Smiths" as people book, "open" until they do (Jordan 10/18)
       const ticks = b.slots.map((s) => { const su = signups[s.id]; return `<div class="dv-slot${su ? " booked" : s.blocked ? " off" : ""}" style="top:${(s.min - b.start) * PX_MIN}px;height:${s.len * PX_MIN}px" title="${fmtClock(s.min)}${su ? " · " + esc(su.name) + (su.phone ? " · " + esc(su.phone) : "") : s.blocked ? " · blocked" : " · open"}"><b>${fmtClock(s.min).replace(/ [AP]M$/, "")}</b> <i>(${s.len} min)</i> <span>${su ? esc(su.name) : s.blocked ? "blocked" : "open"}</span></div>`; }).join("");
       const booked = b.slots.filter((s) => signups[s.id]).length;
-      return `<div class="dv-block dv-tithing dv-slotted${dvFocus === "t:" + b.id ? " dv-focus" : ""}" data-block="t:${esc(b.id)}" style="${style}"><div class="dv-block-tag">Tithing declaration · ${booked}/${b.slots.filter((s) => !s.blocked || signups[s.id]).length} booked${b.win.note ? " · " + esc(b.win.note) : ""}</div><div class="dv-slots">${ticks}</div></div>`;
+      return `<div class="dv-block dv-tithing dv-slotted${dvFocus === "t:" + b.id ? " dv-focus" : ""}" data-block="t:${esc(b.id)}" style="${style}"><div class="dv-block-tag">Tithing declaration · ${booked}/${b.slots.filter((s) => !s.blocked || signups[s.id]).length} booked</div>${b.win.note ? `<div class="dv-block-tag dv-block-note">Reserved for ${esc(b.win.note)}</div>` : ""}<div class="dv-slots">${ticks}</div></div>`;
     }
     if (b.kind === "interviews") {
       const len = Number(b.ev.len) || 15, names = b.ev.slots || {}; const ticks = [];
@@ -337,7 +337,7 @@ function drawDay() {
 function listHtml(date, blocks, allDay) {
   const all = [...allDay, ...blocks.filter((b) => b.start != null)].sort((a, b) => (a.start ?? -1) - (b.start ?? -1));
   if (!all.length) return `<div class="empty-note">Nothing on this day yet.${can("calendar", "edit") ? "<br>Drag across the timeline to add something." : ""}</div>`;
-  return `<h4 class="dv-side-h">This day</h4>${all.map((b) => `<div class="dv-item dv-item-click dv-item-${b.kind === "tithing" ? "tithing" : b.kind === "standing" ? "standing" : b.cal}" data-open="${b.kind === "tithing" ? "t:" : b.kind === "standing" ? "s:" : "e:"}${esc(b.id)}" title="Click to open"${b.ev?.color ? ` style="border-left-color:${esc(b.ev.color)}"` : ""}><b>${esc(b.title)}</b><span class="row-sub">${b.start == null ? "All day" : `${fmtClock(b.start)}–${fmtClock(b.end)}`}${b.kind === "tithing" ? ` · ${b.slots.filter((s) => signups[s.id]).length} booked` : ""}</span></div>`).join("")}`;
+  return `<h4 class="dv-side-h">This day</h4>${all.map((b) => `<div class="dv-item dv-item-click dv-item-${b.kind === "tithing" ? "tithing" : b.kind === "standing" ? "standing" : b.cal}" data-open="${b.kind === "tithing" ? "t:" : b.kind === "standing" ? "s:" : "e:"}${esc(b.id)}" title="Click to open"${b.ev?.color ? ` style="border-left-color:${esc(b.ev.color)}"` : ""}><b>${esc(b.title)}</b>${b.kind === "tithing" && b.win.note ? `<span class="td-tag td-tag-note">Reserved for ${esc(b.win.note)}</span>` : ""}<span class="row-sub">${b.start == null ? "All day" : `${fmtClock(b.start)}–${fmtClock(b.end)}`}${b.kind === "tithing" ? ` · ${b.slots.filter((s) => signups[s.id]).length} booked` : ""}</span></div>`).join("")}`;
 }
 function designateHtml(date) {
   const kinds = KINDS.filter(([k]) => k !== "tithing" || can("tithing", "edit"));
@@ -362,7 +362,6 @@ function optsHtml(kind) {
   const opt = (v, l, cur) => `<option value="${v}"${String(cur) === String(v) ? " selected" : ""}>${l}</option>`;
   if (kind === "tithing") return `<label>Each visit<select id="dv-len">${TITHING_LENS.map((n) => opt(n, n + " minutes", dvSel.len || 15)).join("")}</select></label>
     <label>Where<select id="dv-place"><option value="office">🏛 Bishop's office</option><option value="home">🏠 Home visits</option></select></label>
-    <label>Set aside for<select id="dv-group"><option value="">Anyone</option><option value="families">Families with kids at home</option><option value="widows">Widows</option></select></label>
     <label>Reserved for <small>(optional — shows on the sign-up page)</small><input id="dv-note" maxlength="60" placeholder="e.g. Primary parents" autocomplete="off"></label>`;
   if (kind === "interviews") return `<label>Each interview<select id="dv-len">${INTERVIEW_LENS.map((n) => opt(n, n + " minutes", dvSel.len || 15)).join("")}</select></label><label>Label<input id="dv-title" value="Interviews" autocomplete="off"></label><label>Colour <small>(optional)</small>${swatches("dv-color", dvSel.color)}</label>`;
   const preset = kindOf(kind)?.[3] || "";
@@ -386,8 +385,7 @@ function focusHtml(date, blocks) {
     return `<h4 class="dv-side-h">Tithing declaration</h4>
       <div class="row-sub">${fmtClock(b.start)}–${fmtClock(b.end)} · ${w.place === "home" ? "home visits" : "Bishop's office"}${w.group ? " · " + (w.group === "families" ? "families with kids at home" : "widows") : ""}${w.note ? " · reserved for " + esc(w.note) : ""}</div>
       ${ed ? `<div class="dv-opts dv-opts-row"><label>Each visit<select id="dv-f-len">${TITHING_LENS.map((n) => `<option value="${n}"${Number(w.len) === n ? " selected" : ""}>${n} min</option>`).join("")}</select></label>
-        <label>Where<select id="dv-f-place"><option value="office"${w.place !== "home" ? " selected" : ""}>Bishop's office</option><option value="home"${w.place === "home" ? " selected" : ""}>Home visits</option></select></label>
-        <label>For<select id="dv-f-group"><option value=""${!w.group ? " selected" : ""}>Anyone</option><option value="families"${w.group === "families" ? " selected" : ""}>Families</option><option value="widows"${w.group === "widows" ? " selected" : ""}>Widows</option></select></label></div>
+        <label>Where<select id="dv-f-place"><option value="office"${w.place !== "home" ? " selected" : ""}>Bishop's office</option><option value="home"${w.place === "home" ? " selected" : ""}>Home visits</option></select></label></div>
         <div class="dv-opts"><label>Reserved for <small>(optional — shows on the sign-up page)</small><input id="dv-f-note" maxlength="60" value="${esc(w.note || "")}" placeholder="e.g. Primary parents" autocomplete="off"></label></div>
         <div class="dv-opts dv-opts-row dv-f-repeat"><label>Repeat this block<select id="dv-f-rep">${repeatChoices(date).map(([v, l]) => `<option value="${v}">${esc(v === "0" ? "Doesn't repeat" : l)}</option>`).join("")}</select></label><label id="dv-f-until-wrap" hidden>Until<input type="date" id="dv-f-until" value="${esc(addDaysIso(date, 56))}"></label><button type="button" class="btn btn-sm" id="dv-f-repgo" hidden>Add repeats</button></div>
         ${pickDaysHtml(date, "dv-f-pick")}` : ""}
@@ -440,9 +438,9 @@ function wireSide(date, blocks, keep) {
     side.querySelector("#dv-save").addEventListener("click", () => saveDesignation(date, kindNow(), side));
   }
   // tithing block details
-  ["#dv-f-len", "#dv-f-place", "#dv-f-group", "#dv-f-note"].forEach((sel) => side.querySelector(sel)?.addEventListener("change", async () => {
+  ["#dv-f-len", "#dv-f-place", "#dv-f-note"].forEach((sel) => side.querySelector(sel)?.addEventListener("change", async () => {
     const id = dvFocus.slice(2), note = side.querySelector("#dv-f-note")?.value.trim() || "";
-    const windows = (season.windows || []).map((w) => w.id === id ? { ...w, len: Number(side.querySelector("#dv-f-len").value), place: side.querySelector("#dv-f-place").value, group: side.querySelector("#dv-f-group").value, ...(note ? { note } : {}) } : w);
+    const windows = (season.windows || []).map((w) => w.id === id ? { ...w, len: Number(side.querySelector("#dv-f-len").value), place: side.querySelector("#dv-f-place").value, ...(note ? { note } : {}) } : w);
     if (!note) windows.forEach((w) => { if (w.id === id) delete w.note; });
     await saveTithingWindows(windows, "Updated");
   }));
@@ -654,7 +652,7 @@ async function saveDesignation(date, kind, side) {
     if (kind === "tithing") {
       if (!can("tithing", "edit")) return toast("You can't change tithing declaration times");
       await ensureSeason();
-      const len = Number(side.querySelector("#dv-len").value), place = side.querySelector("#dv-place").value, group = side.querySelector("#dv-group").value, note = side.querySelector("#dv-note")?.value.trim() || "";
+      const len = Number(side.querySelector("#dv-len").value), place = side.querySelector("#dv-place").value, group = "", note = side.querySelector("#dv-note")?.value.trim() || "";
       const adds = dates.map((d) => ({ id: "w" + Math.random().toString(36).slice(2, 9), date: d, start: hhmmOf(a), end: hhmmOf(b), len, place, group, ...(note ? { note } : {}) }));
       await saveTithingWindows([...(season.windows || []), ...adds], many ? `Tithing declaration times added on ${dates.length} days — they're on the sign-up page now` : "Tithing declaration times added — they're on the sign-up page now");
       dvSel = null; drawDay();
@@ -759,6 +757,10 @@ function eventFormHtml(e, defaultDate, canEdit, inline) {
       <label class="field full">Title
         <input id="ev-title" value="${esc(e?.title || "")}" ${canEdit ? "" : "disabled"}>
       </label>
+      ${e && !e.tithing && /tith/i.test(e.title || "") && can("tithing", "edit") ? `<div class="full ev-tithing-hint">This is a plain appointment — members can't sign up for it. Save turns it into a sign-up block (15-minute visits; change that on the block afterwards). <button type="button" class="btn btn-sm" id="ev-make-tithing">Make it a sign-up block now</button></div>
+      <label class="field full">Reserved for <span class="row-sub">(optional — shows on the sign-up page, e.g. "Families with kids" or "Widows or senior couples")</span>
+        <input id="ev-tnote" maxlength="60" placeholder="e.g. Families with kids" autocomplete="off">
+      </label>` : ""}
       <label class="field">Date
         <input type="date" id="ev-date" value="${e?.date || defaultDate || todayISO()}" ${canEdit ? "" : "disabled"}>
       </label>
@@ -783,7 +785,6 @@ function eventFormHtml(e, defaultDate, canEdit, inline) {
       <label class="field">Repeat<select id="ev-rep">${repeatChoices(e?.date || defaultDate || todayISO()).map(([v, l]) => `<option value="${v}">${esc(v === "0" ? "Doesn't repeat" : l)}</option>`).join("")}</select></label>
       <label class="field" id="ev-until-wrap" hidden>Until<input type="date" id="ev-until" value="${esc(addDaysIso(e?.date || defaultDate || todayISO(), 56))}"></label>
       <div class="full" id="ev-pick-wrap" hidden>${pickDaysHtml(e?.date || defaultDate || todayISO(), "ev-pick")}</div>` : ""}
-      ${e && !e.tithing && /tith/i.test(e.title || "") && can("tithing", "edit") ? `<div class="full ev-tithing-hint">This is a plain appointment — members can't sign up for it. Save turns it into a sign-up block (15-minute visits; change that on the block afterwards). <button type="button" class="btn btn-sm" id="ev-make-tithing">Make it a sign-up block now</button></div>` : ""}
       <div class="full cal-clash hidden" id="ev-clash"></div>
     </div>
     ${!isNew && canEdit && !inline ? `<div class="ev-agenda"><button type="button" class="btn btn-sm" id="ev-retime" title="Open the day's timeline with this event ready to drag">⏱ Edit on the timeline</button></div>` : ""}
@@ -824,8 +825,9 @@ function wireEventForm(root, e, canEdit, done) {
     try {
       await ensureSeason();
       const cur = season.windows || [];
+      const tnote = (root.querySelector("#ev-tnote")?.value.trim() || "").slice(0, 60);
       const adds = mine.filter((x) => !cur.some((w) => w.date === x.date && toMinutes(w.start) < toMinutes(x.endTime) && toMinutes(x.startTime) < toMinutes(w.end)))
-        .map((x) => ({ id: "w" + Math.random().toString(36).slice(2, 9), date: x.date, start: x.startTime, end: x.endTime, len: 15, place: "office", group: "" }));
+        .map((x) => ({ id: "w" + Math.random().toString(36).slice(2, 9), date: x.date, start: x.startTime, end: x.endTime, len: 15, place: "office", group: "", ...(tnote ? { note: tnote } : {}) }));
       await Promise.all(mine.map((x) => deleteDoc(doc(db, "events", x.id))));
       await saveTithingWindows([...cur, ...adds], `${adds.length} sign-up block${adds.length === 1 ? "" : "s"} added — on the sign-up page now`, mine.map((x) => x.id));
       done();
@@ -881,8 +883,9 @@ function wireEventForm(root, e, canEdit, done) {
       try {
         await ensureSeason();
         const cur = season.windows || [];
+        const tnote = (root.querySelector("#ev-tnote")?.value.trim() || data.notes || "").slice(0, 60); // "Reserved for" box, else the Notes
         const adds = [data.date, ...repeats].filter((d) => !cur.some((w) => w.date === d && toMinutes(w.start) < toMinutes(data.endTime) && toMinutes(data.startTime) < toMinutes(w.end)))
-          .map((d) => ({ id: "w" + Math.random().toString(36).slice(2, 9), date: d, start: data.startTime, end: data.endTime, len: 15, place: "office", group: "", ...(data.notes ? { note: data.notes.slice(0, 60) } : {}) }));
+          .map((d) => ({ id: "w" + Math.random().toString(36).slice(2, 9), date: d, start: data.startTime, end: data.endTime, len: 15, place: "office", group: "", ...(tnote ? { note: tnote } : {}) }));
         const olds = e ? (e.series ? events.filter((x) => x.series === e.series) : [e]) : [];
         await Promise.all(olds.map((x) => deleteDoc(doc(db, "events", x.id))));
         await saveTithingWindows([...cur, ...adds], `${adds.length} sign-up block${adds.length === 1 ? "" : "s"} added — on the sign-up page now`, olds.map((x) => x.id));

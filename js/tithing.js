@@ -1,17 +1,17 @@
 // Tithing declaration sign-ups (2026-10-04) — the bishop's side, its own page
 // ("Tithing Declaration" tab, area key "tithing"): set when you're available, share the link / QR code, and see
 // who signed up. The public page is tithing.html (js/tithing-form.js).
-import { db } from "./firebase-init.js?v=1792388085";
-import { ctx, can } from "./app.js?v=1792388085";
+import { db } from "./firebase-init.js?v=1792388563";
+import { ctx, can } from "./app.js?v=1792388563";
 import {
   collection, doc, onSnapshot, setDoc, updateDoc, writeBatch, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { watchBishopCal, standingEvents } from "./bishop-cal.js?v=1792388085";
-import { openModal, closeModal, toast } from "./ui.js?v=1792388085";
+import { watchBishopCal, standingEvents } from "./bishop-cal.js?v=1792388563";
+import { openModal, closeModal, toast } from "./ui.js?v=1792388563";
 import {
   GROUPS, PLACES, SLOT_LENGTHS, esc, toMin, fmtClock, fmtLongDay, fmtShortDay, slotsOf, slotMap,
   sortWindows, overlaps, newToken, parseSlotId, todayIso, addDays, hhmm, busyFromEvents, sameBusy, offList,
-} from "./tithing-shared.js?v=1792388085";
+} from "./tithing-shared.js?v=1792388563";
 
 let mount = null, season = null, signups = [], unsubSignups = null, started = false, dirty = false;
 let events = null; // the ward calendar (events with cal: "bishop" block sign-up times); null until it loads
@@ -171,7 +171,6 @@ function render() {
       <label>To<input type="time" id="tdf-end" step="300" value="${esc(form.end)}"></label>
       <label>Each visit<select id="tdf-len">${SLOT_LENGTHS.map((n) => opt(n, n + " minutes", form.len)).join("")}</select></label>
       <label>Where<select id="tdf-place">${Object.entries(PLACES).map(([k, p]) => opt(k, p.icon + " " + p.label, form.place)).join("")}</select></label>
-      <label>Set aside for<select id="tdf-group">${opt("", "Anyone", form.group)}${Object.entries(GROUPS).map(([k, g]) => opt(k, g.label, form.group)).join("")}</select></label>
       <label title="Shows on the sign-up page as 'Reserved for …'">Reserved for <small>(optional)</small><input id="tdf-note" maxlength="60" value="${esc(form.note)}" placeholder="e.g. Primary parents"></label>
       <div class="td-rep-wrap" title="Add the same hours on other weeks too"><span class="td-rep-lbl">Repeat on</span><details class="td-rep" id="tdf-rep"${form.repOpen ? " open" : ""}></details></div>
       <button class="btn btn-primary" id="tdf-add" type="button">+ Add</button>
@@ -360,7 +359,7 @@ function render() {
   const read = () => {
     form.date = mount.querySelector("#tdf-date").value; form.start = mount.querySelector("#tdf-start").value; form.end = mount.querySelector("#tdf-end").value;
     form.len = Number(mount.querySelector("#tdf-len").value); form.place = mount.querySelector("#tdf-place").value;
-    form.group = mount.querySelector("#tdf-group").value;
+    form.group = "";
     form.note = mount.querySelector("#tdf-note").value.trim();
   };
   mount.querySelectorAll(".td-add > label input, .td-add > label select").forEach((i) => i.addEventListener("change", read));

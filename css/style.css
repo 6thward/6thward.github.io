@@ -2502,3 +2502,5 @@ tr.us-menu-open td { background: #f7f9fb; }
 .dv-trow input::placeholder { color: #9aa3ad; font-style: italic; }
 .dv-trow.booked input { background: #fff8e6; border-color: #e6c35c; font-weight: 600; }
 .dv-tphone { font-size: .72rem; white-space: nowrap; }
+.dv-block-tag.dv-block-note { top: 18px; background: #fdf1d6; color: #8a5a00; opacity: 1; }
+.dv-item .td-tag-note { display: inline-block; margin: .1rem 0 .1rem; }
