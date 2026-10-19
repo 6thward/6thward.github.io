@@ -2496,3 +2496,9 @@ tr.us-menu-open td { background: #f7f9fb; }
 .dv-pick-mname { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); margin-bottom: .2rem; }
 .dv-pick-days { display: flex; flex-wrap: wrap; gap: .3rem; }
 .dv-pick .wcd-day { width: 2.2rem; padding: .25rem 0; font-size: .9rem; }
+/* tithing block panel: a name box on every time (2026-10-18) */
+.dv-trow { grid-template-columns: 5.2rem 1fr auto; }
+.dv-trow.off { opacity: .75; } .dv-trow.off .row-sub { font-style: italic; }
+.dv-trow input::placeholder { color: #9aa3ad; font-style: italic; }
+.dv-trow.booked input { background: #fff8e6; border-color: #e6c35c; font-weight: 600; }
+.dv-tphone { font-size: .72rem; white-space: nowrap; }
