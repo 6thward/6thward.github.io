@@ -2280,3 +2280,7 @@ tr.us-menu-open td { background: #f7f9fb; }
 .call-card .call-card-line > .row-sub, .call-card > .row-sub:not(:has(.cand-line, .cand-add)), .stake-list .call-card .call-card-line .row-sub { text-transform: none; letter-spacing: 0; font-weight: 400; font-size: .78rem; font-family: Arial, Helvetica, sans-serif; color: #6b7684 !important; }
 /* Organization tag on calling cards: small plain Arial, normal case and weight (2026-10-18) */
 .call-card .call-card-title .call-org-tag { font-family: Arial, Helvetica, sans-serif; font-size: .72rem; font-weight: 400; text-transform: none; letter-spacing: 0; background: rgba(255,255,255,.75); padding: .08rem .45rem; }
+/* Org tag in dark grey; Set apart / MLS labels in Arial (2026-10-18) */
+.call-card .call-card-title .call-org-tag { color: #4b5563 !important; }
+.call-people-col .st-step { font-family: Arial, Helvetica, sans-serif; font-weight: 400; font-size: .7rem; }
+.call-people-col .st-step.on { font-weight: 400; }
