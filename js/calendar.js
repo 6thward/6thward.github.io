@@ -2,14 +2,14 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792376862";
-import { ctx, hasRole, can } from "./app.js?v=1792376862";
+import { db } from "./firebase-init.js?v=1792383753";
+import { ctx, hasRole, can } from "./app.js?v=1792383753";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792376862";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792376862";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792376862";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792383753";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792383753";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792383753";
 
 let events = [];
 let viewYear, viewMonth; // 0-based month
@@ -125,6 +125,7 @@ const iso = (y, m, d) =>
   `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 
 function render() {
+  if (openDay && document.getElementById("dv-grid")) drawDay(); // the open day view follows live changes (2026-10-18)
   const grid = document.getElementById("cal-grid");
   if (!grid) return;
   document.getElementById("cal-title").textContent =
@@ -201,39 +202,251 @@ function render() {
     }));
 }
 
+// ---- the day view: a timeline you drag on (2026-10-18) ----
+// Drag out a stretch of the day, then say what it is: tithing declaration (10 / 15 / 20 / 30-minute
+// visits — members sign up for them), ward council, bishopric meeting, interviews (slots you put a
+// name on), or anything else. Existing events, standing meetings and tithing blocks sit on the same
+// timeline so you can see the whole day at once.
+const DAY_START = 7 * 60, DAY_END = 21 * 60, PX_MIN = 1.15, SNAP = 5;
+const KINDS = [
+  ["tithing", "Tithing declaration", "Members sign up for these times through the link / QR"],
+  ["council", "Ward council", "Goes on the Bishop calendar"],
+  ["bishopric", "Bishopric meeting", "Goes on the Bishop calendar"],
+  ["interviews", "Interviews", "Slots you fill with names yourself"],
+  ["other", "Something else", "Any other appointment on the Bishop calendar"],
+];
+const TITHING_LENS = [10, 15, 20, 30], INTERVIEW_LENS = [10, 15, 20, 30, 60];
+let openDay = null, dvSel = null, dvFocus = null; // the day that's open, the dragged selection, the block being looked at
+const hhmmOf = (min) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
+const snap = (min) => Math.round(min / SNAP) * SNAP;
+const clampDay = (min) => Math.max(DAY_START, Math.min(DAY_END, min));
+
 function dayView(date) {
   if (!date) return;
-  const dayEvents = [...events.filter((e) => e.date === date && showIt(e)), ...standingEvents([date]).filter(showIt), ...(calView !== "ward" ? tithingItems(date) : [])]
-    .sort((a, b) => (a.startTime || "") < (b.startTime || "") ? -1 : 1);
+  openDay = date; dvSel = null; dvFocus = null;
   const el = openModal(`
-    <h3>${fmtDate(date, { year: true })}</h3>
-    ${dayEvents.length ? dayEvents.map((e) => e.tithing ? `
-      <div class="list-row list-row-tithing">
-        <div class="row-main">
-          <div class="row-title">🗓 ${esc(e.title)} <span class="row-sub">${fmtTime(e.startTime)}–${fmtTime(e.endTime)} · ${esc(e.sub)}</span></div>
-          ${e.booked.length ? `<div class="cal-booked">${e.booked.map((b) => `<span><b>${fmtClock(b.min)}</b> ${esc(b.name)}</span>`).join("")}</div>` : `<div class="row-sub">Nobody signed up yet.</div>`}
-        </div>
-      </div>` : `
-      <div class="list-row" data-id="${e.id}">
-        <div class="row-main">
-          <div class="row-title">${calOf(e) === "bishop" ? `<span class="cal-tag cal-tag-bishop">Bishop</span> ` : ""}${esc(e.title)}</div>
-          <div class="row-sub">${e.startTime ? fmtTime(e.startTime) : "All day"}${e.endTime ? "–" + fmtTime(e.endTime) : ""}${e.location ? " · " + esc(e.location) : ""}${e.notes ? " · " + esc(e.notes) : ""}</div>
-        </div>
-      </div>`).join("") : `<div class="empty-note">No events.</div>`}
-    <div class="modal-actions">
-      <div class="right">
-        <button class="btn" id="dv-close">Close</button>
-        <button class="btn btn-primary" id="dv-add">+ Add event</button>
-      </div>
-    </div>`);
-  el.querySelector("#dv-close").addEventListener("click", closeModal);
+    <div class="dv-head"><h3>${fmtDate(date, { year: true })}</h3><span class="row-sub" id="dv-hint">${can("calendar", "edit") ? "Drag across the timeline to add something." : ""}</span></div>
+    <div class="dv-wrap">
+      <div class="dv-grid-wrap"><div class="dv-grid" id="dv-grid"></div></div>
+      <div class="dv-side" id="dv-side"></div>
+    </div>
+    <div class="modal-actions"><div class="right"><button class="btn" id="dv-close">Close</button><button class="btn btn-primary" id="dv-add">+ Add event</button></div></div>`);
+  el.classList.add("modal-wide", "cal-dayview");
+  el.querySelector("#dv-close").addEventListener("click", () => { openDay = null; closeModal(); });
   el.querySelector("#dv-add").addEventListener("click", () => editEvent(null, date));
-  el.querySelectorAll(".list-row[data-id]").forEach((row) =>
-    row.addEventListener("click", () => {
-      if (/^s[cb]:/.test(row.dataset.id)) return can("calendar", "edit") ? editStanding() : undefined;
-      const e = events.find((x) => x.id === row.dataset.id);
-      if (e) editEvent(e);
-    }));
+  drawDay();
+  wireDrag(el.querySelector("#dv-grid"));
+}
+// everything on this day as timeline blocks
+function dayBlocks(date) {
+  const out = [];
+  events.filter((e) => e.date === date && showIt(e)).forEach((e) => out.push({ kind: e.kind === "interviews" ? "interviews" : "event", id: e.id, title: e.title, start: e.startTime ? toMinutes(e.startTime) : null, end: e.endTime ? toMinutes(e.endTime) : (e.startTime ? toMinutes(e.startTime) + 60 : null), cal: calOf(e), ev: e }));
+  standingEvents([date]).filter(showIt).forEach((e) => out.push({ kind: "standing", id: e.id, title: e.title, start: toMinutes(e.startTime), end: toMinutes(e.endTime), cal: "bishop" }));
+  if (season && calView !== "ward") {
+    const slots = slotsOf(season.windows, offList(season)).filter((s) => s.date === date);
+    (season.windows || []).filter((w) => w.date === date).forEach((w) => {
+      const mine = slots.filter((s) => s.win === w.id);
+      out.push({ kind: "tithing", id: w.id, title: "Tithing declaration", start: toMinutes(w.start), end: toMinutes(w.end), cal: "bishop", win: w, slots: mine });
+    });
+  }
+  return out;
+}
+function drawDay() {
+  const grid = document.getElementById("dv-grid"), side = document.getElementById("dv-side");
+  if (!grid || !openDay) return;
+  const date = openDay, blocks = dayBlocks(date);
+  const top = (min) => (min - DAY_START) * PX_MIN, h = (a, b) => Math.max(14, (b - a) * PX_MIN);
+  const hours = [];
+  for (let m = DAY_START; m <= DAY_END; m += 60) hours.push(`<div class="dv-hour" style="top:${top(m)}px"><span>${fmtClock(m).replace(":00", "")}</span></div>`);
+  const timed = blocks.filter((b) => b.start != null);
+  const allDay = blocks.filter((b) => b.start == null);
+  // overlapping blocks share the width side by side
+  timed.sort((a, b) => a.start - b.start);
+  const cols = []; timed.forEach((b) => { let c = cols.findIndex((lastEnd) => lastEnd <= b.start); if (c < 0) { c = cols.length; cols.push(0); } cols[c] = b.end; b.col = c; });
+  const nCols = Math.max(1, cols.length);
+  const blockHtml = (b) => {
+    const style = `top:${top(Math.max(b.start, DAY_START))}px;height:${h(Math.max(b.start, DAY_START), Math.min(b.end, DAY_END))}px;left:calc(${(b.col / nCols) * 100}% + 2px);width:calc(${100 / nCols}% - 4px)`;
+    if (b.kind === "tithing") {
+      const ticks = b.slots.map((s) => { const su = signups[s.id]; return `<div class="dv-slot${su ? " booked" : s.blocked ? " off" : ""}" style="top:${(s.min - b.start) * PX_MIN}px;height:${s.len * PX_MIN}px" title="${fmtClock(s.min)}${su ? " · " + esc(su.name) : s.blocked ? " · blocked" : " · open"}">${su ? `<span>${esc(su.name)}</span>` : ""}</div>`; }).join("");
+      const booked = b.slots.filter((s) => signups[s.id]).length;
+      return `<div class="dv-block dv-tithing${dvFocus === "t:" + b.id ? " dv-focus" : ""}" data-block="t:${esc(b.id)}" style="${style}"><div class="dv-block-title">Tithing declaration <span>${fmtClock(b.start)}–${fmtClock(b.end)} · ${b.win.len} min · ${booked}/${b.slots.filter((s) => !s.blocked || signups[s.id]).length} booked</span></div><div class="dv-slots">${ticks}</div></div>`;
+    }
+    if (b.kind === "interviews") {
+      const len = Number(b.ev.len) || 15, names = b.ev.slots || {}; const ticks = [];
+      for (let m = b.start; m + len <= b.end; m += len) { const k = hhmmOf(m); ticks.push(`<div class="dv-slot${names[k] ? " booked" : ""}" data-islot="${k}" style="top:${(m - b.start) * PX_MIN}px;height:${len * PX_MIN}px" title="${fmtClock(m)}${names[k] ? " · " + esc(names[k]) : " · open — click to add a name"}">${names[k] ? `<span>${esc(names[k])}</span>` : ""}</div>`); }
+      return `<div class="dv-block dv-interviews${dvFocus === "e:" + b.id ? " dv-focus" : ""}" data-block="e:${esc(b.id)}" style="${style}"><div class="dv-block-title">${esc(b.title)} <span>${fmtClock(b.start)}–${fmtClock(b.end)} · ${len} min</span></div><div class="dv-slots">${ticks.join("")}</div></div>`;
+    }
+    const cls = b.kind === "standing" ? "dv-standing" : b.cal === "bishop" ? "dv-bishop" : "dv-ward";
+    return `<div class="dv-block ${cls}" data-block="${b.kind === "standing" ? "s:" : "e:"}${esc(b.id)}" style="${style}" title="${esc(b.title)}"><div class="dv-block-title">${esc(b.title)} <span>${fmtClock(b.start)}–${fmtClock(b.end)}</span></div></div>`;
+  };
+  const selHtml = dvSel ? `<div class="dv-sel" style="top:${top(dvSel.a)}px;height:${h(dvSel.a, dvSel.b)}px"><span>${fmtClock(dvSel.a)} – ${fmtClock(dvSel.b)}</span></div>` : "";
+  grid.style.height = `${(DAY_END - DAY_START) * PX_MIN + 20}px`;
+  grid.innerHTML = `${hours.join("")}<div class="dv-blocks">${timed.map(blockHtml).join("")}${selHtml}</div>`;
+  grid.querySelectorAll("[data-block]").forEach((n) => n.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const [t, id] = [n.dataset.block.slice(0, 1), n.dataset.block.slice(2)];
+    if (t === "s") return can("calendar", "edit") ? editStanding() : undefined;
+    if (t === "t") { dvFocus = "t:" + id; dvSel = null; drawDay(); return; }
+    const ev = events.find((x) => x.id === id);
+    if (ev && ev.kind === "interviews") { const k = e.target.closest("[data-islot]")?.dataset.islot; dvFocus = "e:" + id; dvSel = null; drawDay(); if (k) document.getElementById("dv-side")?.querySelector(`[data-iname="${k}"]`)?.focus(); return; }
+    if (ev) editEvent(ev);
+  }));
+  // the side panel: the designate form while something is selected, a block's details when one is clicked, else the day's list
+  side.innerHTML = dvSel ? designateHtml(date) : dvFocus ? focusHtml(date, blocks) : listHtml(date, blocks, allDay);
+  wireSide(date, blocks);
+}
+function listHtml(date, blocks, allDay) {
+  const all = [...allDay, ...blocks.filter((b) => b.start != null)].sort((a, b) => (a.start ?? -1) - (b.start ?? -1));
+  if (!all.length) return `<div class="empty-note">Nothing on this day yet.${can("calendar", "edit") ? "<br>Drag across the timeline to add something." : ""}</div>`;
+  return `<h4 class="dv-side-h">This day</h4>${all.map((b) => `<div class="dv-item dv-item-${b.kind === "tithing" ? "tithing" : b.kind === "standing" ? "standing" : b.cal}"><b>${esc(b.title)}</b><span class="row-sub">${b.start == null ? "All day" : `${fmtClock(b.start)}–${fmtClock(b.end)}`}${b.kind === "tithing" ? ` · ${b.slots.filter((s) => signups[s.id]).length} booked` : ""}</span></div>`).join("")}`;
+}
+function designateHtml(date) {
+  const kinds = KINDS.filter(([k]) => k !== "tithing" || can("tithing", "edit"));
+  return `<h4 class="dv-side-h">What is this?</h4>
+    <div class="dv-time"><label>From<input type="time" id="dv-start" step="300" value="${hhmmOf(dvSel.a)}"></label><label>To<input type="time" id="dv-end" step="300" value="${hhmmOf(dvSel.b)}"></label></div>
+    <div class="dv-kinds">${kinds.map(([k, l, hint], i) => `<label class="dv-kind${(dvSel.kind || kinds[0][0]) === k ? " on" : ""}"><input type="radio" name="dv-kind" value="${k}"${(dvSel.kind || kinds[0][0]) === k ? " checked" : ""}><span><b>${l}</b><small>${hint}</small></span></label>`).join("")}</div>
+    <div class="dv-opts" id="dv-opts"></div>
+    <div class="dv-form-actions"><button type="button" class="btn" id="dv-cancel">Cancel</button><button type="button" class="btn btn-primary" id="dv-save">Add</button></div>`;
+}
+function optsHtml(kind) {
+  const opt = (v, l, cur) => `<option value="${v}"${String(cur) === String(v) ? " selected" : ""}>${l}</option>`;
+  if (kind === "tithing") return `<label>Each visit<select id="dv-len">${TITHING_LENS.map((n) => opt(n, n + " minutes", dvSel.len || 15)).join("")}</select></label>
+    <label>Where<select id="dv-place"><option value="office">🏛 Bishop's office</option><option value="home">🏠 Home visits</option></select></label>
+    <label>Set aside for<select id="dv-group"><option value="">Anyone</option><option value="families">Families with kids at home</option><option value="widows">Widows</option></select></label>`;
+  if (kind === "interviews") return `<label>Each interview<select id="dv-len">${INTERVIEW_LENS.map((n) => opt(n, n + " minutes", dvSel.len || 15)).join("")}</select></label><label>Label<input id="dv-title" value="Interviews" autocomplete="off"></label>`;
+  if (kind === "other") return `<label>Title<input id="dv-title" placeholder="e.g. Temple recommend — Hansen" autocomplete="off"></label>`;
+  return "";
+}
+function focusHtml(date, blocks) {
+  const [t, id] = [dvFocus.slice(0, 1), dvFocus.slice(2)];
+  const b = blocks.find((x) => (t === "t" ? x.kind === "tithing" : x.kind !== "tithing") && x.id === id);
+  if (!b) { dvFocus = null; return listHtml(date, blocks, []); }
+  if (t === "t") {
+    const w = b.win, booked = b.slots.filter((s) => signups[s.id]);
+    const ed = can("tithing", "edit");
+    return `<h4 class="dv-side-h">Tithing declaration</h4>
+      <div class="row-sub">${fmtClock(b.start)}–${fmtClock(b.end)} · ${w.place === "home" ? "home visits" : "Bishop's office"}${w.group ? " · " + (w.group === "families" ? "families with kids at home" : "widows") : ""}</div>
+      ${ed ? `<div class="dv-opts dv-opts-row"><label>Each visit<select id="dv-f-len">${TITHING_LENS.map((n) => `<option value="${n}"${Number(w.len) === n ? " selected" : ""}>${n} min</option>`).join("")}</select></label>
+        <label>Where<select id="dv-f-place"><option value="office"${w.place !== "home" ? " selected" : ""}>Bishop's office</option><option value="home"${w.place === "home" ? " selected" : ""}>Home visits</option></select></label>
+        <label>For<select id="dv-f-group"><option value=""${!w.group ? " selected" : ""}>Anyone</option><option value="families"${w.group === "families" ? " selected" : ""}>Families</option><option value="widows"${w.group === "widows" ? " selected" : ""}>Widows</option></select></label></div>` : ""}
+      <h4 class="dv-side-h">Signed up <span class="pill pill-role-member">${booked.length}</span></h4>
+      ${booked.length ? booked.map((s) => `<div class="dv-item dv-item-tithing"><b>${fmtClock(s.min)}</b><span>${esc(signups[s.id].name)}${signups[s.id].phone ? ` <span class="row-sub">· ${esc(signups[s.id].phone)}</span>` : ""}</span></div>`).join("") : `<div class="row-sub">Nobody yet.</div>`}
+      <div class="dv-form-actions">${ed ? `<button type="button" class="btn btn-ghost btn-danger" id="dv-f-remove">Remove block</button>` : ""}<button type="button" class="btn" id="dv-back">Back</button></div>`;
+  }
+  const ev = b.ev, len = Number(ev.len) || 15, names = ev.slots || {}, ed = can("calendar", "edit") || ev.createdBy === ctx.uid;
+  const rows = []; for (let m = b.start; m + len <= b.end; m += len) { const k = hhmmOf(m); rows.push(`<label class="dv-irow"><b>${fmtClock(m)}</b><input data-iname="${k}" value="${esc(names[k] || "")}" placeholder="—" autocomplete="off" ${ed ? "" : "disabled"}></label>`); }
+  return `<h4 class="dv-side-h">${esc(ev.title)}</h4><div class="row-sub">${fmtClock(b.start)}–${fmtClock(b.end)} · ${len}-minute slots · type a name on a slot, Enter saves</div>
+    <div class="dv-irows">${rows.join("")}</div>
+    <div class="dv-form-actions">${ed ? `<button type="button" class="btn" id="dv-f-edit">Edit…</button>` : ""}<button type="button" class="btn" id="dv-back">Back</button></div>`;
+}
+function wireSide(date, blocks) {
+  const side = document.getElementById("dv-side"); if (!side) return;
+  side.querySelector("#dv-back")?.addEventListener("click", () => { dvFocus = null; drawDay(); });
+  side.querySelector("#dv-cancel")?.addEventListener("click", () => { dvSel = null; drawDay(); });
+  // designate form
+  if (dvSel) {
+    const opts = side.querySelector("#dv-opts");
+    const kindNow = () => side.querySelector("input[name=dv-kind]:checked")?.value || KINDS[0][0];
+    const redrawOpts = () => { dvSel.kind = kindNow(); opts.innerHTML = optsHtml(dvSel.kind); side.querySelectorAll(".dv-kind").forEach((l) => l.classList.toggle("on", l.querySelector("input").checked)); };
+    side.querySelectorAll("input[name=dv-kind]").forEach((r) => r.addEventListener("change", redrawOpts));
+    redrawOpts();
+    const syncTimes = () => { const a = toMinutes(side.querySelector("#dv-start").value), b = toMinutes(side.querySelector("#dv-end").value); if (b > a) { dvSel.a = a; dvSel.b = b; const g = document.getElementById("dv-grid"); const selEl = g?.querySelector(".dv-sel"); if (selEl) { selEl.style.top = `${(a - DAY_START) * PX_MIN}px`; selEl.style.height = `${(b - a) * PX_MIN}px`; selEl.querySelector("span").textContent = `${fmtClock(a)} – ${fmtClock(b)}`; } } };
+    side.querySelector("#dv-start").addEventListener("change", syncTimes); side.querySelector("#dv-end").addEventListener("change", syncTimes);
+    side.querySelector("#dv-save").addEventListener("click", () => saveDesignation(date, kindNow(), side));
+  }
+  // tithing block details
+  ["#dv-f-len", "#dv-f-place", "#dv-f-group"].forEach((sel) => side.querySelector(sel)?.addEventListener("change", async () => {
+    const id = dvFocus.slice(2);
+    const windows = (season.windows || []).map((w) => w.id === id ? { ...w, len: Number(side.querySelector("#dv-f-len").value), place: side.querySelector("#dv-f-place").value, group: side.querySelector("#dv-f-group").value } : w);
+    await saveTithingWindows(windows, "Updated");
+  }));
+  side.querySelector("#dv-f-remove")?.addEventListener("click", async () => {
+    const id = dvFocus.slice(2), b = blocks.find((x) => x.kind === "tithing" && x.id === id);
+    if (b && b.slots.some((s) => signups[s.id])) return toast("People are signed up in this block — move or cancel them on the Tithing Declaration page first");
+    if (!confirm("Remove this tithing declaration block?")) return;
+    dvFocus = null;
+    await saveTithingWindows((season.windows || []).filter((w) => w.id !== id), "Block removed");
+  });
+  // interview slot names
+  side.querySelectorAll("[data-iname]").forEach((inp) => {
+    const commit = async () => {
+      const id = dvFocus.slice(2), ev = events.find((x) => x.id === id); if (!ev) return;
+      const next = { ...(ev.slots || {}) }; const v = inp.value.trim();
+      if ((next[inp.dataset.iname] || "") === v) return;
+      if (v) next[inp.dataset.iname] = v; else delete next[inp.dataset.iname];
+      try { await updateDoc(doc(db, "events", id), { slots: next, updatedAt: serverTimestamp() }); toast(v ? "Saved" : "Cleared"); } catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
+    };
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); commit(); inp.blur(); } });
+    inp.addEventListener("blur", commit);
+  });
+  side.querySelector("#dv-f-edit")?.addEventListener("click", () => { const ev = events.find((x) => x.id === dvFocus.slice(2)); if (ev) editEvent(ev); });
+}
+// drag on the empty timeline → a selection; release → the designate form
+function wireDrag(grid) {
+  if (!can("calendar", "edit")) return;
+  let startMin = null, moved = false;
+  const minAt = (e) => { const r = grid.getBoundingClientRect(); return clampDay(snap(DAY_START + (e.clientY - r.top + grid.parentElement.scrollTop * 0) / PX_MIN)); };
+  grid.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || e.target.closest("[data-block], .dv-sel")) return;
+    startMin = minAt(e); moved = false; dvFocus = null;
+    dvSel = { a: startMin, b: startMin + SNAP, kind: dvSel?.kind, len: dvSel?.len };
+    grid.setPointerCapture(e.pointerId);
+    drawDay();
+  });
+  grid.addEventListener("pointermove", (e) => {
+    if (startMin == null) return;
+    const m = minAt(e); moved = true;
+    dvSel.a = Math.min(startMin, m); dvSel.b = Math.max(startMin, m);
+    if (dvSel.b - dvSel.a < SNAP) dvSel.b = dvSel.a + SNAP;
+    const selEl = grid.querySelector(".dv-sel");
+    if (selEl) { selEl.style.top = `${(dvSel.a - DAY_START) * PX_MIN}px`; selEl.style.height = `${(dvSel.b - dvSel.a) * PX_MIN}px`; selEl.querySelector("span").textContent = `${fmtClock(dvSel.a)} – ${fmtClock(dvSel.b)}`; }
+  });
+  const finish = () => {
+    if (startMin == null) return;
+    startMin = null;
+    if (!moved || dvSel.b - dvSel.a < 10) dvSel = { ...dvSel, b: Math.min(DAY_END, dvSel.a + 60) }; // a tap gives an hour to start from
+    drawDay();
+    document.getElementById("dv-side")?.querySelector("#dv-start")?.scrollIntoView({ block: "nearest" });
+  };
+  grid.addEventListener("pointerup", finish);
+  grid.addEventListener("pointercancel", finish);
+}
+async function saveDesignation(date, kind, side) {
+  const a = toMinutes(side.querySelector("#dv-start").value), b = toMinutes(side.querySelector("#dv-end").value);
+  if (!(b > a)) return toast("The end has to be after the start");
+  try {
+    if (kind === "tithing") {
+      if (!can("tithing", "edit")) return toast("You can't change tithing declaration times");
+      await ensureSeason();
+      const w = { id: "w" + Math.random().toString(36).slice(2, 9), date, start: hhmmOf(a), end: hhmmOf(b), len: Number(side.querySelector("#dv-len").value), place: side.querySelector("#dv-place").value, group: side.querySelector("#dv-group").value };
+      dvSel = null;
+      await saveTithingWindows([...(season.windows || []), w], "Tithing declaration times added — they're on the sign-up page now");
+      return;
+    }
+    const title = kind === "council" ? "Ward council" : kind === "bishopric" ? "Bishopric meeting" : (side.querySelector("#dv-title")?.value.trim() || (kind === "interviews" ? "Interviews" : ""));
+    if (!title) return toast("Give it a title");
+    const data = { title, date, startTime: hhmmOf(a), endTime: hhmmOf(b), location: "", notes: "", cal: "bishop", createdBy: ctx.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
+    if (kind === "interviews") { data.kind = "interviews"; data.len = Number(side.querySelector("#dv-len").value); data.slots = {}; }
+    dvSel = null;
+    const ref = await addDoc(collection(db, "events"), data);
+    toast(kind === "interviews" ? "Interview block added — click a slot to put a name on it" : "Added to the Bishop calendar");
+    if (kind === "interviews") { dvFocus = "e:" + ref.id; drawDay(); }
+    syncBusy([...events, { ...data, id: ref.id }]);
+  } catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
+}
+// tithing windows live on the season doc; busy + slots are recomputed so the sign-up page stays right
+async function ensureSeason() {
+  if (season) return;
+  const token = Array.from(crypto.getRandomValues(new Uint8Array(12))).map((b) => "abcdefghjkmnpqrstuvwxyz23456789"[b % 31]).join("");
+  await setDoc(doc(db, "tithing", token), { open: true, ward: "6th Ward", note: "", windows: [], slots: {}, created: new Date().toISOString(), createdBy: ctx.name || "", createdAt: serverTimestamp() });
+  season = { token, open: true, windows: [], slots: {}, blocked: [], busy: {} };
+}
+async function saveTithingWindows(windows, msg) {
+  const busy = busyFromEvents(windows, [...events, ...standingEvents(windows.map((w) => w.date))]);
+  await updateDoc(doc(db, "tithing", season.token), { windows, busy, slots: slotMap(windows, [...(season.blocked || []), ...Object.keys(busy)]), updatedAt: serverTimestamp() });
+  season = { ...season, windows, busy };
+  toast(msg);
+  drawDay();
 }
 
 // ward council + bishopric meeting times (settings/bishopCal)
