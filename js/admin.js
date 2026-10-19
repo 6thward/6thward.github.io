@@ -15,14 +15,14 @@
 // whose profile doc carries `alias: <googleUid>` plus a mirror of the name /
 // organization / calling / pages, so the rules see the same access either
 // way. The table shows one row; the mirror is kept in step on every save.
-import { db } from "./firebase-init.js?v=1792375880";
-import { ctx, AREAS, normalizePerms } from "./app.js?v=1792375880";
+import { db } from "./firebase-init.js?v=1792375955";
+import { ctx, AREAS, normalizePerms } from "./app.js?v=1792375955";
 import {
   collection, onSnapshot, updateDoc, setDoc, deleteDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { orgColor } from "./org-colors.js?v=1792375880";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1792375880";
-import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1792375880";
+import { orgColor } from "./org-colors.js?v=1792375955";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1792375955";
+import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1792375955";
 
 let sort = { key: "created", dir: 1 }; // default: oldest at the top; click a header for A→Z / Z→A (2026-09-19)
 let showPastUsers = (() => { try { return localStorage.getItem("sw-users-past") === "1"; } catch { return false; } })(); // Past users folded unless they chose to see them (2026-10-18)
@@ -36,7 +36,7 @@ let started = false;
 const APP_URL = "https://6thward.github.io/";
 // "Last used" is the bishop's eyes only (2026-09-19) — helpers with the Users page don't see it
 const BISHOP_EMAIL = "jordanchri@gmail.com";
-const showLastUsed = () => (ctx.email || "").toLowerCase() === BISHOP_EMAIL;
+const showLastUsed = () => false; // column retired 2026-10-18 (Jordan: no need to show it); was bishop-only via BISHOP_EMAIL
 
 export function initAdmin() {
   if (started) return;
@@ -93,11 +93,15 @@ function permsOf(u) {
   return normalizePerms({});
 }
 const isBishopUser = (u) => u.role === "bishop" || u.email === "jordanchri@gmail.com";
-const accessPills = (perms) => {
+// one count pill by default ("6 pages"); click it to unfold the list, click again to fold (2026-10-18)
+const accOpen = new Set();
+const accessPills = (perms, uid) => {
   const on = AREAS.filter((a) => perms[a.key] === "edit");
   if (!on.length) return `<span class="pill pill-muted">no pages</span>`;
   if (on.length === AREAS.length) return `<span class="pill pill-ok">All pages</span>`;
-  return on.map((a) => `<span class="pill us-pill">${esc(a.label)}</span>`).join(" ");
+  const open = uid && accOpen.has(uid);
+  const toggle = uid ? `<button type="button" class="pill us-pill us-acc-n" data-acc="${esc(uid)}" title="${open ? "Fold the list" : esc(on.map((a) => a.label).join(", "))}">${open ? "▾ " : ""}${on.length} page${on.length === 1 ? "" : "s"}</button>` : "";
+  return toggle + (open ? on.map((a) => `<span class="pill us-pill">${esc(a.label)}</span>`).join(" ") : "");
 };
 // a Google user with a PIN has two sign-in docs — show whichever was used last
 function latestSeen(u) {
@@ -196,7 +200,7 @@ function render() {
       <td class="us-col-phone">${u.phone ? `<span class="row-sub us-phone">${esc(u.phone)}</span>` : ""}</td>
       <td class="us-col-organization"><span class="us-trunc" title="${esc(u.organization || "")}">${esc(u.organization || "")}</span></td>
       <td class="us-col-calling"><span class="us-trunc" title="${esc(u.calling || "")}">${esc(u.calling || "")}</span></td>
-      <td class="us-access"><div class="us-pills">${u.revoked ? `<span class="pill pill-muted">—</span>` : accessPills(permsOf(u))}</div></td>
+      <td class="us-access"><div class="us-pills">${u.revoked ? `<span class="pill pill-muted">—</span>` : accessPills(permsOf(u), id)}</div></td>
       ${showLastUsed() ? `<td class="us-col-lastUsed">${u.invite ? `<span class="row-sub">invited ${fmtSeen(u.invitedAt).replace(/<[^>]+>/g, "")}</span>` : fmtSeen(latestSeen(u))}</td>` : ""}
       <td class="us-actions us-col-menu"><button type="button" class="btn btn-sm us-menu-btn" data-usmenu title="Actions">⋯</button><div class="us-menu" hidden>${items.join("")}</div></td>
     </tr>`;
@@ -210,6 +214,7 @@ function render() {
   tbody.innerHTML = (ordered.length ? ordered.map((g) => { const col = orgColor(g.label); orgCls = "us-org"; orgStyle = ` style="--org:${col};--org-soft:color-mix(in srgb, ${col} 9%, #fff)"`; return `
     <tr class="us-group ${orgCls}"${orgStyle}><td colspan="${cols}"><span class="us-group-name">${esc(g.label || "No organization")}</span><span class="us-group-n">${g.list.length}</span></td></tr>
     ${g.list.map(rowHtml).join("")}`; }).join("") : `<tr><td colspan="${cols}" class="empty-note">Nobody active — everyone is under Past users.</td></tr>`) + (orgCls = "", orgStyle = "", pastHtml);
+  tbody.querySelectorAll("[data-acc]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); const id = b.dataset.acc; accOpen.has(id) ? accOpen.delete(id) : accOpen.add(id); render(); }));
   // ⋯ opens one small menu at a time; any click elsewhere closes it
   const closeMenus = () => tbody.querySelectorAll(".us-menu:not([hidden])").forEach((m) => { m.hidden = true; m.closest("tr").classList.remove("us-menu-open"); });
   tbody.querySelectorAll("[data-usmenu]").forEach((b) => b.addEventListener("click", (e) => {
