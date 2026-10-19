@@ -15,14 +15,14 @@
 // whose profile doc carries `alias: <googleUid>` plus a mirror of the name /
 // organization / calling / pages, so the rules see the same access either
 // way. The table shows one row; the mirror is kept in step on every save.
-import { db } from "./firebase-init.js?v=1792376261";
-import { ctx, AREAS, normalizePerms } from "./app.js?v=1792376261";
+import { db } from "./firebase-init.js?v=1792376293";
+import { ctx, AREAS, normalizePerms } from "./app.js?v=1792376293";
 import {
   collection, onSnapshot, updateDoc, setDoc, deleteDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { orgColor } from "./org-colors.js?v=1792376261";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1792376261";
-import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1792376261";
+import { orgColor } from "./org-colors.js?v=1792376293";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1792376293";
+import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1792376293";
 
 let sort = { key: "created", dir: 1 }; // default: oldest at the top; click a header for A→Z / Z→A (2026-09-19)
 let showPastUsers = (() => { try { return localStorage.getItem("sw-users-past") === "1"; } catch { return false; } })(); // Past users folded unless they chose to see them (2026-10-18)
@@ -99,6 +99,7 @@ const accessPills = (perms, uid) => {
   const on = AREAS.filter((a) => perms[a.key] === "edit");
   if (!on.length) return `<span class="pill pill-muted">no pages</span>`;
   if (on.length === AREAS.length) return `<span class="pill pill-ok">All pages</span>`;
+  if (on.length === 1) return `<span class="pill us-pill" title="${esc(on[0].label)}">${esc(on[0].label.length > 8 ? on[0].label.slice(0, 8).trimEnd() + "…" : on[0].label)}</span>`; // one page: just name it (2026-10-18)
   const open = uid && accOpen.has(uid);
   const toggle = uid ? `<button type="button" class="pill us-pill us-acc-n" data-acc="${esc(uid)}" title="${open ? "Fold the list" : esc(on.map((a) => a.label).join(", "))}">${open ? "▾ " : ""}${on.length} page${on.length === 1 ? "" : "s"}</button>` : "";
   return toggle + (open ? on.map((a) => `<span class="pill us-pill">${esc(a.label)}</span>`).join(" ") : "");
