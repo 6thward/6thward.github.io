@@ -15,14 +15,14 @@
 // whose profile doc carries `alias: <googleUid>` plus a mirror of the name /
 // organization / calling / pages, so the rules see the same access either
 // way. The table shows one row; the mirror is kept in step on every save.
-import { db } from "./firebase-init.js?v=1792373915";
-import { ctx, AREAS, normalizePerms } from "./app.js?v=1792373915";
+import { db } from "./firebase-init.js?v=1792374961";
+import { ctx, AREAS, normalizePerms } from "./app.js?v=1792374961";
 import {
   collection, onSnapshot, updateDoc, setDoc, deleteDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { orgColor } from "./org-colors.js?v=1792373915";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1792373915";
-import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1792373915";
+import { orgColor } from "./org-colors.js?v=1792374961";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1792374961";
+import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1792374961";
 
 let sort = { key: "created", dir: 1 }; // default: oldest at the top; click a header for A→Z / Z→A (2026-09-19)
 let showPastUsers = (() => { try { return localStorage.getItem("sw-users-past") === "1"; } catch { return false; } })(); // Past users folded unless they chose to see them (2026-10-18)
@@ -30,6 +30,7 @@ let users = [];   // profiles (alias PIN docs are folded into their Google row)
 let aliasPins = {}; // googleUid -> the PIN profile doc that aliases it
 let invites = [];
 let pins = {};          // uid -> pin (bishop-only collection)
+let textGroups = [];    // saved recipient sets for the Text tool (2026-10-18): { id, name, uids[] }
 let started = false;
 
 const APP_URL = "https://6thward.github.io/";
@@ -47,7 +48,7 @@ export function initAdmin() {
         <h2>Users</h2>
         <p class="panel-sub">Who can open the app and which pages they see. A page they aren't given doesn't exist for them.</p>
       </div>
-      <button class="btn btn-primary" id="btn-new-user">+ Add user</button>
+      <div style="display:flex;gap:.5rem;align-items:center"><button class="btn" id="btn-text" title="Write a text to the council, an organization, a saved group or individuals — opens in your Messages app">💬 Text</button><button class="btn btn-primary" id="btn-new-user">+ Add user</button></div>
     </div>
     <div class="card">
       <div class="us-wrap">
@@ -58,6 +59,7 @@ export function initAdmin() {
       </div>
     </div>`;
   panel.querySelector("#btn-new-user").addEventListener("click", () => editUser(null));
+  panel.querySelector("#btn-text").addEventListener("click", () => textTool());
   panel.querySelectorAll("[data-sort]").forEach((th) => th.addEventListener("click", () => {
     sort = sort.key === th.dataset.sort ? { key: sort.key, dir: -sort.dir } : { key: th.dataset.sort, dir: 1 };
     render();
@@ -74,6 +76,7 @@ export function initAdmin() {
     invites = qs.docs.map((d) => ({ email: d.id, ...d.data(), invite: true }));
     render();
   }, () => {});
+  onSnapshot(collection(db, "textGroups"), (qs) => { textGroups = qs.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.name || "").localeCompare(b.name || "")); }, () => {});
   onSnapshot(collection(db, "pins"), (qs) => {
     pins = {};
     qs.docs.forEach((d) => { pins[d.id] = d.data().pin; });
@@ -239,6 +242,7 @@ function editUser(u) {
       <label class="field"><span>Name</span><input id="uu-name" value="${esc(u?.name || "")}" placeholder="First and last name" autocomplete="off"></label>
       <label class="field"><span>Organization</span><input id="uu-org" value="${esc(u?.organization || "")}" placeholder="e.g. Relief Society, Elders Quorum, Primary" autocomplete="off" list="dl-orgs"></label>
       <label class="field"><span>Calling</span><input id="uu-calling" value="${esc(u?.calling || "")}" placeholder="e.g. President, Secretary, Ward Clerk" autocomplete="off"></label>
+      <label class="field"><span>Mobile number <span class="row-sub">(for the Text tool)</span></span><input id="uu-phone" type="tel" inputmode="tel" value="${esc(u?.phone || "")}" placeholder="(435) 555-0123" autocomplete="off"></label>
       ${isNew ? `
       <div class="field"><span>How they sign in</span>
         <div class="us-method">
@@ -308,6 +312,7 @@ function editUser(u) {
     const name = el.querySelector("#uu-name").value.trim();
     const organization = el.querySelector("#uu-org").value.trim();
     const calling = el.querySelector("#uu-calling").value.trim();
+    const phone = el.querySelector("#uu-phone").value.trim();
     const newPerms = bishop ? null : readPerms();
     const councilMember = el.querySelector("#uu-council").checked;
     if (councilMember && newPerms) newPerms.council = "edit";
@@ -323,7 +328,7 @@ function editUser(u) {
           if (!validPin(newPin)) throw new Error("PIN must be exactly 6 digits.");
           const uid = await createPinAccount(newPin);
           await setDoc(doc(db, "users", uid), {
-            name, organization, calling, councilMember, role: "pin", perms: newPerms, email: "",
+            name, organization, calling, councilMember, phone, role: "pin", perms: newPerms, email: "",
             createdAt: serverTimestamp(), createdBy: ctx.name || ctx.email || "",
           });
           await setDoc(doc(db, "pins", uid), { pin: newPin, name, updatedAt: serverTimestamp() });
@@ -336,7 +341,7 @@ function editUser(u) {
         if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error("Enter their Google email address.");
         if (users.some((x) => (x.email || "").toLowerCase() === email)) throw new Error("That email already has a profile — edit it in the list.");
         await setDoc(doc(db, "invites", email), {
-          name, organization, calling, councilMember, perms: newPerms, email,
+          name, organization, calling, councilMember, phone, perms: newPerms, email,
           invitedAt: serverTimestamp(), invitedBy: ctx.name || ctx.email || "",
         });
         closeModal();
@@ -345,9 +350,9 @@ function editUser(u) {
         return;
       }
       if (u.invite) {
-        await updateDoc(doc(db, "invites", u.email), { name, organization, calling, councilMember, perms: newPerms });
+        await updateDoc(doc(db, "invites", u.email), { name, organization, calling, councilMember, phone, perms: newPerms });
       } else {
-        const patch = { name, organization, calling, councilMember };
+        const patch = { name, organization, calling, councilMember, phone };
         if (newPerms) { patch.perms = newPerms; if (u.role !== "pin") patch.role = "user"; }
         await updateDoc(doc(db, "users", u.uid), patch);
         if (pins[u.uid]) await updateDoc(doc(db, "pins", u.uid), { name }).catch(() => {});
@@ -498,4 +503,99 @@ function changePin(u) {
       btn.disabled = false; btn.textContent = "Change PIN";
     }
   });
+}
+
+
+// ===== Text tool (2026-10-18) =====
+// Pick who (ward council, an organization, a saved group, or people one by one), write the message,
+// and "Open in Messages" hands it to the phone's own texting app through an sms: link. Nothing is
+// sent by the app itself — it just fills in the numbers and the words.
+const normPhone = (p) => { const d = String(p || "").replace(/\D/g, ""); return d.length === 10 ? "+1" + d : d.length === 11 && d[0] === "1" ? "+" + d : d ? "+" + d : ""; };
+const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+function smsLink(numbers, body) {
+  const nums = numbers.join(",");
+  const q = body ? (isIOS() ? "&" : "?") + "body=" + encodeURIComponent(body) : "";
+  return `sms:${nums}${q}`;
+}
+function textTool() {
+  const people = users.filter((u) => !u.revoked && u.role !== "pending").sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  const orgs = [...new Set(people.map((u) => (u.organization || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const chosen = new Set();
+  let draft = "";
+  const el = openModal(`
+    <h3>Send a text</h3>
+    <p class="row-sub" style="margin:0 0 .6rem">Pick who, write the message, then <b>Open in Messages</b> fills it into your phone's texting app. People without a mobile number on their profile are greyed out.</p>
+    <div class="tx-quick">
+      <span class="row-sub" style="font-weight:700">Add:</span>
+      <button type="button" class="chip" data-q="council">Ward council</button>
+      ${orgs.map((o) => `<button type="button" class="chip" data-q="org" data-org="${esc(o)}" style="--col:${orgColor(o)}">${esc(o)}</button>`).join("")}
+      ${textGroups.map((g) => `<button type="button" class="chip tx-group" data-q="group" data-gid="${esc(g.id)}" title="Saved group">★ ${esc(g.name)}</button>`).join("")}
+      <button type="button" class="chip" data-q="all">Everyone</button>
+      <button type="button" class="chip tx-clear" data-q="none">Clear</button>
+    </div>
+    <input id="tx-filter" class="src-in" placeholder="Find a name…" autocomplete="off" style="margin:.5rem 0 .3rem">
+    <div class="tx-list" id="tx-list"></div>
+    <div class="tx-summary" id="tx-summary"></div>
+    <label class="field" style="margin-top:.7rem">Message
+      <textarea id="tx-body" rows="4" placeholder="Reminder: ward council Sunday at 7:30 in the RS room."></textarea>
+    </label>
+    <div class="tx-actions">
+      <div class="tx-save"><input id="tx-gname" class="src-in" placeholder="Save these people as a group…" autocomplete="off"><button type="button" class="btn btn-sm" id="tx-gsave">Save group</button></div>
+      <div class="right"><button type="button" class="btn" id="tx-copy" title="Copy the numbers and the message — for a computer without Messages">Copy</button><a class="btn btn-primary" id="tx-open" href="#" target="_blank" rel="noopener">Open in Messages</a><button type="button" class="btn" id="tx-close">Close</button></div>
+    </div>`);
+  const list = el.querySelector("#tx-list"), summary = el.querySelector("#tx-summary"), body = el.querySelector("#tx-body"), open = el.querySelector("#tx-open"), filter = el.querySelector("#tx-filter");
+  const withPhone = (u) => !!normPhone(u.phone);
+  const drawList = () => {
+    const q = filter.value.trim().toLowerCase();
+    list.innerHTML = people.filter((u) => !q || (u.name || "").toLowerCase().includes(q)).map((u) => `
+      <label class="tx-row${chosen.has(u.uid) ? " on" : ""}${withPhone(u) ? "" : " tx-nophone"}">
+        <input type="checkbox" data-uid="${esc(u.uid)}" ${chosen.has(u.uid) ? "checked" : ""} ${withPhone(u) ? "" : "disabled"}>
+        <span class="tx-name">${esc(u.name || u.email || "—")}</span>
+        <span class="tx-meta">${esc([u.organization, u.calling].filter(Boolean).join(" · "))}</span>
+        <span class="tx-phone">${withPhone(u) ? esc(u.phone) : "no number"}</span>
+      </label>`).join("") || `<div class="empty-note">Nobody matches.</div>`;
+    list.querySelectorAll("input[data-uid]").forEach((cb) => cb.addEventListener("change", () => { cb.checked ? chosen.add(cb.dataset.uid) : chosen.delete(cb.dataset.uid); draw(); }));
+  };
+  const draw = () => {
+    drawList();
+    const sel = people.filter((u) => chosen.has(u.uid));
+    const nums = sel.map((u) => normPhone(u.phone)).filter(Boolean);
+    summary.innerHTML = sel.length
+      ? `<b>${nums.length}</b> ${nums.length === 1 ? "person" : "people"} selected${sel.length > nums.length ? ` <span class="row-sub">(${sel.length - nums.length} without a number, skipped)</span>` : ""}: <span class="row-sub">${esc(sel.map((u) => (u.name || "").split(" ")[0]).join(", "))}</span>`
+      : `<span class="row-sub">No one selected yet.</span>`;
+    draft = body.value;
+    open.href = nums.length ? smsLink(nums, draft) : "#";
+    open.classList.toggle("btn-disabled", !nums.length);
+    open.title = nums.length ? `Opens Messages with ${nums.length} recipient${nums.length === 1 ? "" : "s"}` : "Pick someone first";
+    if (nums.length > 32) summary.innerHTML += ` <span class="row-sub">Phones cap group texts around 30 — expect Messages to ask you to split this.</span>`;
+  };
+  el.querySelectorAll("[data-q]").forEach((b) => b.addEventListener("click", () => {
+    const q = b.dataset.q;
+    if (q === "none") chosen.clear();
+    else if (q === "all") people.filter(withPhone).forEach((u) => chosen.add(u.uid));
+    else if (q === "council") people.filter((u) => u.councilMember && withPhone(u)).forEach((u) => chosen.add(u.uid));
+    else if (q === "org") people.filter((u) => (u.organization || "").trim().toLowerCase() === b.dataset.org.toLowerCase() && withPhone(u)).forEach((u) => chosen.add(u.uid));
+    else if (q === "group") { const g = textGroups.find((x) => x.id === b.dataset.gid); (g?.uids || []).forEach((uid) => { if (people.some((u) => u.uid === uid && withPhone(u))) chosen.add(uid); }); }
+    draw();
+  }));
+  filter.addEventListener("input", drawList);
+  body.addEventListener("input", draw);
+  el.querySelector("#tx-close").addEventListener("click", closeModal);
+  el.querySelector("#tx-copy").addEventListener("click", async () => {
+    const sel = people.filter((u) => chosen.has(u.uid)); const nums = sel.map((u) => normPhone(u.phone)).filter(Boolean);
+    try { await navigator.clipboard.writeText(`${nums.join(", ")}\n\n${body.value}`); toast("Numbers and message copied"); } catch { toast("Couldn't copy"); }
+  });
+  el.querySelector("#tx-gsave").addEventListener("click", async () => {
+    const name = el.querySelector("#tx-gname").value.trim(); const uids = [...chosen];
+    if (!name) return toast("Give the group a name");
+    if (!uids.length) return toast("Pick some people first");
+    try {
+      const existing = textGroups.find((g) => (g.name || "").toLowerCase() === name.toLowerCase());
+      await setDoc(doc(db, "textGroups", existing ? existing.id : name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "group"), { name, uids, updatedAt: serverTimestamp(), by: ctx.name || "" });
+      toast(existing ? `Group “${name}” updated` : `Group “${name}” saved`);
+      closeModal(); setTimeout(textTool, 50); // redraw with the new chip
+    } catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
+  });
+  open.addEventListener("click", (e) => { if (open.classList.contains("btn-disabled")) { e.preventDefault(); toast("Pick someone first"); } });
+  draw();
 }

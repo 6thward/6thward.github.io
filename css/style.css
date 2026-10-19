@@ -2292,3 +2292,19 @@ tr.us-menu-open td { background: #f7f9fb; }
 .bb-drop .call-card.call-card-v > .call-people.call-people-col { flex: 0 1 auto; max-width: 100%; }
 .call-people-col .call-person-row { justify-content: flex-start; gap: .4rem .6rem; }
 .call-people-col .step-track { margin-left: 0; }
+/* Users → Text tool (2026-10-18) */
+.tx-quick { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+.tx-quick .chip { border-left: 3px solid var(--col, transparent); }
+.tx-quick .tx-group { background: #fdf3da; border-color: #d9a400; }
+.tx-quick .tx-clear { color: var(--ink-soft); }
+.tx-list { max-height: 15rem; overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.tx-row { display: grid; grid-template-columns: auto 1fr auto auto; gap: .5rem; align-items: center; padding: .35rem .6rem; border-top: 1px solid #eef1f4; cursor: pointer; font-size: .92rem; }
+.tx-row:first-child { border-top: none; } .tx-row:hover { background: #f7f9fb; } .tx-row.on { background: #f1f6fb; }
+.tx-row .tx-meta { color: var(--ink-soft); font-size: .78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 14rem; }
+.tx-row .tx-phone { color: var(--ink-soft); font-size: .78rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tx-row.tx-nophone { opacity: .55; cursor: default; } .tx-row.tx-nophone .tx-phone { font-style: italic; }
+.tx-summary { margin-top: .45rem; font-size: .9rem; }
+.tx-actions { display: flex; align-items: center; justify-content: space-between; gap: .6rem; margin-top: .8rem; flex-wrap: wrap; }
+.tx-actions .right { display: flex; gap: .4rem; margin-left: auto; }
+.tx-save { display: flex; gap: .35rem; align-items: center; } .tx-save .src-in { width: 14rem; }
+.btn.btn-disabled { opacity: .5; cursor: not-allowed; }
