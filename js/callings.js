@@ -5,13 +5,13 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1792369938";
+import { db } from "./firebase-init.js?v=1792370004";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1792369938";
-import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1792369938";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1792370004";
+import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1792370004";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
@@ -132,7 +132,18 @@ export function initCallings() {
     items.sort((a, b) => sortKey(a) - sortKey(b));
     render();
   });
+  // the organizations set on the Users page become the suggestions for a calling's Organization (2026-10-18)
+  onSnapshot(collection(db, "users"), (qs) => { userOrgs = qs.docs.map((d) => (d.data().organization || "").trim()).filter(Boolean); }, () => {});
 }
+let userOrgs = [];
+// every organization we know of: the fixed colour list, the Users page, and callings already on the board — A→Z, no repeats
+function knownOrgs() {
+  const seen = new Map();
+  [...Object.keys(ORG_COLORS).filter((k) => k !== "ward").map((k) => k.replace(/\b\w/g, (ch) => ch.toUpperCase())), ...userOrgs, ...items.map((i) => (i.organization || "").trim())]
+    .filter(Boolean).forEach((o) => { const k = o.toLowerCase(); if (!seen.has(k)) seen.set(k, o); });
+  return [...seen.values()].sort((a, b) => a.localeCompare(b));
+}
+const orgDatalist = (id) => `<datalist id="${id}">${knownOrgs().map((o) => `<option value="${esc(o)}"></option>`).join("")}</datalist>`;
 
 // Several people can hold one calling (2026-10-11): `people` lists everyone chosen for the card;
 // `decided` stays as the first of them so older code (and older docs with just a name) keep working.
@@ -298,7 +309,8 @@ function openStake(prefillName = "") {
     <div class="mtg-sec-title" style="margin-top:.9rem">Recommend to the stake</div>
     <div class="form-grid">
       <label class="field"><span>Calling</span><input id="st-calling" placeholder="e.g. Stake Young Women Presidency" autocomplete="off"></label>
-      <label class="field"><span>Organization <span class="row-sub">(optional)</span></span><input id="st-org" placeholder="e.g. Stake" autocomplete="off"></label>
+      <label class="field"><span>Organization <span class="row-sub">(optional)</span></span><input id="st-org" placeholder="e.g. Stake" autocomplete="off" list="dl-orgs-st"></label>
+    ${orgDatalist("dl-orgs-st")}
       <label class="field full"><span>Name</span><input id="st-name" placeholder="Who you're recommending" autocomplete="off" list="dl-needy-st" value="${esc(prefillName)}"></label>
     </div>
     <datalist id="dl-needy-st">${items.filter((i) => i.kind === "member").map((p) => `<option value="${esc(p.name)}"></option>`).join("")}</datalist>
@@ -871,9 +883,10 @@ function editCalling(c) {
         <input id="cl-calling" placeholder="e.g. Primary teacher" value="${esc(c?.calling || "")}">
       </label>
       <label class="field">Organization
-        <input id="cl-org" placeholder="e.g. Primary" value="${esc(c?.organization || "")}">
+        <input id="cl-org" placeholder="e.g. Primary" value="${esc(c?.organization || "")}" list="dl-orgs" autocomplete="off">
       </label>
     </div>
+    ${orgDatalist("dl-orgs")}
     <div class="row-sub" style="margin:.8rem 0 .3rem;font-weight:700">Names being considered <span style="font-weight:400">· ★ = settled on</span></div>
     <div id="cand-rows">${cands.map(candRow).join("")}</div>
     <button class="btn btn-sm" id="cand-add" type="button">+ Add a name</button>
