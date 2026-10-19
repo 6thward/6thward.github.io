@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792386139";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792386139";
+import { db } from "./firebase-init.js?v=1792386175";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792386175";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792386139";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792386139";
-import { openCouncilDate } from "./council.js?v=1792386139";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792386139";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792386175";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792386175";
+import { openCouncilDate } from "./council.js?v=1792386175";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792386175";
 
 let events = [];
 let viewYear, viewMonth; // 0-based month
@@ -166,11 +166,11 @@ function render() {
     html += `
       <div class="cal-cell ${otherMonth ? "other-month" : ""} ${cellDate === today ? "today" : ""}" data-date="${cellDate}">
         <span class="cal-daynum">${displayNum}</span>
-        ${evs.slice(0, 3).map((e) => `
+        ${evs.slice(0, 7).map((e) => `
           <div class="cal-event ${isSunday ? "ev-sunday" : ""}${e.tithing ? " ev-tithing" : calOf(e) === "bishop" ? " ev-bishop" : ""}${e.standing ? " ev-standing" : ""}${e.color ? " ev-colored" : ""}"${evStyle(e)} title="${esc(e.title)}${e.sub ? " · " + esc(e.sub) : ""}">
             ${e.startTime ? fmtTime(e.startTime) + " " : ""}${esc(e.title)}
           </div>`).join("")}
-        ${evs.length > 3 ? `<div class="cal-event">+${evs.length - 3} more</div>` : ""}
+        ${evs.length > 7 ? `<div class="cal-event">+${evs.length - 7} more</div>` : ""}
       </div>`;
   }
   grid.innerHTML = html;
