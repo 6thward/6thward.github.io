@@ -2426,3 +2426,4 @@ tr.us-menu-open td { background: #f7f9fb; }
 .wc-add { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-top: .5rem; }
 .wc-foldall { margin-left: auto; display: inline-flex; gap: .2rem; }
 .wc-foldall .btn { font-size: .78rem; }
+.dv-repeat.hidden { display: none; }

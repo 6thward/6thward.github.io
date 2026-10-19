@@ -8,7 +8,7 @@
 //   "## Name"               → a name card: the lines under it (until the next "## " or a "---" line)
 //                             sit inside a card headed by that name; cards in a row form a group (2026-10-11)
 // The text is stored exactly as typed, so it stays readable anywhere.
-import { esc } from "./ui.js?v=1792385393";
+import { esc } from "./ui.js?v=1792385652";
 
 const MAX_LEVEL = 3;
 const levelOf = (indent) => Math.min(MAX_LEVEL, Math.floor(String(indent || "").replace(/\t/g, "  ").length / 2));

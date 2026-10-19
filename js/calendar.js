@@ -2,14 +2,14 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792385393";
-import { ctx, hasRole, can } from "./app.js?v=1792385393";
+import { db } from "./firebase-init.js?v=1792385652";
+import { ctx, hasRole, can } from "./app.js?v=1792385652";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792385393";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792385393";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792385393";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792385652";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792385652";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792385652";
 
 let events = [];
 let viewYear, viewMonth; // 0-based month
@@ -304,7 +304,7 @@ function designateHtml(date) {
   const kinds = KINDS.filter(([k]) => k !== "tithing" || can("tithing", "edit"));
   return `<h4 class="dv-side-h">What is this?</h4>
     <div class="dv-time"><label>From<input type="time" id="dv-start" step="300" value="${hhmmOf(dvSel.a)}"></label><label>To<input type="time" id="dv-end" step="300" value="${hhmmOf(dvSel.b)}"></label></div>
-    <div class="dv-kinds">${kinds.map(([k, l, hint], i) => `<label class="dv-kind${(dvSel.kind || kinds[0][0]) === k ? " on" : ""}"><input type="radio" name="dv-kind" value="${k}"${(dvSel.kind || kinds[0][0]) === k ? " checked" : ""}><span><b>${l}</b><small>${hint}</small></span></label>`).join("")}</div>
+    <div class="dv-kinds">${kinds.map(([k, l, hint]) => `<label class="dv-kind${dvSel.kind === k ? " on" : ""}"><input type="radio" name="dv-kind" value="${k}"${dvSel.kind === k ? " checked" : ""}><span><b>${l}</b><small>${hint}</small></span></label>`).join("")}</div>
     <div class="dv-opts" id="dv-opts"></div>
     <div class="dv-opts dv-opts-row dv-repeat"><label>Repeat<select id="dv-rep"><option value="0"${!dvSel.rep ? " selected" : ""}>Just this day</option><option value="7"${dvSel.rep === 7 ? " selected" : ""}>Every week</option><option value="14"${dvSel.rep === 14 ? " selected" : ""}>Every 2 weeks</option></select></label><label id="dv-until-wrap"${dvSel.rep ? "" : " hidden"}>Until<input type="date" id="dv-until" value="${esc(dvSel.until || addDaysIso(date, 56))}"></label></div>
     <div class="dv-err hidden" id="dv-err"></div>
@@ -356,8 +356,9 @@ function wireSide(date, blocks) {
   // designate form
   if (dvSel) {
     const opts = side.querySelector("#dv-opts");
-    const kindNow = () => side.querySelector("input[name=dv-kind]:checked")?.value || KINDS[0][0];
-    const redrawOpts = () => { dvSel.kind = kindNow(); opts.innerHTML = optsHtml(dvSel.kind); side.querySelectorAll(".dv-kind").forEach((l) => l.classList.toggle("on", l.querySelector("input").checked)); };
+    const kindNow = () => side.querySelector("input[name=dv-kind]:checked")?.value || "";
+    // nothing is picked to start with: the extra fields (visit length, where, who for) only appear for the kind that needs them
+    const redrawOpts = () => { dvSel.kind = kindNow(); opts.innerHTML = dvSel.kind ? optsHtml(dvSel.kind) : ""; side.querySelectorAll(".dv-kind").forEach((l) => l.classList.toggle("on", l.querySelector("input").checked)); const sv = side.querySelector("#dv-save"); if (sv) sv.disabled = !dvSel.kind; side.querySelector(".dv-repeat")?.classList.toggle("hidden", !dvSel.kind); };
     side.querySelectorAll("input[name=dv-kind]").forEach((r) => r.addEventListener("change", redrawOpts));
     redrawOpts();
     const syncTimes = () => { const a = toMinutes(side.querySelector("#dv-start").value), b = toMinutes(side.querySelector("#dv-end").value); if (b > a) { dvSel.a = a; dvSel.b = b; const g = document.getElementById("dv-grid"); const selEl = g?.querySelector(".dv-sel"); if (selEl) { selEl.style.top = `${(a - DAY_START) * PX_MIN}px`; selEl.style.height = `${(b - a) * PX_MIN}px`; selEl.querySelector("span").textContent = `${fmtClock(a)} – ${fmtClock(b)}`; } } };
@@ -401,7 +402,7 @@ function wireDrag(grid) {
   grid.addEventListener("pointerdown", (e) => {
     if (e.button !== 0 || e.target.closest("[data-block], .dv-sel")) return;
     startMin = minAt(e); moved = false; dvFocus = null;
-    dvSel = { a: startMin, b: startMin + SNAP, kind: dvSel?.kind, len: dvSel?.len };
+    dvSel = { a: startMin, b: startMin + SNAP, kind: "", len: dvSel?.len };
     grid.setPointerCapture(e.pointerId);
     drawDay();
   });
@@ -434,6 +435,7 @@ function repeatDates(date, step, until) {
 }
 async function saveDesignation(date, kind, side) {
   const saveBtn = side.querySelector("#dv-save");
+  if (!kind) return toast("Pick what this is first");
   if (saveBtn?.disabled) return; // already saving
   const a = toMinutes(side.querySelector("#dv-start").value), b = toMinutes(side.querySelector("#dv-end").value);
   if (!(b > a)) return toast("The end has to be after the start");
