@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792387226";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792387226";
+import { db } from "./firebase-init.js?v=1792387254";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792387254";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792387226";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792387226";
-import { openCouncilDate } from "./council.js?v=1792387226";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792387226";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792387254";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792387254";
+import { openCouncilDate } from "./council.js?v=1792387254";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792387254";
 
 let events = [];
 let viewStart; // ISO date of the Sunday the grid starts on — the current week by default, so past weeks aren't shown (2026-10-18)
@@ -58,6 +58,7 @@ export function initCalendar() {
   panel.querySelector("#cal-prev").addEventListener("click", () => shiftMonth(-1));
   panel.querySelector("#cal-next").addEventListener("click", () => shiftMonth(1));
   panel.querySelector("#cal-today").addEventListener("click", () => { viewStart = weekStartOf(todayISO()); render(); });
+  let lastWeeks = gridWeeks(); window.addEventListener("resize", () => { if (gridWeeks() !== lastWeeks) { lastWeeks = gridWeeks(); render(); } });
   panel.querySelector("#btn-new-event").addEventListener("click", () => editEvent(null, todayISO()));
   panel.querySelector("#btn-standing")?.addEventListener("click", editStanding);
   watchBishopCal(() => { render(); if (season) syncBusy(events); });
@@ -123,6 +124,8 @@ function shiftMonth(delta) {
 
 const iso = (y, m, d) =>
   `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+// how many weeks the grid shows: this week + the next three on a desktop (Jordan 10/18); six on a phone, where cells are small
+const gridWeeks = () => (window.innerWidth >= 800 ? 4 : 6);
 const weekStartOf = (isoDate) => { const d = new Date(isoDate + "T12:00:00"); return addDaysIso(isoDate, -d.getDay()); };
 const monthLabel = (isoDate, withYear) => new Date(isoDate + "T12:00:00").toLocaleDateString("en-US", withYear ? { month: "long", year: "numeric" } : { month: "long" });
 
@@ -130,8 +133,9 @@ function render() {
   if (openDay && document.getElementById("dv-grid")) drawDay(); // the open day view follows live changes (2026-10-18)
   const grid = document.getElementById("cal-grid");
   if (!grid) return;
-  const gridDates = Array.from({ length: 42 }, (_, i) => addDaysIso(viewStart, i));
-  const lastDate = gridDates[41];
+  const cells = gridWeeks() * 7;
+  const gridDates = Array.from({ length: cells }, (_, i) => addDaysIso(viewStart, i));
+  const lastDate = gridDates[cells - 1];
   // "October 2026" when the six weeks sit in one month, else "October – November 2026" (or "December 2026 – January 2027")
   document.getElementById("cal-title").textContent =
     viewStart.slice(0, 7) === lastDate.slice(0, 7) ? monthLabel(viewStart, true)
@@ -147,7 +151,6 @@ function render() {
   let html = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
     .map((d) => `<div class="cal-dow">${d}</div>`).join("");
 
-  const cells = 42;
   for (let i = 0; i < cells; i++) {
     const cellDate = gridDates[i];
     const dayNum = Number(cellDate.slice(8));
