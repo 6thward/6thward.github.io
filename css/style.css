@@ -2197,3 +2197,28 @@ tr.us-menu-open td { background: #f7f9fb; }
 #users-table th.us-col-organization, #users-table td.us-col-organization { width: 10%; }
 #users-table th.us-col-calling, #users-table td.us-col-calling { width: 12%; }
 .us-col-email .us-email { font-size: .8rem; }
+/* Callings board, option B (2026-10-18): one frame, tinted title bands, two-dot Set apart / MLS track */
+.callings-wrap { padding: .9rem 1rem 1rem; background: #f3f5f8; border: 1px solid var(--line); border-radius: 14px; }
+.callings-wrap .callings-board { margin-top: 0; }
+.callings-wrap .callings-board > .card { background: #fff; }
+.callings-wrap > h3 + .callings-board > .card:first-child, .callings-wrap .callings-board > .card { margin-top: .6rem !important; }
+.call-card .call-card-title { background: color-mix(in srgb, var(--col) 18%, #fff) !important; color: color-mix(in srgb, var(--col) 68%, #000) !important; }
+.call-card .call-card-title .call-card-org { margin-left: auto; display: inline-flex; align-items: center; gap: .35rem; color: color-mix(in srgb, var(--col) 60%, #000) !important; font-size: .74rem; font-weight: 600; white-space: nowrap; }
+.call-card .call-card-title .call-card-org + .call-del, .call-card .call-card-title .call-card-org + .call-del { margin-left: .4rem; }
+.call-org-dot { width: .55rem; height: .55rem; border-radius: 50%; background: var(--col); display: inline-block; }
+.call-card .call-card-title .call-del { color: inherit; opacity: .5; }
+.call-card .call-card-title .call-del:hover { background: rgba(0,0,0,.1); }
+.call-card { background: #fff !important; border-color: color-mix(in srgb, var(--col) 35%, #fff) !important; border-left-width: 1px !important; }
+.step-track { display: grid; grid-template-columns: auto 1fr auto; grid-template-rows: auto auto; align-items: center; column-gap: .35rem; margin: .35rem .2rem 0 .4rem; max-width: 12rem; }
+.step-track-1 { grid-template-columns: auto; }
+.st-dot, .st-lbl { font: inherit; background: none; border: none; padding: 0; cursor: pointer; }
+.st-dot { width: .95rem; height: .95rem; border-radius: 50%; border: 2px solid #b3bac4; background: #fff; }
+.st-dot:hover { border-color: var(--brand); }
+.st-dot.on { background: #2e7d4f; border-color: #2e7d4f; box-shadow: inset 0 0 0 2px #fff; }
+.st-seg { height: 2px; background: #d9dee4; } .st-seg.on { background: #2e7d4f; }
+.st-lbl { grid-row: 2; font-size: .7rem; color: #8a94a1; text-align: left; margin-top: .1rem; }
+.st-lbl:hover { color: var(--brand); }
+.st-lbl.on { color: #22693f; font-weight: 700; }
+.st-lbl.r { grid-column: 3; text-align: right; }
+.step-track-1 .st-lbl { grid-column: 1; }
+.call-people-col .step-track { margin-top: .15rem; }

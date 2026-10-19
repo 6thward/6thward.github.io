@@ -5,13 +5,13 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1792370423";
+import { db } from "./firebase-init.js?v=1792370556";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1792370423";
-import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1792370423";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1792370556";
+import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1792370556";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
@@ -265,7 +265,7 @@ const fillRow = (c) => {
   const addBox = `<input class="cand-add" data-addcand="${c.id}" placeholder="${cands.length ? "+ Add another name" : "+ Add a name to consider"}" autocomplete="off" aria-label="Add a name to consider for ${esc(c.calling)}">`;
   return `
   <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
-    <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}${c.organization ? ` <span class="call-card-org">· ${esc(c.organization)}</span>` : ""}${delBtn(c)}</div>
+    ${titleBand(c)}
     <div class="row-sub">${sub}${addBox}</div>
     ${(c.people || []).length ? `<div class="call-card-line"><span class="row-sub">${c.people.length === 1 ? "1 name chosen" : c.people.length + " names chosen"}</span><button class="btn btn-sm btn-primary" data-issue="${c.id}" type="button" title="Move to Calls to Issue with the starred name${c.people.length === 1 ? "" : "s"}">Issue call${c.people.length === 1 ? "" : "s"} →</button></div>` : ""}
   </div>`;
@@ -278,11 +278,18 @@ const peoplePills = (c, extra) => {
   return `<div class="call-people${extra ? " call-people-col" : ""}">${names.map((n) => `<div class="call-person-row"><span class="call-person" draggable="true" data-person="${esc(n)}" title="${many ? "Drag just this person to another column — the others stay here" : "Drag the card to move it along"}">${esc(n)}</span>${extra ? extra(n) : ""}</div>`).join("")}</div>`;
 };
 
+// title band (option B, 2026-10-18): soft tint of the organization colour with dark text; org as a dot + name on the right
+const titleBand = (c, del = true) => `<div class="call-card-title">${esc(c.calling)}${c.organization ? `<span class="call-card-org"><i class="call-org-dot"></i>${esc(c.organization)}</span>` : ""}${del ? delBtn(c) : ""}</div>`;
+// Set apart / MLS as a two-dot progress track under each name (option B, 2026-10-18); dots and labels both toggle
+const stepTrack = (steps) => `<div class="step-track step-track-${steps.length}">
+  ${steps.map((st, i) => `${i ? `<span class="st-seg${steps[i - 1].on && st.on ? " on" : ""}"></span>` : ""}<button type="button" class="st-dot${st.on ? " on" : ""}" ${st.attrs} title="${esc(st.title)}"></button>`).join("")}
+  ${steps.map((st, i) => `<button type="button" class="st-lbl${st.on ? " on" : ""}${i === steps.length - 1 && steps.length > 1 ? " r" : ""}" ${st.attrs} title="${esc(st.title)}">${esc(st.label)}</button>`).join("")}
+</div>`;
 // small ✕ in the title band deletes the calling (with a confirm) — 2026-09-20
 const delBtn = (c) => `<span class="call-del" data-del="${c.id}" title="Delete this calling" role="button">✕</span>`;
 const issueRow = (c) => `
   <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
-    <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}${delBtn(c)}</div>
+    ${titleBand(c)}
     ${peoplePills(c)}
     ${stampAction("Decided", c.stamps?.issue, `<button class="btn btn-sm" data-adv="sustain" type="button" title="${esc(namesOf(c).join(", "))} accepted the call">Accepted</button>`)}
   </div>`;
@@ -295,7 +302,7 @@ function openStake(prefillName = "") {
   const rec = stakes.filter((c) => c.stage === "recommend"), called = stakes.filter((c) => c.stage === "called");
   const card = (c, action) => `
     <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
-      <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}${c.organization ? ` <span class="call-card-org">· ${esc(c.organization)}</span>` : ""}<span class="call-del" data-sdel="${c.id}" title="Delete" role="button">✕</span></div>
+      <div class="call-card-title">${esc(c.calling)}${c.organization ? `<span class="call-card-org"><i class="call-org-dot"></i>${esc(c.organization)}</span>` : ""}<span class="call-del" data-sdel="${c.id}" title="Delete" role="button">✕</span></div>
       <div class="row-title">${esc(c.name || "—")}</div>
       ${action}
     </div>`;
@@ -346,18 +353,18 @@ function openStake(prefillName = "") {
 
 const sustainRow = (c) => `
   <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
-    <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}${delBtn(c)}</div>
+    ${titleBand(c)}
     ${peoplePills(c)}
     ${stampAction("Accepted", c.stamps?.sustain, `<button class="btn btn-sm" data-adv="apart" type="button">Sustained →</button>`)}
   </div>`;
 
 const apartRow = (c) => `
   <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
-    <div class="call-card-title" style="color:${callColor(c.calling, c.organization)}">${esc(c.calling)}${delBtn(c)}</div>
-    ${peoplePills(c, (n) => { const d = doneOf(c, n); return `<div class="step-pills">
-      <button class="step-pill${d.setApart ? " on" : ""}" data-ptoggle="setApart" data-pname="${esc(n)}" type="button" title="${d.setApart ? "Set apart — click to undo" : "Click when " + esc(n) + " is set apart"}">${d.setApart ? "✓" : "○"} Set apart</button>
-      <button class="step-pill${d.mlsDone ? " on" : ""}" data-ptoggle="mlsDone" data-pname="${esc(n)}" type="button" title="${d.mlsDone ? "Updated in MLS — click to undo" : "Click when " + esc(n) + " is updated in MLS"}">${d.mlsDone ? "✓" : "○"} MLS</button>
-    </div>`; })}
+    ${titleBand(c)}
+    ${peoplePills(c, (n) => { const d = doneOf(c, n); return stepTrack([
+      { on: !!d.setApart, label: "Set apart", attrs: `data-ptoggle="setApart" data-pname="${esc(n)}"`, title: d.setApart ? "Set apart — click to undo" : `Click when ${n} is set apart` },
+      { on: !!d.mlsDone, label: "MLS", attrs: `data-ptoggle="mlsDone" data-pname="${esc(n)}"`, title: d.mlsDone ? "Updated in MLS — click to undo" : `Click when ${n} is updated in MLS` },
+    ]); })}
     ${stampLine("Sustained", c.stamps?.apart)}
   </div>`;
 
@@ -365,11 +372,11 @@ const apartRow = (c) => `
 // column the MLS tick completes and archives it.
 const releaseRow = (r) => `
   <div class="list-row call-card call-card-v" data-id="${r.id}" ${cardStyle(r.calling || r.name)}>
-    ${r.calling ? `<div class="call-card-title" style="color:${callColor(r.calling)}">${esc(r.calling)}</div>` : ""}
+    ${r.calling ? `<div class="call-card-title">${esc(r.calling)}</div>` : ""}
     <div class="row-title">${esc(r.name)}</div>
     ${r.notes ? `<div class="row-sub">${esc(r.notes.slice(0, 90))}</div>` : ""}
     ${stampLine(REL_STAGES.find(([k]) => k === r.stage)?.[1] || "", r.stamps?.[r.stage])}
-    ${r.stage === "released" ? `<div class="step-pills"><button class="step-pill" data-adv="done" type="button" title="Recorded in MLS — completes and archives this release">○ Updated in MLS</button></div>` : ""}
+    ${r.stage === "released" ? stepTrack([{ on: false, label: "Updated in MLS", attrs: `data-adv="done"`, title: "Recorded in MLS — completes and archives this release" }]) : ""}
   </div>`;
 
 // gender colours the "Needs calling" pill — blue for brothers, pink for
@@ -444,8 +451,10 @@ function render() {
       <p class="row-sub" style="margin:0 0 .3rem">Names under consideration — star one to decide.${groups.length ? " Drag a calling into a grouping." : ""}</p>
       ${fillCards.length || groups.length ? groups.map(fillSection).join("") + fillSection(null) : `<div class="bb-drop" data-stage="fill" data-group=""><div class="empty-note">Nothing waiting to be filled.</div></div>`}
     </div>`;
+  const inFlight = items.filter((i) => i.kind !== "stake" && i.kind !== "release" && i.kind !== "member" && i.stage !== "done" && CALL_BACK.some(([k]) => k === i.stage)).length;
   wrap.innerHTML =
-    `<div class="bishopric-board">` +
+    `<div class="callings-wrap"><h3 style="margin:0;display:flex;align-items:center;gap:.5rem">Callings <span class="pill pill-role-member">${inFlight}</span></h3>` + // the four stages sit in one framed group (option B, 2026-10-18)
+    `<div class="bishopric-board callings-board">` +
     fillBody +
     bucket("Calls to Issue", "Name decided — extend the call.",
       by("issue").map(issueRow), "No calls waiting to be issued.", "issue") +
@@ -453,7 +462,7 @@ function render() {
       by("sustain").map(sustainRow), "No one waiting to be sustained.", "sustain") +
     bucket("Set Apart & MLS", "Tick Set apart and MLS as each happens — when both are ticked the calling is complete and archives.",
       by("apart").map(apartRow), "No one waiting to be set apart.", "apart") +
-    `</div>` +
+    `</div></div>` +
 
     `<div class="releases-wrap"><h3 style="margin:0;display:flex;align-items:center;gap:.5rem">Releases <span class="pill pill-role-member">${releases.filter((r) => r.stage !== "done").length}</span></h3>` + // the three release steps sit in one framed group (2026-10-11)
     `<div class="bishopric-board releases-board">` +
