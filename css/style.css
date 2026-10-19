@@ -2317,3 +2317,9 @@ tr.us-menu-open td { background: #f7f9fb; }
 .us-acc-n:hover { border-color: var(--brand); color: var(--brand); }
 #users-table th.us-col-organization, #users-table td.us-col-organization { width: 12%; }
 #users-table th.us-col-calling, #users-table td.us-col-calling { width: 15%; }
+/* Users: mobile number edits in the cell (2026-10-18) */
+.us-phone-ed { font: inherit; font-size: .8rem; font-variant-numeric: tabular-nums; background: none; border: none; padding: .1rem .2rem; margin: -.1rem -.2rem; border-radius: 6px; color: var(--ink-soft); cursor: text; }
+.us-phone-ed:hover { background: #eef1f4; color: var(--ink); }
+.us-phone-add { font: inherit; width: 1.5rem; height: 1.5rem; border-radius: 6px; border: 1px dashed #c3c9d1; background: #fff; color: #9aa4b1; cursor: pointer; line-height: 1; padding: 0; }
+.us-phone-add:hover { border-color: var(--brand); color: var(--brand); }
+.us-phone-in { font: inherit; font-size: .85rem; width: 8rem; padding: .2rem .4rem; border: 1px solid var(--brand); border-radius: 6px; }

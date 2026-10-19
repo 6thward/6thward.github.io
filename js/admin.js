@@ -15,14 +15,14 @@
 // whose profile doc carries `alias: <googleUid>` plus a mirror of the name /
 // organization / calling / pages, so the rules see the same access either
 // way. The table shows one row; the mirror is kept in step on every save.
-import { db } from "./firebase-init.js?v=1792375955";
-import { ctx, AREAS, normalizePerms } from "./app.js?v=1792375955";
+import { db } from "./firebase-init.js?v=1792376261";
+import { ctx, AREAS, normalizePerms } from "./app.js?v=1792376261";
 import {
   collection, onSnapshot, updateDoc, setDoc, deleteDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { orgColor } from "./org-colors.js?v=1792375955";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1792375955";
-import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1792375955";
+import { orgColor } from "./org-colors.js?v=1792376261";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1792376261";
+import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1792376261";
 
 let sort = { key: "created", dir: 1 }; // default: oldest at the top; click a header for A→Z / Z→A (2026-09-19)
 let showPastUsers = (() => { try { return localStorage.getItem("sw-users-past") === "1"; } catch { return false; } })(); // Past users folded unless they chose to see them (2026-10-18)
@@ -197,7 +197,7 @@ function render() {
       <td class="us-col-council">${u.councilMember ? `<span class="pill us-council-pill" title="Ward council member">Council</span>` : ""}</td>
       <td class="us-col-signin">${signInPill(u)}</td>
       <td class="us-col-email">${email ? `<span class="row-sub us-email" title="${esc(email)}">${esc(email)}</span>` : ""}</td>
-      <td class="us-col-phone">${u.phone ? `<span class="row-sub us-phone">${esc(u.phone)}</span>` : ""}</td>
+      <td class="us-col-phone">${u.phone ? `<button type="button" class="us-phone us-phone-ed" data-phone="${esc(id)}" title="Click to change">${esc(u.phone)}</button>` : `<button type="button" class="us-phone-add" data-phone="${esc(id)}" title="Add a mobile number">+</button>`}</td>
       <td class="us-col-organization"><span class="us-trunc" title="${esc(u.organization || "")}">${esc(u.organization || "")}</span></td>
       <td class="us-col-calling"><span class="us-trunc" title="${esc(u.calling || "")}">${esc(u.calling || "")}</span></td>
       <td class="us-access"><div class="us-pills">${u.revoked ? `<span class="pill pill-muted">—</span>` : accessPills(permsOf(u), id)}</div></td>
@@ -214,6 +214,28 @@ function render() {
   tbody.innerHTML = (ordered.length ? ordered.map((g) => { const col = orgColor(g.label); orgCls = "us-org"; orgStyle = ` style="--org:${col};--org-soft:color-mix(in srgb, ${col} 9%, #fff)"`; return `
     <tr class="us-group ${orgCls}"${orgStyle}><td colspan="${cols}"><span class="us-group-name">${esc(g.label || "No organization")}</span><span class="us-group-n">${g.list.length}</span></td></tr>
     ${g.list.map(rowHtml).join("")}`; }).join("") : `<tr><td colspan="${cols}" class="empty-note">Nobody active — everyone is under Past users.</td></tr>`) + (orgCls = "", orgStyle = "", pastHtml);
+  // mobile number edits right in the cell (2026-10-18): + or the number → input; Enter / blur saves, Esc cancels
+  tbody.querySelectorAll("[data-phone]").forEach((b) => b.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const u = find(b.dataset.phone); if (!u) return;
+    const td = b.closest("td"), initial = u.phone || "";
+    td.innerHTML = `<input class="us-phone-in" type="tel" inputmode="tel" placeholder="(435) 555-0123" autocomplete="off">`;
+    const inp = td.querySelector("input"); inp.value = initial; inp.focus(); inp.select();
+    let done = false;
+    const finish = async (commit) => {
+      if (done) return; done = true;
+      const v = inp.value.trim();
+      if (commit && v !== initial) {
+        try {
+          await updateDoc(doc(db, u.invite ? "invites" : "users", u.invite ? u.email : u.uid), { phone: v });
+          toast(v ? "Number saved" : "Number removed");
+        } catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
+      }
+      render();
+    };
+    inp.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); finish(true); } if (ev.key === "Escape") { ev.preventDefault(); finish(false); } });
+    inp.addEventListener("blur", () => setTimeout(() => finish(true), 80));
+  }));
   tbody.querySelectorAll("[data-acc]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); const id = b.dataset.acc; accOpen.has(id) ? accOpen.delete(id) : accOpen.add(id); render(); }));
   // ⋯ opens one small menu at a time; any click elsewhere closes it
   const closeMenus = () => tbody.querySelectorAll(".us-menu:not([hidden])").forEach((m) => { m.hidden = true; m.closest("tr").classList.remove("us-menu-open"); });
