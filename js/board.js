@@ -3,14 +3,14 @@
 // added, renamed, reordered and removed. Data:
 //   boardColumns/{id}  { label, order }
 //   board/{id}         { name, notes, column, order, createdAt, updatedAt }
-import { db } from "./firebase-init.js?v=1792384940";
-import { goTab, ctx, can } from "./app.js?v=1792384940";
+import { db } from "./firebase-init.js?v=1792385317";
+import { goTab, ctx, can } from "./app.js?v=1792385317";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openCaseById } from "./sr-cases.js?v=1792384940";
-import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1792384940";
-import { notesHtml, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1792384940";
+import { openCaseById } from "./sr-cases.js?v=1792385317";
+import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1792385317";
+import { notesHtml, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1792385317";
 
 // Next ordinance a person is working toward — shown as a pill beside the name.
 const ORDINANCES = ["Sacrament", "Aaronic Priesthood", "Melchizedek Priesthood", "Endowment", "Sealing"];

@@ -2418,3 +2418,4 @@ tr.us-menu-open td { background: #f7f9fb; }
 .wcd-quick-menu button:hover { background: var(--brand-soft); color: var(--brand); }
 .wcd-quick-menu button.danger { color: var(--danger); } .wcd-quick-menu button.danger:hover { background: #fdf0ee; }
 .dv-opts label[hidden] { display: none; } /* Until only shows once a repeat is chosen (2026-10-18) */
+.dv-err { margin-top: .6rem; padding: .5rem .7rem; background: #fdf0ee; border: 1px solid #f1c9c2; border-radius: 8px; color: var(--danger); font-size: .85rem; white-space: pre-wrap; }
