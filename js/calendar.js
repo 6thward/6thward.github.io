@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792386653";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792386653";
+import { db } from "./firebase-init.js?v=1792386707";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792386707";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792386653";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792386653";
-import { openCouncilDate } from "./council.js?v=1792386653";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792386653";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792386707";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792386707";
+import { openCouncilDate } from "./council.js?v=1792386707";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792386707";
 
 let events = [];
 let viewYear, viewMonth; // 0-based month
@@ -185,13 +185,21 @@ function render() {
   const up = [...events.filter(showIt), ...standingEvents(soon).filter(showIt), ...(calView !== "ward" && season ? (season.windows || []).filter((w) => w.date >= today && w.date <= horizonISO).flatMap((w) => tithingItems(w.date).filter((t) => t.id === "t:" + w.id)) : [])]
     .filter((e) => e.date >= today && e.date <= horizonISO)
     .sort((a, b) => (a.date + (a.startTime || "")) < (b.date + (b.startTime || "")) ? -1 : 1);
+  // grouped by day (2026-10-18): a date heading, then that day's items in a compact column
+  const byDay = [];
+  up.forEach((e) => { const g = byDay[byDay.length - 1]; if (g && g.date === e.date) g.items.push(e); else byDay.push({ date: e.date, items: [e] }); });
+  const dayLabel = (d) => d === today ? "Today" : d === addDaysIso(today, 1) ? "Tomorrow" : fmtDate(d);
   document.getElementById("upcoming-list").innerHTML = up.length
-    ? up.map((e) => `
-      <div class="list-row${e.tithing ? " list-row-tithing" : ""}${e.color ? " list-row-colored" : ""}" data-id="${e.id}"${evStyle(e)}>
-        <div class="row-main">
-          <div class="row-title">${e.tithing ? "🗓 " : calOf(e) === "bishop" ? `<span class="cal-tag cal-tag-bishop"${evStyle(e)}>Bishop</span> ` : ""}${esc(e.title)}</div>
-          <div class="row-sub">${fmtDate(e.date)}${e.startTime ? " · " + fmtTime(e.startTime) : ""}${e.endTime ? "–" + fmtTime(e.endTime) : ""}${e.location ? " · " + esc(e.location) : ""}${e.sub ? " · " + esc(e.sub) : ""}</div>
-        </div>
+    ? byDay.map((g) => `
+      <div class="up-day">
+        <div class="up-day-h"><b>${esc(dayLabel(g.date))}</b><span class="row-sub">${esc(new Date(g.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long" }))}</span></div>
+        ${g.items.map((e) => `
+        <div class="list-row up-row${e.tithing ? " list-row-tithing" : ""}${e.color ? " list-row-colored" : ""}" data-id="${e.id}"${evStyle(e)}>
+          <div class="row-main">
+            <div class="row-title">${e.tithing ? "🗓 " : calOf(e) === "bishop" ? `<span class="cal-tag cal-tag-bishop"${evStyle(e)}>Bishop</span> ` : ""}${esc(e.title)}</div>
+            <div class="row-sub">${e.startTime ? fmtTime(e.startTime) : "All day"}${e.endTime ? "–" + fmtTime(e.endTime) : ""}${e.location ? " · " + esc(e.location) : ""}${e.sub ? " · " + esc(e.sub) : ""}</div>
+          </div>
+        </div>`).join("")}
       </div>`).join("")
     : `<div class="empty-note">Nothing on the calendar for the next 30 days.</div>`;
   document.querySelectorAll("#upcoming-list .list-row").forEach((row) =>

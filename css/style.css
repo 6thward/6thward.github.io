@@ -2460,3 +2460,10 @@ tr.us-menu-open td { background: #f7f9fb; }
 .dv-block.dv-movable:active { cursor: grabbing; }
 .dv-resize { position: absolute; left: 0; right: 0; bottom: 0; height: 7px; cursor: ns-resize; border-radius: 0 0 8px 8px; }
 .dv-resize:hover { background: rgba(0,0,0,.12); }
+/* Coming up: grouped by day, narrower (2026-10-18) */
+#upcoming-list { max-width: 44rem; }
+.up-day { margin-bottom: .9rem; }
+.up-day-h { display: flex; align-items: baseline; gap: .5rem; padding: .25rem 0 .3rem; border-bottom: 2px solid var(--brand); margin-bottom: .3rem; }
+.up-day-h b { font-size: .95rem; color: var(--brand); }
+.up-row { padding: .4rem .6rem; }
+.up-row .row-title { font-size: .95rem; } .up-row .row-sub { font-size: .8rem; }
