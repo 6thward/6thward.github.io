@@ -5,13 +5,13 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1792371130";
+import { db } from "./firebase-init.js?v=1792371603";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1792371130";
-import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1792371130";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1792371603";
+import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1792371603";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
@@ -267,7 +267,7 @@ const fillRow = (c) => {
   <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
     ${titleBand(c)}
     <div class="row-sub">${sub}${addBox}</div>
-    ${(c.people || []).length ? `<div class="call-card-line"><span class="row-sub">${c.people.length === 1 ? "1 name chosen" : c.people.length + " names chosen"}</span><button class="btn btn-sm btn-primary" data-issue="${c.id}" type="button" title="Move to Calls to Issue with the starred name${c.people.length === 1 ? "" : "s"}">Issue call${c.people.length === 1 ? "" : "s"} →</button></div>` : ""}
+    ${(c.people || []).length ? `<div class="call-card-line"><span class="row-sub">${c.people.length === 1 ? "1 name chosen" : c.people.length + " names chosen"}</span><button class="btn btn-sm btn-primary call-arrow" data-issue="${c.id}" type="button" title="Issue the call${c.people.length === 1 ? "" : "s"} — move to Calls to Issue with the starred name${c.people.length === 1 ? "" : "s"}" aria-label="Issue call">→</button></div>` : ""}
   </div>`;
 };
 // the people on a card, each a pill of its own; with more than one, a pill can be dragged on by itself
@@ -275,7 +275,7 @@ const peoplePills = (c, extra) => {
   const names = namesOf(c);
   if (!names.length) return `<div class="row-title">—</div>`;
   const many = names.length > 1;
-  return `<div class="call-people${extra ? " call-people-col" : ""}">${names.map((n) => `<div class="call-person-row"><span class="call-person${many ? "" : " call-solo"}" draggable="true" data-person="${esc(n)}" title="${many ? "Drag just this person to another column — the others stay here" : "Drag the card to move it along"}">${esc(n)}</span>${extra ? extra(n) : ""}</div>`).join("")}</div>`; // one name shows plain, several show as pills (style D, 2026-10-18)
+  return `<div class="call-people${extra ? " call-people-col" : ""}">${names.map((n) => `<div class="call-person-row"><span class="call-person" draggable="true" data-person="${esc(n)}" title="${many ? "Drag just this person to another column — the others stay here" : "Drag the card to move it along"}">${esc(n)}</span>${extra ? extra(n) : ""}</div>`).join("")}</div>`; // every name is a chip, lone ones too (2026-10-18)
 };
 
 // title band (option B, 2026-10-18): soft tint of the organization colour with dark text; org as a dot + name on the right
@@ -288,7 +288,7 @@ const issueRow = (c) => `
   <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
     ${titleBand(c)}
     ${peoplePills(c)}
-    ${stampAction("Decided", c.stamps?.issue, `<button class="btn btn-sm" data-adv="sustain" type="button" title="${esc(namesOf(c).join(", "))} accepted the call">Accepted</button>`)}
+    ${stampAction("Decided", c.stamps?.issue, `<button class="btn btn-sm call-arrow" data-adv="sustain" type="button" title="${esc(namesOf(c).join(", "))} accepted — move to Calls to Sustain" aria-label="Accepted — move to Calls to Sustain">→</button>`)}
   </div>`;
 
 // Stake pop-up (2026-09-20): stake callings have their own two-step flow
@@ -352,7 +352,7 @@ const sustainRow = (c) => `
   <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
     ${titleBand(c)}
     ${peoplePills(c)}
-    ${stampAction("Accepted", c.stamps?.sustain, `<button class="btn btn-sm" data-adv="apart" type="button">Sustained →</button>`)}
+    ${stampAction("Accepted", c.stamps?.sustain, `<button class="btn btn-sm call-arrow" data-adv="apart" type="button" title="Sustained — move to Set Apart & MLS" aria-label="Sustained — move to Set Apart & MLS">→</button>`)}
   </div>`;
 
 const apartRow = (c) => `

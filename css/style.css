@@ -2233,3 +2233,9 @@ tr.us-menu-open td { background: #f7f9fb; }
 .bb-col > h3 .btn { text-transform: none; letter-spacing: 0; }
 .bb-col > p.row-sub { font-size: .64rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #8a94a1; }
 .cand-line .cand-name-txt { font-weight: 600; }
+/* Callings: small arrow buttons in place of Accepted / Sustained / Issue call (2026-10-18); soft blue, solid for Issue call */
+.call-card .call-card-line .btn.call-arrow { width: 1.7rem; height: 1.7rem; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; font-size: 1rem; line-height: 1; font-weight: 700; background: #dbe9f7; color: var(--brand); border: none; }
+.call-card .call-card-line .btn.call-arrow:hover { background: #c7dcf1; }
+.call-card .call-card-line .btn.call-arrow.btn-primary { background: var(--brand); color: #fff; }
+.call-card .call-card-line .btn.call-arrow.btn-primary:hover { background: #163a5c; }
+.call-person.call-solo { background: #eef1f4; padding: .2rem .65rem; font-size: .92rem; border-radius: 8px; } /* no longer used — kept harmless */
