@@ -5,17 +5,17 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1792372983";
+import { db } from "./firebase-init.js?v=1792373086";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { ORG_COLORS, orgColor } from "./org-colors.js?v=1792372983";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1792372983";
-import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1792372983";
+import { ORG_COLORS, orgColor } from "./org-colors.js?v=1792373086";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1792373086";
+import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1792373086";
 
 const CALL_STAGES = [
-  ["fill", "Calling to Fill"],
+  ["fill", "Callings to Fill"],
   ["issue", "Calls to Issue"],
   ["sustain", "Calls to Sustain"],
   ["apart", "Set Apart & MLS"],
@@ -378,7 +378,7 @@ const memberRow = (p) => `
 
 // Archived (complete) callings + releases, with a "move back to…" so a
 // mistake — or a calling that fell through — can rejoin the flow.
-const CALL_BACK = [["fill", "Calling to Fill"], ["issue", "Calls to Issue"], ["sustain", "Calls to Sustain"], ["apart", "Set Apart & MLS"]];
+const CALL_BACK = [["fill", "Callings to Fill"], ["issue", "Calls to Issue"], ["sustain", "Calls to Sustain"], ["apart", "Set Apart & MLS"]];
 // Stake callings (kind "stake") live only inside the Stake pop-up (2026-09-20):
 //   recommend (Recommended to Stake) → called (Called) → done (archived)
 const STAKE_STAGES = [["recommend", "Recommended to Stake"], ["called", "Called"]];
@@ -430,7 +430,7 @@ function render() {
   };
   const fillBody = `
     <div class="card bb-col" style="margin-top:.8rem">
-      <h3 style="display:flex;align-items:center;gap:.5rem" title="Names under consideration — star one to decide.">Calling to Fill <span class="pill pill-role-member">${fillCards.length}</span>
+      <h3 style="display:flex;align-items:center;gap:.5rem" title="Names under consideration — star one to decide.">Callings to Fill <span class="pill pill-role-member">${fillCards.length}</span>
         <span style="margin-left:auto;display:flex;gap:.3rem"><button class="btn btn-sm" data-add="group" type="button" title="New grouping (Primary, RS, Urgent…)">+ Group</button><button class="btn btn-sm" data-add="calling" type="button" title="Add a calling">+</button></span></h3>
       <p class="row-sub bb-sub" style="margin:0 0 .3rem">Names under consideration — star one to decide.${groups.length ? " Drag a calling into a grouping." : ""}</p>
       ${fillCards.length || groups.length ? groups.map(fillSection).join("") + fillSection(null) : `<div class="bb-drop" data-stage="fill" data-group=""><div class="empty-note">Nothing waiting to be filled.</div></div>`}
