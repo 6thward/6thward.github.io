@@ -2209,16 +2209,11 @@ tr.us-menu-open td { background: #f7f9fb; }
 .call-card .call-card-title .call-del { color: inherit; opacity: .5; }
 .call-card .call-card-title .call-del:hover { background: rgba(0,0,0,.1); }
 .call-card { background: #fff !important; border-color: color-mix(in srgb, var(--col) 35%, #fff) !important; border-left-width: 1px !important; }
-.step-track { display: grid; grid-template-columns: auto 1fr auto; grid-template-rows: auto auto; align-items: center; column-gap: .35rem; margin: .35rem .2rem 0 .4rem; max-width: 12rem; }
-.step-track-1 { grid-template-columns: auto; }
-.st-dot, .st-lbl { font: inherit; background: none; border: none; padding: 0; cursor: pointer; }
-.st-dot { width: .95rem; height: .95rem; border-radius: 50%; border: 2px solid #b3bac4; background: #fff; }
-.st-dot:hover { border-color: var(--brand); }
-.st-dot.on { background: #2e7d4f; border-color: #2e7d4f; box-shadow: inset 0 0 0 2px #fff; }
-.st-seg { height: 2px; background: #d9dee4; } .st-seg.on { background: #2e7d4f; }
-.st-lbl { grid-row: 2; font-size: .7rem; color: #8a94a1; text-align: left; margin-top: .1rem; }
-.st-lbl:hover { color: var(--brand); }
-.st-lbl.on { color: #22693f; font-weight: 700; }
-.st-lbl.r { grid-column: 3; text-align: right; }
-.step-track-1 .st-lbl { grid-column: 1; }
-.call-people-col .step-track { margin-top: .15rem; }
+.step-track { display: flex; align-items: center; gap: .45rem; align-self: stretch; width: 100%; margin: .4rem 0 0; }
+.st-step { font: inherit; font-size: .78rem; font-weight: 600; color: #8a94a1; background: none; border: none; padding: .15rem .1rem; cursor: pointer; display: inline-flex; align-items: center; gap: .35rem; white-space: nowrap; border-radius: 6px; }
+.st-step:hover { color: var(--brand); } .st-step:hover .st-dot { border-color: var(--brand); }
+.st-step.on { color: #22693f; }
+.st-dot { width: .95rem; height: .95rem; border-radius: 50%; border: 2px solid #b3bac4; background: #fff; display: inline-block; flex: none; }
+.st-step.on .st-dot { background: #2e7d4f; border-color: #2e7d4f; box-shadow: inset 0 0 0 2px #fff; }
+.st-seg { flex: 1; min-width: .8rem; height: 2px; background: #d9dee4; border-radius: 1px; } .st-seg.on { background: #2e7d4f; }
+.call-person-row .step-track { padding-left: .3rem; }

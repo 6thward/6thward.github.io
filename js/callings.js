@@ -5,13 +5,13 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1792370645";
+import { db } from "./firebase-init.js?v=1792371034";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1792370645";
-import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1792370645";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1792371034";
+import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1792371034";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
@@ -281,10 +281,7 @@ const peoplePills = (c, extra) => {
 // title band (option B, 2026-10-18): soft tint of the organization colour with dark text; org as a dot + name on the right
 const titleBand = (c, del = true) => `<div class="call-card-title">${esc(c.calling)}${c.organization ? `<span class="call-card-org"><i class="call-org-dot"></i>${esc(c.organization)}</span>` : ""}${del ? delBtn(c) : ""}</div>`;
 // Set apart / MLS as a two-dot progress track under each name (option B, 2026-10-18); dots and labels both toggle
-const stepTrack = (steps) => `<div class="step-track step-track-${steps.length}">
-  ${steps.map((st, i) => `${i ? `<span class="st-seg${steps[i - 1].on && st.on ? " on" : ""}"></span>` : ""}<button type="button" class="st-dot${st.on ? " on" : ""}" ${st.attrs} title="${esc(st.title)}"></button>`).join("")}
-  ${steps.map((st, i) => `<button type="button" class="st-lbl${st.on ? " on" : ""}${i === steps.length - 1 && steps.length > 1 ? " r" : ""}" ${st.attrs} title="${esc(st.title)}">${esc(st.label)}</button>`).join("")}
-</div>`;
+const stepTrack = (steps) => `<div class="step-track">${steps.map((st, i) => `${i ? `<span class="st-seg${steps[i - 1].on && st.on ? " on" : ""}"></span>` : ""}<button type="button" class="st-step${st.on ? " on" : ""}" ${st.attrs} title="${esc(st.title)}"><i class="st-dot"></i>${esc(st.label)}</button>`).join("")}</div>`; // one row: ◉ Set apart ── ○ MLS (2026-10-18)
 // small ✕ in the title band deletes the calling (with a confirm) — 2026-09-20
 const delBtn = (c) => `<span class="call-del" data-del="${c.id}" title="Delete this calling" role="button">✕</span>`;
 const issueRow = (c) => `
