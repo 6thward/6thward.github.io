@@ -2427,3 +2427,4 @@ tr.us-menu-open td { background: #f7f9fb; }
 .wc-foldall { margin-left: auto; display: inline-flex; gap: .2rem; }
 .wc-foldall .btn { font-size: .78rem; }
 .dv-repeat.hidden { display: none; }
+.dv-opts label small { font-weight: 500; text-transform: none; letter-spacing: 0; }

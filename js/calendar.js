@@ -2,14 +2,14 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792385652";
-import { ctx, hasRole, can } from "./app.js?v=1792385652";
+import { db } from "./firebase-init.js?v=1792385725";
+import { ctx, hasRole, can } from "./app.js?v=1792385725";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792385652";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792385652";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792385652";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792385725";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792385725";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792385725";
 
 let events = [];
 let viewYear, viewMonth; // 0-based month
@@ -306,7 +306,7 @@ function designateHtml(date) {
     <div class="dv-time"><label>From<input type="time" id="dv-start" step="300" value="${hhmmOf(dvSel.a)}"></label><label>To<input type="time" id="dv-end" step="300" value="${hhmmOf(dvSel.b)}"></label></div>
     <div class="dv-kinds">${kinds.map(([k, l, hint]) => `<label class="dv-kind${dvSel.kind === k ? " on" : ""}"><input type="radio" name="dv-kind" value="${k}"${dvSel.kind === k ? " checked" : ""}><span><b>${l}</b><small>${hint}</small></span></label>`).join("")}</div>
     <div class="dv-opts" id="dv-opts"></div>
-    <div class="dv-opts dv-opts-row dv-repeat"><label>Repeat<select id="dv-rep"><option value="0"${!dvSel.rep ? " selected" : ""}>Just this day</option><option value="7"${dvSel.rep === 7 ? " selected" : ""}>Every week</option><option value="14"${dvSel.rep === 14 ? " selected" : ""}>Every 2 weeks</option></select></label><label id="dv-until-wrap"${dvSel.rep ? "" : " hidden"}>Until<input type="date" id="dv-until" value="${esc(dvSel.until || addDaysIso(date, 56))}"></label></div>
+    <div class="dv-opts dv-opts-row dv-repeat"><label>Repeat<select id="dv-rep">${repeatChoices(date).map(([v, l]) => `<option value="${v}"${String(dvSel.rep || "0") === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></label><label id="dv-until-wrap"${dvSel.rep ? "" : " hidden"}>Until<input type="date" id="dv-until" value="${esc(dvSel.until || addDaysIso(date, 56))}"></label></div>
     <div class="dv-err hidden" id="dv-err"></div>
     <div class="dv-form-actions"><button type="button" class="btn" id="dv-cancel">Cancel</button><button type="button" class="btn btn-primary" id="dv-save">Add</button></div>`;
 }
@@ -324,7 +324,7 @@ function optsHtml(kind) {
     <label>Where<select id="dv-place"><option value="office">🏛 Bishop's office</option><option value="home">🏠 Home visits</option></select></label>
     <label>Set aside for<select id="dv-group"><option value="">Anyone</option><option value="families">Families with kids at home</option><option value="widows">Widows</option></select></label>`;
   if (kind === "interviews") return `<label>Each interview<select id="dv-len">${INTERVIEW_LENS.map((n) => opt(n, n + " minutes", dvSel.len || 15)).join("")}</select></label><label>Label<input id="dv-title" value="Interviews" autocomplete="off"></label>`;
-  if (kind === "other") return `<label>Title<input id="dv-title" placeholder="e.g. Temple recommend — Hansen" autocomplete="off"></label>`;
+  if (kind === "other") return `<label>Title<input id="dv-title" placeholder="e.g. Sacrament meeting, Temple recommend — Hansen" autocomplete="off"></label><label>Location <small>(optional)</small><input id="dv-loc" placeholder="e.g. Chapel — leave blank if it doesn't matter" autocomplete="off"></label>`;
   return "";
 }
 function focusHtml(date, blocks) {
@@ -363,7 +363,7 @@ function wireSide(date, blocks) {
     redrawOpts();
     const syncTimes = () => { const a = toMinutes(side.querySelector("#dv-start").value), b = toMinutes(side.querySelector("#dv-end").value); if (b > a) { dvSel.a = a; dvSel.b = b; const g = document.getElementById("dv-grid"); const selEl = g?.querySelector(".dv-sel"); if (selEl) { selEl.style.top = `${(a - DAY_START) * PX_MIN}px`; selEl.style.height = `${(b - a) * PX_MIN}px`; selEl.querySelector("span").textContent = `${fmtClock(a)} – ${fmtClock(b)}`; } } };
     side.querySelector("#dv-start").addEventListener("change", syncTimes); side.querySelector("#dv-end").addEventListener("change", syncTimes);
-    side.querySelector("#dv-rep").addEventListener("change", (e) => { dvSel.rep = Number(e.target.value) || 0; side.querySelector("#dv-until-wrap").hidden = !dvSel.rep; });
+    side.querySelector("#dv-rep").addEventListener("change", (e) => { dvSel.rep = e.target.value === "0" ? 0 : e.target.value; side.querySelector("#dv-until-wrap").hidden = !dvSel.rep; });
     side.querySelector("#dv-until").addEventListener("change", (e) => { dvSel.until = e.target.value; });
     side.querySelector("#dv-save").addEventListener("click", () => saveDesignation(date, kindNow(), side));
   }
@@ -426,11 +426,36 @@ function wireDrag(grid) {
 }
 // the days a repeat covers: this one, then every `step` days up to and including `until`
 const addDaysIso = (iso, n) => { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
-function repeatDates(date, step, until) {
+// the choices offered for this day: weekly ones plus monthly ones worded for the day picked ("every 4th Sunday")
+const WD = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const nthOf = (iso) => Math.ceil(new Date(iso + "T12:00:00").getDate() / 7);
+const isLastOfMonth = (iso) => { const d = new Date(iso + "T12:00:00"); return d.getDate() + 7 > new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); };
+const ORD = ["", "1st", "2nd", "3rd", "4th", "5th"];
+function repeatChoices(date) {
+  const d = new Date(date + "T12:00:00"), wd = WD[d.getDay()], n = nthOf(date);
+  const out = [["0", "Just this day"], ["7", "Every week"], ["14", "Every 2 weeks"], ["m-nth", `Every month — ${ORD[n]} ${wd}`]];
+  if (isLastOfMonth(date)) out.push(["m-last", `Every month — last ${wd}`]);
+  out.push(["m-date", `Every month — the ${d.getDate()}${[1, 21, 31].includes(d.getDate()) ? "st" : [2, 22].includes(d.getDate()) ? "nd" : [3, 23].includes(d.getDate()) ? "rd" : "th"}`]);
+  return out;
+}
+const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+function repeatDates(date, rule, until) {
   const out = [date];
-  if (!step) return out;
+  if (!rule || rule === "0") return out;
   const stop = until && /^\d{4}-\d{2}-\d{2}$/.test(until) ? until : addDaysIso(date, 56);
-  for (let d = addDaysIso(date, step), i = 0; d <= stop && i < 60; d = addDaysIso(d, step), i++) out.push(d);
+  const step = Number(rule);
+  if (step) { for (let d = addDaysIso(date, step), i = 0; d <= stop && i < 60; d = addDaysIso(d, step), i++) out.push(d); return out; }
+  const first = new Date(date + "T12:00:00"), wd = first.getDay(), n = nthOf(date), dom = first.getDate();
+  for (let k = 1; k <= 36; k++) {
+    const y = first.getFullYear(), m = first.getMonth() + k;
+    let d;
+    if (rule === "m-date") { d = new Date(y, m, Math.min(dom, new Date(y, m + 1, 0).getDate())); }
+    else if (rule === "m-last") { d = new Date(y, m + 1, 0); while (d.getDay() !== wd) d.setDate(d.getDate() - 1); }
+    else { d = new Date(y, m, 1); while (d.getDay() !== wd) d.setDate(d.getDate() + 1); d.setDate(d.getDate() + 7 * (n - 1)); if (d.getMonth() !== ((m % 12) + 12) % 12) continue; } // a 5th Sunday some months don't have
+    const iso = isoOf(d);
+    if (iso > stop) break;
+    out.push(iso);
+  }
   return out;
 }
 async function saveDesignation(date, kind, side) {
@@ -440,9 +465,9 @@ async function saveDesignation(date, kind, side) {
   const a = toMinutes(side.querySelector("#dv-start").value), b = toMinutes(side.querySelector("#dv-end").value);
   if (!(b > a)) return toast("The end has to be after the start");
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = "Saving…"; }
-  const step = Number(side.querySelector("#dv-rep")?.value) || 0, until = side.querySelector("#dv-until")?.value || "";
-  if (step && until && until < date) return toast("The end date is before the first day");
-  const dates = repeatDates(date, step, until), many = dates.length > 1;
+  const rule = side.querySelector("#dv-rep")?.value || "0", until = side.querySelector("#dv-until")?.value || "";
+  if (rule !== "0" && until && until < date) return toast("The end date is before the first day");
+  const dates = repeatDates(date, rule, until), many = dates.length > 1;
   try {
     if (kind === "tithing") {
       if (!can("tithing", "edit")) return toast("You can't change tithing declaration times");
@@ -456,7 +481,7 @@ async function saveDesignation(date, kind, side) {
     const title = kind === "council" ? "Ward council" : kind === "bishopric" ? "Bishopric meeting" : (side.querySelector("#dv-title")?.value.trim() || (kind === "interviews" ? "Interviews" : ""));
     if (!title) { if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "Add"; } return toast("Give it a title"); }
     const series = many ? "r" + Math.random().toString(36).slice(2, 9) : null; // the repeats know they belong together
-    const base = { title, startTime: hhmmOf(a), endTime: hhmmOf(b), location: "", notes: "", cal: "bishop", createdBy: ctx.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), ...(series ? { series } : {}) };
+    const base = { title, startTime: hhmmOf(a), endTime: hhmmOf(b), location: side.querySelector("#dv-loc")?.value.trim() || "", notes: "", cal: "bishop", createdBy: ctx.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), ...(series ? { series } : {}) };
     if (kind === "interviews") { base.kind = "interviews"; base.len = Number(side.querySelector("#dv-len").value); }
     const made = [];
     for (const d of dates) { const data = { ...base, date: d, ...(kind === "interviews" ? { slots: {} } : {}) }; const ref = await addDoc(collection(db, "events"), data); made.push({ ...data, id: ref.id }); }
