@@ -2189,3 +2189,11 @@ tr.us-menu-open td { background: #f7f9fb; }
 #users-table tr.us-org:not(.us-group) td.us-col-name { border-left: 3px solid var(--org); }
 #users-table tr.us-org.us-menu-open td { filter: brightness(.97); }
 .us-menu[hidden] { display: none; }
+/* Users: Council and Email in their own columns, one "multiple" pill (2026-10-18) */
+#users-table th.us-col-name, #users-table td.us-col-name { width: 14%; }
+#users-table th.us-col-council, #users-table td.us-col-council { width: 5.2rem; }
+#users-table th.us-col-signin, #users-table td.us-col-signin { width: 5.6rem; white-space: nowrap; }
+#users-table th.us-col-email, #users-table td.us-col-email { width: 15%; }
+#users-table th.us-col-organization, #users-table td.us-col-organization { width: 10%; }
+#users-table th.us-col-calling, #users-table td.us-col-calling { width: 12%; }
+.us-col-email .us-email { font-size: .8rem; }

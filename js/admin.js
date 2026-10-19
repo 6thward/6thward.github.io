@@ -15,13 +15,13 @@
 // whose profile doc carries `alias: <googleUid>` plus a mirror of the name /
 // organization / calling / pages, so the rules see the same access either
 // way. The table shows one row; the mirror is kept in step on every save.
-import { db } from "./firebase-init.js?v=1792370004";
-import { ctx, AREAS, normalizePerms } from "./app.js?v=1792370004";
+import { db } from "./firebase-init.js?v=1792370423";
+import { ctx, AREAS, normalizePerms } from "./app.js?v=1792370423";
 import {
   collection, onSnapshot, updateDoc, setDoc, deleteDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1792370004";
-import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1792370004";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1792370423";
+import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1792370423";
 
 let sort = { key: "created", dir: 1 }; // default: oldest at the top; click a header for A→Z / Z→A (2026-09-19)
 let showPastUsers = (() => { try { return localStorage.getItem("sw-users-past") === "1"; } catch { return false; } })(); // Past users folded unless they chose to see them (2026-10-18)
@@ -51,7 +51,7 @@ export function initAdmin() {
     <div class="card">
       <div class="us-wrap">
         <table class="simple us-table" id="users-table">
-          <thead><tr>${[["name", "Name"], ["signin", "Sign-in"], ["organization", "Organization"], ["calling", "Calling"], ["access", "Access"]].concat(showLastUsed() ? [["lastUsed", "Last used"]] : []).map(([k, l]) => `<th class="us-sort us-col-${k}" data-sort="${k}" title="Sort by ${l}">${l}<span class="us-sort-ic"></span></th>`).join("")}<th class="us-col-menu"></th></tr></thead>
+          <thead><tr>${[["name", "Name"], ["council", "Council"], ["signin", "Sign-in"], ["email", "Email"], ["organization", "Organization"], ["calling", "Calling"], ["access", "Access"]].concat(showLastUsed() ? [["lastUsed", "Last used"]] : []).map(([k, l]) => `<th class="us-sort us-col-${k}" data-sort="${k}" title="Sort by ${l}">${l}<span class="us-sort-ic"></span></th>`).join("")}<th class="us-col-menu"></th></tr></thead>
           <tbody id="user-rows"></tbody>
         </table>
       </div>
@@ -103,10 +103,10 @@ function latestSeen(u) {
 }
 function fmtSeen(ts) {
   const d = ts?.toDate?.() || (ts ? new Date(ts) : null);
-  if (!d || isNaN(d)) return `<span class="row-sub">never</span>`;
+  if (!d || isNaN(d)) return `<span class="row-sub">Never</span>`;
   const days = Math.floor((Date.now() - d.getTime()) / 86400000);
   const when = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: days > 300 ? "numeric" : undefined });
-  return `<span title="${d.toLocaleString()}">${days === 0 ? "today" : days === 1 ? "yesterday" : when}</span>`;
+  return `<span title="${d.toLocaleString()}">${days === 0 ? "Today" : days === 1 ? "Yesterday" : when}</span>`;
 }
 function signInPill(u) {
   if (u.invite) return `<span class="pill pill-pending" title="Invited — hasn't signed in yet">invited</span>`;
@@ -114,7 +114,8 @@ function signInPill(u) {
   if (u.role === "pending") return `<span class="pill pill-pending" title="Signed in with Google but hasn't been given any pages">waiting</span>`;
   if (u.role === "pin") return `<span class="pill pill-muted" title="Signs in with a PIN">PIN ${esc(pins[u.uid] || "")}</span>`;
   const ap = aliasPins[u.uid];
-  return `<span class="pill pill-muted" title="${esc(u.email || "")}">Google</span>${ap ? (ap.quick ? ` <span class="pill pill-muted" title="Set their own 4-digit PIN">own PIN</span>` : ` <span class="pill pill-muted" title="Also signs in with a PIN">PIN ${esc(pins[ap.uid] || "")}</span>`) : ""}`;
+  if (ap) return `<span class="pill pill-muted" title="Google${ap.quick ? " + a 4-digit PIN they set themselves" : " + PIN " + esc(pins[ap.uid] || "")}">multiple</span>`; // one pill, the detail on hover (2026-10-18)
+  return `<span class="pill pill-muted" title="${esc(u.email || "")}">Google</span>`;
 }
 
 function render() {
@@ -125,7 +126,9 @@ function render() {
   const created = (u) => ms(u.invite ? u.invitedAt : u.createdAt);
   const accessKey = (u) => AREAS.filter((a) => permsOf(u)[a.key] === "edit").map((a) => a.label).join(", ");
   const keyOf = (u) => sort.key === "name" ? (u.name || u.email || "").toLowerCase()
-    : sort.key === "signin" ? (u.email || "").toLowerCase()
+    : sort.key === "council" ? (u.councilMember ? "a" : "b")
+    : sort.key === "signin" ? (u.invite ? "invited" : u.revoked ? "revoked" : u.role === "pending" ? "waiting" : u.role === "pin" ? "pin" : aliasPins[u.uid] ? "multiple" : "google")
+    : sort.key === "email" ? (u.email || "").toLowerCase()
     : sort.key === "organization" ? (u.organization || "").toLowerCase()
     : sort.key === "calling" ? (u.calling || "").toLowerCase()
     : sort.key === "access" ? accessKey(u).toLowerCase()
@@ -148,10 +151,10 @@ function render() {
     th.classList.toggle("on", th.dataset.sort === sort.key);
     th.querySelector(".us-sort-ic").textContent = th.dataset.sort === sort.key ? (sort.dir === 1 ? " ▲" : " ▼") : "";
   });
-  if (!rows.length) { tbody.innerHTML = `<tr><td colspan="${showLastUsed() ? 7 : 6}" class="empty-note">Nobody yet — use “+ Add user”.</td></tr>`; return; }
+  if (!rows.length) { tbody.innerHTML = `<tr><td colspan="${showLastUsed() ? 9 : 8}" class="empty-note">Nobody yet — use “+ Add user”.</td></tr>`; return; }
   // grouped by organization (2026-10-04): Bishopric first, then A→Z, people with none last;
   // the column sort still orders people inside each group
-  const cols = showLastUsed() ? 7 : 6;
+  const cols = showLastUsed() ? 9 : 8;
   const orgOf = (u) => (u.organization || "").trim() || (isBishopUser(u) ? "Bishopric" : "");
   // revoked people leave the main table and sit under "Past users" at the bottom, folded by default (2026-10-18)
   const past = rows.filter((u) => u.revoked && !u.invite);
@@ -181,8 +184,10 @@ function render() {
     ].filter(Boolean);
     return `
     <tr class="${orgCls}${u.revoked ? " us-revoked" : ""}${u.role === "pending" ? " us-waiting" : ""}">
-      <td class="us-col-name"><b title="${esc(u.name || u.email || "")}">${esc(u.name || u.email || "—")}</b>${me ? " <span class='row-sub'>(you)</span>" : ""}${u.councilMember ? ` <span class="pill us-council-pill" title="Ward council member">Council</span>` : ""}</td>
-      <td class="us-col-signin"><div class="us-sub">${signInPill(u)}${email ? `<span class="row-sub us-email" title="${esc(email)}">${esc(email)}</span>` : ""}</div></td>
+      <td class="us-col-name"><b title="${esc(u.name || u.email || "")}">${esc(u.name || u.email || "—")}</b>${me ? " <span class='row-sub'>(you)</span>" : ""}</td>
+      <td class="us-col-council">${u.councilMember ? `<span class="pill us-council-pill" title="Ward council member">Council</span>` : ""}</td>
+      <td class="us-col-signin">${signInPill(u)}</td>
+      <td class="us-col-email">${email ? `<span class="row-sub us-email" title="${esc(email)}">${esc(email)}</span>` : ""}</td>
       <td class="us-col-organization"><span class="us-trunc" title="${esc(u.organization || "")}">${esc(u.organization || "")}</span></td>
       <td class="us-col-calling"><span class="us-trunc" title="${esc(u.calling || "")}">${esc(u.calling || "")}</span></td>
       <td class="us-access"><div class="us-pills">${u.revoked ? `<span class="pill pill-muted">—</span>` : accessPills(permsOf(u))}</div></td>
