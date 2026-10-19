@@ -9,15 +9,15 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1792385317";
-import { ctx, can } from "./app.js?v=1792385317";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1792385317";
-import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1792385317";
+import { db } from "./firebase-init.js?v=1792385393";
+import { ctx, can } from "./app.js?v=1792385393";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1792385393";
+import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1792385393";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { watchBishopCal, bishopCalConfig } from "./bishop-cal.js?v=1792385317";
-import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1792385317";
+import { watchBishopCal, bishopCalConfig } from "./bishop-cal.js?v=1792385393";
+import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1792385393";
 
 let cards = [];
 let councils = {};    // date -> doc
@@ -25,6 +25,11 @@ let members = [];     // names of ward council members (Users tab → "Ward coun
 // what a council member can be asked to do at a meeting (2026-10-04)
 const ASSIGN = [["openPrayer", "Opening prayer"], ["thought", "Scripture & thought"], ["training", "Handbook training"], ["closePrayer", "Closing prayer"]];
 let openNotesFor = null;
+// collapsed agenda items (2026-10-18): "date:key" entries; discussed items start folded
+const collapsed = new Set((() => { try { return JSON.parse(localStorage.getItem("sw-wc-folded") || "[]"); } catch { return []; } })());
+const expandedDone = new Set(); // discussed items the user opened on purpose this visit
+const saveFolded = () => { try { localStorage.setItem("sw-wc-folded", JSON.stringify([...collapsed].slice(-400))); } catch {} }
+const isFolded = (date, key, discussed) => collapsed.has(date + ":" + key) || (discussed && !expandedDone.has(date + ":" + key));
 let fuOpen = new Set(); // follow-up rows that are unfolded (2026-10-11)
 // organizations a follow-up can be handed to, besides a council member or any typed name
 const ORGS = ["Bishopric", "Relief Society", "Elders Quorum", "Primary", "Young Women", "Young Men", "Sunday School", "Ward Mission", "Ward Clerk", "Executive Secretary", "Temple & Family History", "Music", "Activities Committee"]; // an item just added: its notes box opens as soon as it's drawn (2026-10-11)
@@ -384,10 +389,10 @@ function render() {
                <button class="btn btn-sm btn-ghost" data-act="remove" title="${it.kind === "board" ? "Take off the agenda (unflags the to-do)" : "Delete this agenda item"}">✕</button>`}
         </div>` : "";
     return `
-      <div class="wc-row${it.discussed ? " wc-done" : ""}${editor && !it.discussed ? " wc-drag" : ""}" data-key="${key}">
+      <div class="wc-row${it.discussed ? " wc-done" : ""}${editor && !it.discussed ? " wc-drag" : ""}${isFolded(date, key, it.discussed) ? " wc-folded" : ""}" data-key="${key}">
         <div class="wc-num${editor && !it.discussed ? " wc-grip" : ""}"${editor && !it.discussed ? ` draggable="true" title="Drag to reorder"` : ""}>${editor && !it.discussed ? `<span class="wc-grip-dots" aria-hidden="true">⋮⋮</span>` : ""}${n}.</div>
         <div class="wc-main">
-          <div class="wc-head"><div class="wc-title">${person ? `<span class="wc-person-name">${esc(person)}</span> · ` : ""}${esc(title)}${it.discussed ? `<span class="wc-done-badge" title="Discussed${when ? " " + esc(fmtDay(when)) : ""}">✓ Discussed</span>` : ""}${owner}${assignee}${due}</div>${actions}</div>
+          <div class="wc-head"><button type="button" class="wc-fold" data-fold="${key}" title="${isFolded(date, key, it.discussed) ? "Show the details" : "Hide the details"}">${isFolded(date, key, it.discussed) ? "▸" : "▾"}</button><div class="wc-title">${person ? `<span class="wc-person-name">${esc(person)}</span> · ` : ""}${esc(title)}${it.discussed ? `<span class="wc-done-badge" title="Discussed${when ? " " + esc(fmtDay(when)) : ""}">✓ Discussed</span>` : ""}${owner}${assignee}${due}</div>${actions}</div>
           ${context}
           ${(editor || notes) ? noteBlock(key, notes, "+ council notes") : ""}
           ${files.length ? `<div class="wc-files">${files.map((f) => `<span class="wc-file" data-file="${esc(f.id)}" title="Open ${esc(f.name)}"><span class="wc-file-ic">${fileIcon(f)}</span><span class="wc-file-name">${esc(f.name)}</span><span class="wc-file-size">${fmtBytes(f.size)}</span>${editor ? `<button type="button" class="wc-file-x" data-rmfile="${esc(f.id)}" title="Remove this attachment">✕</button>` : ""}</span>`).join("")}</div>` : ""}
@@ -450,7 +455,7 @@ function render() {
       <div class="wc-list">
         ${items.length ? items.map((it, i) => row(it, i + 1)).join("") : `<div class="empty-note" style="padding:.7rem">${next ? "Nothing on the agenda yet." : "No items."}</div>`}
       </div>
-      ${editor ? `<div class="wc-add"><input class="wc-new" placeholder="+ Add an agenda item and press Enter — its notes open right after" autocomplete="off"></div>` : ""}
+      ${editor ? `<div class="wc-add"><button type="button" class="btn" id="wc-additem">+ Add item</button><span class="wc-foldall"><button type="button" class="btn btn-sm btn-ghost" data-foldall="1">Collapse all</button><button type="button" class="btn btn-sm btn-ghost" data-foldall="0">Expand all</button></span></div>` : ""}
     </div>
     ${followCard}
     <div class="card" style="margin-top:.8rem">
@@ -629,20 +634,44 @@ function render() {
   // an item that was just added: drop straight into its notes (Esc leaves them empty)
   if (openNotesFor) { const el = body.querySelector(`[data-cnotes="${openNotesFor}"]`); openNotesFor = null; if (el) { el.click(); el.scrollIntoView({ block: "nearest" }); } }
 
-  // add a free-form item
-  const inp = body.querySelector(".wc-new");
-  if (inp) {
-    const add = async () => {
-      const title = inp.value.trim(); if (!title) return;
-      inp.value = "";
+  // fold / unfold an item's details; discussed items start folded
+  body.querySelectorAll("[data-fold]").forEach((b) => b.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const key = b.dataset.fold, row = b.closest(".wc-row"), id = date + ":" + key, done = row.classList.contains("wc-done");
+    const nowFolded = !row.classList.contains("wc-folded");
+    if (nowFolded) { collapsed.add(id); expandedDone.delete(id); } else { collapsed.delete(id); if (done) expandedDone.add(id); }
+    saveFolded();
+    row.classList.toggle("wc-folded", nowFolded); b.textContent = nowFolded ? "▸" : "▾"; b.title = nowFolded ? "Show the details" : "Hide the details";
+  }));
+  body.querySelectorAll("[data-foldall]").forEach((b) => b.addEventListener("click", () => {
+    const fold = b.dataset.foldall === "1";
+    body.querySelectorAll(".wc-list > .wc-row").forEach((row) => { const id = date + ":" + row.dataset.key; if (fold) { collapsed.add(id); expandedDone.delete(id); } else { collapsed.delete(id); expandedDone.add(id); } });
+    saveFolded(); render();
+  }));
+  // "+ Add item": title + body in one window (2026-10-18)
+  body.querySelector("#wc-additem")?.addEventListener("click", () => {
+    const el = openModal(`
+      <h3>New agenda item</h3>
+      <label class="field">Title<input id="wca-title" placeholder="e.g. Temple cleaning assignment" autocomplete="off"></label>
+      <label class="field" style="margin-top:.7rem">Body <span class="row-sub">(optional)</span>
+        <div class="wc-tools">${toolbarHtml("Tab makes a sub-point · ⌘Enter saves")}</div>
+        <textarea id="wca-body" class="src-ta" rows="7" placeholder="Details, notes, bullet points…"></textarea>
+      </label>
+      <div class="modal-actions"><button class="btn" id="wca-cancel" type="button">Cancel</button><button class="btn btn-primary" id="wca-save" type="button">Add item</button></div>`);
+    const t = el.querySelector("#wca-title"), ta = el.querySelector("#wca-body");
+    wireToolbar(el, ta);
+    setTimeout(() => t.focus(), 30);
+    const save = async () => {
+      const title = t.value.trim(); if (!title) { t.focus(); return toast("Give it a title"); }
       const id = "a" + Math.random().toString(36).slice(2, 9);
-      openNotesFor = "x:" + id; // type the title, press Enter, keep typing the notes
-      const extra = [...(cdoc.extra || []), { id, title, notes: "", discussed: false, createdAt: new Date().toISOString(), by: ctx.name || "", owner: ctx.name || "" }];
-      try { await saveCouncil(date, { extra }); } catch (e) { openNotesFor = null; toast("Couldn't save: " + (e.code || e.message)); }
+      const extra = [...(cdoc.extra || []), { id, title, notes: ta.value.trim(), discussed: false, createdAt: new Date().toISOString(), by: ctx.name || "", owner: ctx.name || "" }];
+      try { await saveCouncil(date, { extra }); closeModal(); toast("Added"); } catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
     };
-    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); add(); } });
-    inp.addEventListener("blur", () => { if (inp.value.trim()) add(); });
-  }
+    el.querySelector("#wca-cancel").addEventListener("click", closeModal);
+    el.querySelector("#wca-save").addEventListener("click", save);
+    t.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); ta.focus(); } });
+    ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); save(); } else if (e.key === "Escape") { e.preventDefault(); closeModal(); } else handleNoteKeys(ta, e); });
+  });
 
   // assignments: type or pick a council member; saves when the box changes
   body.querySelectorAll("[data-asg]").forEach((inp) => {

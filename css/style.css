@@ -2419,3 +2419,10 @@ tr.us-menu-open td { background: #f7f9fb; }
 .wcd-quick-menu button.danger { color: var(--danger); } .wcd-quick-menu button.danger:hover { background: #fdf0ee; }
 .dv-opts label[hidden] { display: none; } /* Until only shows once a repeat is chosen (2026-10-18) */
 .dv-err { margin-top: .6rem; padding: .5rem .7rem; background: #fdf0ee; border: 1px solid #f1c9c2; border-radius: 8px; color: var(--danger); font-size: .85rem; white-space: pre-wrap; }
+/* Ward Council agenda: fold / unfold items, "+ Add item" (2026-10-18) */
+.wc-fold { font: inherit; font-size: .85rem; line-height: 1; width: 1.4rem; height: 1.4rem; border: none; background: none; color: var(--ink-soft); cursor: pointer; border-radius: 6px; flex: none; margin-right: .15rem; margin-top: .05rem; }
+.wc-fold:hover { background: #eef1f4; color: var(--brand); }
+.wc-row.wc-folded .wc-cnotes, .wc-row.wc-folded .wc-notes, .wc-row.wc-folded .wc-files, .wc-row.wc-folded .wc-upload { display: none !important; }
+.wc-add { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-top: .5rem; }
+.wc-foldall { margin-left: auto; display: inline-flex; gap: .2rem; }
+.wc-foldall .btn { font-size: .78rem; }
