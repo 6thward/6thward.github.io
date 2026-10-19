@@ -2284,3 +2284,11 @@ tr.us-menu-open td { background: #f7f9fb; }
 .call-card .call-card-title .call-org-tag { color: #4b5563 !important; }
 .call-people-col .st-step { font-family: Arial, Helvetica, sans-serif; font-weight: 400; font-size: .7rem; }
 .call-people-col .st-step.on { font-weight: 400; }
+/* Column headlines share one height so the underlines line up with Callings to Fill (2026-10-18) */
+.callings-board > .card > h3, .releases-board > .card > h3, .needy-wrap > .card > h3 { min-height: 2.25rem; box-sizing: border-box; }
+/* Set Apart & MLS: "Sustained …" joins the name row instead of its own line */
+.bb-drop .call-card.call-card-v > .call-people.call-people-col { flex: 1 1 auto; }
+.bb-drop .call-card.call-card-v > .call-people.call-people-col + .row-sub { font-size: .74rem; white-space: nowrap; }
+.bb-drop .call-card.call-card-v > .call-people.call-people-col { flex: 0 1 auto; max-width: 100%; }
+.call-people-col .call-person-row { justify-content: flex-start; gap: .4rem .6rem; }
+.call-people-col .step-track { margin-left: 0; }
