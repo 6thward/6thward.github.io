@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792386594";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792386594";
+import { db } from "./firebase-init.js?v=1792386653";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792386653";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792386594";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792386594";
-import { openCouncilDate } from "./council.js?v=1792386594";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792386594";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792386653";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792386653";
+import { openCouncilDate } from "./council.js?v=1792386653";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792386653";
 
 let events = [];
 let viewYear, viewMonth; // 0-based month
@@ -197,8 +197,7 @@ function render() {
   document.querySelectorAll("#upcoming-list .list-row").forEach((row) =>
     row.addEventListener("click", () => {
       if (row.dataset.id.startsWith("t:")) return dayView(up.find((x) => x.id === row.dataset.id)?.date);
-      if (/^sc:/.test(row.dataset.id) && openAgenda(row.dataset.id.slice(3))) return;
-      if (/^s[cb]:/.test(row.dataset.id)) return can("calendar", "edit") ? editStanding() : undefined;
+      if (/^s[cb]:/.test(row.dataset.id)) return standingDialog(row.dataset.id);
       const e = events.find((x) => x.id === row.dataset.id);
       if (e) editEvent(e);
     }));
@@ -272,7 +271,7 @@ function dayView(date) {
 function dayBlocks(date) {
   const out = [];
   events.filter((e) => e.date === date && showIt(e)).forEach((e) => out.push({ kind: e.kind === "interviews" ? "interviews" : "event", id: e.id, title: e.title, start: e.startTime ? toMinutes(e.startTime) : null, end: e.endTime ? toMinutes(e.endTime) : (e.startTime ? toMinutes(e.startTime) + 60 : null), cal: calOf(e), ev: e }));
-  standingEvents([date]).filter(showIt).forEach((e) => out.push({ kind: "standing", id: e.id, title: e.title, start: toMinutes(e.startTime), end: toMinutes(e.endTime), cal: "bishop" }));
+  standingEvents([date]).filter(showIt).forEach((e) => out.push({ kind: "standing", id: e.id, title: e.title, start: toMinutes(e.startTime), end: toMinutes(e.endTime), cal: "bishop", ev: { color: e.color || "" }, standing: e.standing }));
   if (season && calView !== "ward") {
     const slots = slotsOf(season.windows, offList(season)).filter((s) => s.date === date);
     (season.windows || []).filter((w) => w.date === date).forEach((w) => {
@@ -319,7 +318,7 @@ function drawDay() {
     e.stopPropagation();
     if (dragJustHappened) { dragJustHappened = false; return; }
     const [t, id] = [n.dataset.block.slice(0, 1), n.dataset.block.slice(2)];
-    if (t === "s") { if (/^sc:/.test(id) && openAgenda(openDay)) return; return can("calendar", "edit") ? editStanding() : undefined; }
+    if (t === "s") return standingDialog(id);
     if (t === "t") { dvFocus = "t:" + id; dvSel = null; drawDay(); return; }
     const ev = events.find((x) => x.id === id);
     if (ev && ev.kind === "interviews") { const k = e.target.closest("[data-islot]")?.dataset.islot; dvFocus = "e:" + id; dvSel = null; drawDay(); if (k) document.getElementById("dv-side")?.querySelector(`[data-iname="${k}"]`)?.focus(); return; }
@@ -392,7 +391,7 @@ function wireSide(date, blocks) {
   // the day's list opens things too — the only handle for an all-day event, which has no block on the timeline (2026-10-18)
   side.querySelectorAll("[data-open]").forEach((row) => row.addEventListener("click", () => {
     const [t, id] = [row.dataset.open.slice(0, 1), row.dataset.open.slice(2)];
-    if (t === "s") { if (/^sc:/.test(id) && openAgenda(date)) return; return can("calendar", "edit") ? editStanding() : undefined; }
+    if (t === "s") return standingDialog(id);
     if (t === "t") { dvFocus = "t:" + id; dvSel = null; drawDay(); return; }
     const ev = events.find((x) => x.id === id);
     if (ev && ev.kind === "interviews") { dvFocus = "e:" + id; dvSel = null; drawDay(); return; }
@@ -599,6 +598,30 @@ async function saveTithingWindows(windows, msg) {
   drawDay();
 }
 
+// a standing meeting on the calendar (2026-10-18): see its time, pick a colour, change the time, or jump to the agenda
+function standingDialog(id) {
+  const kind = id.startsWith("sc:") ? "council" : "bishopric", date = id.slice(3);
+  const cfg = bishopCalConfig()[kind] || {}, label = kind === "council" ? "Ward council" : "Bishopric meeting";
+  const editable = can("calendar", "edit") || (kind === "council" && can("council", "edit"));
+  const el = openModal(`
+    <h3>${label}</h3>
+    <p class="row-sub" style="margin-top:-.6rem">${esc(fmtDate(date, { year: true }))} · ${fmtTime(cfg.start)}${cfg.end ? "–" + fmtTime(cfg.end) : ""} · ${kind === "council" ? "on every council Sunday" : "every " + WEEKDAYS[Number(cfg.weekday ?? 0)]}</p>
+    ${editable ? `<div class="field"><span>Colour <span class="row-sub">(optional)</span></span>${swatches("st-color", cfg.color)}</div>` : ""}
+    <div class="ev-agenda" style="display:flex;gap:.4rem;flex-wrap:wrap">
+      ${kind === "council" && can("council") ? `<button type="button" class="btn btn-sm" id="st-agenda">📋 Open this day's agenda</button>` : ""}
+      ${editable ? `<button type="button" class="btn btn-sm" id="st-time">🕒 Change the time…</button>` : ""}
+    </div>
+    <div class="modal-actions"><div class="right"><button class="btn" id="st-close" type="button">Close</button>${editable ? `<button class="btn btn-primary" id="st-save" type="button">Save</button>` : ""}</div></div>`);
+  el.querySelector("#st-close").addEventListener("click", closeModal);
+  el.querySelector("#st-agenda")?.addEventListener("click", () => openAgenda(date));
+  el.querySelector("#st-time")?.addEventListener("click", () => { closeModal(); editStanding(); });
+  wireSwatches(el.querySelector("#st-color"));
+  el.querySelector("#st-save")?.addEventListener("click", async () => {
+    const color = swatchValue(el.querySelector("#st-color"));
+    try { await setDoc(doc(db, "settings", "bishopCal"), { [kind]: { ...cfg, color }, updatedAt: serverTimestamp() }, { merge: true }); closeModal(); toast("Saved"); }
+    catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
+  });
+}
 // ward council + bishopric meeting times (settings/bishopCal)
 function editStanding() {
   const c = bishopCalConfig(), co = c.council || {}, bp = c.bishopric || {};
