@@ -2276,3 +2276,5 @@ tr.us-menu-open td { background: #f7f9fb; }
 .bb-drop .call-card.call-card-v > .row-sub:not(:has(.cand-line, .cand-add)) { flex: 0 0 auto; margin-left: auto; margin-top: 0; }
 .bb-drop .call-card.call-card-v > .row-sub:has(.cand-line, .cand-add) { flex: 1 0 100%; }
 .bb-drop .call-card.call-card-v > .row-title, .bb-drop .call-card.call-card-v > .step-track { flex: 1 0 100%; }
+/* Stamps: plain sentence case, normal weight (2026-10-18) */
+.call-card .call-card-line > .row-sub, .call-card > .row-sub:not(:has(.cand-line, .cand-add)), .stake-list .call-card .call-card-line .row-sub { text-transform: none; letter-spacing: 0; font-weight: 400; font-size: .78rem; font-family: Arial, Helvetica, sans-serif; color: #6b7684 !important; }
