@@ -2146,3 +2146,46 @@ button.src-reqst { cursor: pointer; } button.src-reqst:hover { filter: brightnes
 .src-card-b .src-openact-none { background: #f1f3f5; border-left-color: #c3c9d1; color: #8a94a1; font-size: .78rem; }
 .src-card-b.src-card-x .src-openacts, .src-card-b.src-card-x .src-openact { height: auto; white-space: normal; }
 .src-card-b.src-card-x .src-openact-txt { white-space: normal; overflow: visible; }
+/* Users: past (revoked) people folded at the bottom (2026-10-18) */
+#users-table tr.us-group-past td { border-bottom-color: #c3c9d1; }
+.us-group-past .us-group-name, .us-group-past .us-group-n { color: #6b7684; }
+.us-group-past .us-group-n { background: #eef1f4; }
+.us-past-toggle { margin-left: .6rem; padding: .05rem .5rem; font-size: .72rem; }
+.us-past-names { margin-left: .6rem; }
+/* Users table (2026-10-18): fixed columns, name on its own, sign-in details beside it, actions in a ⋯ menu */
+#users-table { table-layout: fixed; width: 100%; }
+#users-table th.us-col-name, #users-table td.us-col-name { width: 15%; }
+#users-table th.us-col-signin, #users-table td.us-col-signin { width: 17%; }
+#users-table th.us-col-organization, #users-table td.us-col-organization { width: 11%; }
+#users-table th.us-col-calling, #users-table td.us-col-calling { width: 13%; }
+#users-table th.us-col-lastUsed, #users-table td.us-col-lastUsed { width: 8%; }
+#users-table th.us-col-menu, #users-table td.us-col-menu { width: 3rem; }
+#users-table td { vertical-align: top; }
+#users-table td.us-col-name b { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+.us-trunc, .us-email { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.us-col-signin .us-sub { margin-top: 0; flex-wrap: nowrap; min-width: 0; }
+.us-col-signin .us-email { min-width: 0; flex: 1; }
+#users-table tr.us-group td { white-space: normal; }
+.us-actions { position: relative; }
+.us-menu-btn { font-size: 1rem; line-height: 1; padding: .05rem .5rem; }
+.us-menu { position: absolute; right: .4rem; top: 2.1rem; z-index: 20; min-width: 12rem; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(20,30,45,.14); padding: .3rem; display: flex; flex-direction: column; text-align: left; }
+.us-menu button { font: inherit; font-size: .88rem; text-align: left; background: none; border: none; border-radius: 7px; padding: .45rem .7rem; cursor: pointer; color: var(--ink); }
+.us-menu button:hover { background: var(--brand-soft); color: var(--brand); }
+.us-menu button.danger { color: var(--danger); } .us-menu button.danger:hover { background: #fdf0ee; }
+tr.us-menu-open td { background: #f7f9fb; }
+/* Users: each organization section in its own colour (2026-10-18) */
+#users-table tr.us-org-0 { --org: #1f4e79; --org-soft: #f1f6fb; }
+#users-table tr.us-org-1 { --org: #2e7d4f; --org-soft: #f0f8f3; }
+#users-table tr.us-org-2 { --org: #8a6500; --org-soft: #fdf8ea; }
+#users-table tr.us-org-3 { --org: #5b3fa0; --org-soft: #f5f2fb; }
+#users-table tr.us-org-4 { --org: #a0472a; --org-soft: #fdf3ef; }
+#users-table tr.us-org-5 { --org: #0f6b63; --org-soft: #eef8f6; }
+#users-table tr.us-org-6 { --org: #a34a6e; --org-soft: #fcf1f5; }
+#users-table tr.us-org-7 { --org: #4b5563; --org-soft: #f3f5f7; }
+#users-table tr.us-group.us-org td { border-bottom-color: var(--org); }
+#users-table tr.us-group.us-org .us-group-name, #users-table tr.us-group.us-org .us-group-n { color: var(--org); }
+#users-table tr.us-group.us-org .us-group-n { background: var(--org-soft); filter: saturate(1.4); }
+#users-table tr.us-org:not(.us-group) td { background: var(--org-soft); }
+#users-table tr.us-org:not(.us-group) td.us-col-name { border-left: 3px solid var(--org); }
+#users-table tr.us-org.us-menu-open td { filter: brightness(.97); }
+.us-menu[hidden] { display: none; }

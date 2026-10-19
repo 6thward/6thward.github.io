@@ -15,15 +15,16 @@
 // whose profile doc carries `alias: <googleUid>` plus a mirror of the name /
 // organization / calling / pages, so the rules see the same access either
 // way. The table shows one row; the mirror is kept in step on every save.
-import { db } from "./firebase-init.js?v=1791783908";
-import { ctx, AREAS, normalizePerms } from "./app.js?v=1791783908";
+import { db } from "./firebase-init.js?v=1792369938";
+import { ctx, AREAS, normalizePerms } from "./app.js?v=1792369938";
 import {
   collection, onSnapshot, updateDoc, setDoc, deleteDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1791783908";
-import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1791783908";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1792369938";
+import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1792369938";
 
 let sort = { key: "created", dir: 1 }; // default: oldest at the top; click a header for A→Z / Z→A (2026-09-19)
+let showPastUsers = (() => { try { return localStorage.getItem("sw-users-past") === "1"; } catch { return false; } })(); // Past users folded unless they chose to see them (2026-10-18)
 let users = [];   // profiles (alias PIN docs are folded into their Google row)
 let aliasPins = {}; // googleUid -> the PIN profile doc that aliases it
 let invites = [];
@@ -50,7 +51,7 @@ export function initAdmin() {
     <div class="card">
       <div class="us-wrap">
         <table class="simple us-table" id="users-table">
-          <thead><tr>${[["name", "Name"], ["organization", "Organization"], ["calling", "Calling"], ["access", "Access"]].concat(showLastUsed() ? [["lastUsed", "Last used"]] : []).map(([k, l]) => `<th class="us-sort" data-sort="${k}" title="Sort by ${l}">${l}<span class="us-sort-ic"></span></th>`).join("")}<th></th></tr></thead>
+          <thead><tr>${[["name", "Name"], ["signin", "Sign-in"], ["organization", "Organization"], ["calling", "Calling"], ["access", "Access"]].concat(showLastUsed() ? [["lastUsed", "Last used"]] : []).map(([k, l]) => `<th class="us-sort us-col-${k}" data-sort="${k}" title="Sort by ${l}">${l}<span class="us-sort-ic"></span></th>`).join("")}<th class="us-col-menu"></th></tr></thead>
           <tbody id="user-rows"></tbody>
         </table>
       </div>
@@ -124,6 +125,7 @@ function render() {
   const created = (u) => ms(u.invite ? u.invitedAt : u.createdAt);
   const accessKey = (u) => AREAS.filter((a) => permsOf(u)[a.key] === "edit").map((a) => a.label).join(", ");
   const keyOf = (u) => sort.key === "name" ? (u.name || u.email || "").toLowerCase()
+    : sort.key === "signin" ? (u.email || "").toLowerCase()
     : sort.key === "organization" ? (u.organization || "").toLowerCase()
     : sort.key === "calling" ? (u.calling || "").toLowerCase()
     : sort.key === "access" ? accessKey(u).toLowerCase()
@@ -146,13 +148,16 @@ function render() {
     th.classList.toggle("on", th.dataset.sort === sort.key);
     th.querySelector(".us-sort-ic").textContent = th.dataset.sort === sort.key ? (sort.dir === 1 ? " ▲" : " ▼") : "";
   });
-  if (!rows.length) { tbody.innerHTML = `<tr><td colspan="${showLastUsed() ? 6 : 5}" class="empty-note">Nobody yet — use “+ Add user”.</td></tr>`; return; }
+  if (!rows.length) { tbody.innerHTML = `<tr><td colspan="${showLastUsed() ? 7 : 6}" class="empty-note">Nobody yet — use “+ Add user”.</td></tr>`; return; }
   // grouped by organization (2026-10-04): Bishopric first, then A→Z, people with none last;
   // the column sort still orders people inside each group
-  const cols = showLastUsed() ? 6 : 5;
+  const cols = showLastUsed() ? 7 : 6;
   const orgOf = (u) => (u.organization || "").trim() || (isBishopUser(u) ? "Bishopric" : "");
+  // revoked people leave the main table and sit under "Past users" at the bottom, folded by default (2026-10-18)
+  const past = rows.filter((u) => u.revoked && !u.invite);
+  const active = rows.filter((u) => !(u.revoked && !u.invite));
   const groups = new Map(); // lowercased org -> { label, list }
-  rows.forEach((u) => {
+  active.forEach((u) => {
     const label = orgOf(u), k = label.toLowerCase();
     if (!groups.has(k)) groups.set(k, { label, list: [] });
     groups.get(k).list.push(u);
@@ -160,30 +165,52 @@ function render() {
   const rank = (k) => (k === "bishopric" ? 0 : k === "" ? 2 : 1);
   const orgDir = sort.key === "organization" ? sort.dir : 1;
   const ordered = [...groups.entries()].sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b) * orgDir).map(([, g]) => g);
+  let orgCls = ""; // each organization section carries its own colour (2026-10-18)
   const rowHtml = (u) => {
     const id = u.invite ? "inv:" + u.email : u.uid;
     const me = u.uid === ctx.uid;
+    const email = u.email && (u.invite || u.role !== "pin") ? u.email : "";
+    // the ⋯ menu holds everything that used to be a row of buttons (2026-10-18)
+    const items = [
+      `<button type="button" data-edit="${esc(id)}">${u.role === "pending" ? "Give access" : "Edit…"}</button>`,
+      u.invite || u.role === "pin" || aliasPins[u.uid] ? `<button type="button" data-invite="${esc(id)}">Copy invitation message</button>` : "",
+      u.invite ? `<button type="button" class="danger" data-cancel="${esc(id)}">Cancel invitation</button>`
+        : isBishopUser(u) ? ""
+        : u.revoked ? `<button type="button" data-restore="${esc(id)}">Restore access</button><button type="button" class="danger" data-remove="${esc(id)}">Remove completely</button>`
+        : `<button type="button" class="danger" data-revoke="${esc(id)}">Revoke access</button>`,
+    ].filter(Boolean);
     return `
-    <tr class="${u.revoked ? "us-revoked" : ""}${u.role === "pending" ? " us-waiting" : ""}">
-      <td><b>${esc(u.name || u.email || "—")}</b>${me ? " <span class='row-sub'>(you)</span>" : ""}<div class="us-sub">${signInPill(u)}${u.councilMember ? ` <span class="pill us-council-pill" title="Ward council member">Council</span>` : ""}${u.email && !u.invite && u.role !== "pin" ? ` <span class="row-sub">${esc(u.email)}</span>` : ""}${u.invite ? ` <span class="row-sub">${esc(u.email)}</span>` : ""}</div></td>
-      <td>${esc(u.organization || "")}</td>
-      <td>${esc(u.calling || "")}</td>
+    <tr class="${orgCls}${u.revoked ? " us-revoked" : ""}${u.role === "pending" ? " us-waiting" : ""}">
+      <td class="us-col-name"><b title="${esc(u.name || u.email || "")}">${esc(u.name || u.email || "—")}</b>${me ? " <span class='row-sub'>(you)</span>" : ""}${u.councilMember ? ` <span class="pill us-council-pill" title="Ward council member">Council</span>` : ""}</td>
+      <td class="us-col-signin"><div class="us-sub">${signInPill(u)}${email ? `<span class="row-sub us-email" title="${esc(email)}">${esc(email)}</span>` : ""}</div></td>
+      <td class="us-col-organization"><span class="us-trunc" title="${esc(u.organization || "")}">${esc(u.organization || "")}</span></td>
+      <td class="us-col-calling"><span class="us-trunc" title="${esc(u.calling || "")}">${esc(u.calling || "")}</span></td>
       <td class="us-access"><div class="us-pills">${u.revoked ? `<span class="pill pill-muted">—</span>` : accessPills(permsOf(u))}</div></td>
-      ${showLastUsed() ? `<td>${u.invite ? `<span class="row-sub">invited ${fmtSeen(u.invitedAt).replace(/<[^>]+>/g, "")}</span>` : fmtSeen(latestSeen(u))}</td>` : ""}
-      <td class="us-actions">
-        ${isBishopUser(u) && !me ? "" : ""}
-        <button class="btn btn-sm" data-edit="${esc(id)}">${u.role === "pending" ? "Give access" : "Edit"}</button>
-        ${u.invite || u.role === "pin" || aliasPins[u.uid] ? `<button class="btn btn-sm" data-invite="${esc(id)}" title="Copy the invitation message">✉</button>` : ""}
-        ${u.invite ? `<button class="btn btn-sm btn-ghost btn-danger" data-cancel="${esc(id)}">Cancel</button>`
-          : isBishopUser(u) ? ""
-          : u.revoked ? `<button class="btn btn-sm" data-restore="${esc(id)}">Restore</button><button class="btn btn-sm btn-ghost btn-danger" data-remove="${esc(id)}">Remove</button>`
-          : `<button class="btn btn-sm btn-ghost btn-danger" data-revoke="${esc(id)}">Revoke</button>`}
-      </td>
+      ${showLastUsed() ? `<td class="us-col-lastUsed">${u.invite ? `<span class="row-sub">invited ${fmtSeen(u.invitedAt).replace(/<[^>]+>/g, "")}</span>` : fmtSeen(latestSeen(u))}</td>` : ""}
+      <td class="us-actions us-col-menu"><button type="button" class="btn btn-sm us-menu-btn" data-usmenu title="Actions">⋯</button><div class="us-menu" hidden>${items.join("")}</div></td>
     </tr>`;
   };
-  tbody.innerHTML = ordered.map((g) => `
-    <tr class="us-group"><td colspan="${cols}"><span class="us-group-name">${esc(g.label || "No organization")}</span><span class="us-group-n">${g.list.length}</span></td></tr>
-    ${g.list.map(rowHtml).join("")}`).join("");
+  const pastSorted = [...past].sort((a, b) => ms(b.revokedAt) - ms(a.revokedAt) || (a.name || "").localeCompare(b.name || ""));
+  const pastHtml = past.length ? `
+    <tr class="us-group us-group-past"><td colspan="${cols}"><span class="us-group-name">Past users</span><span class="us-group-n">${past.length}</span>
+      <button type="button" class="btn btn-sm btn-ghost us-past-toggle" data-pasttoggle>${showPastUsers ? "Hide" : "Show"}</button>
+      ${showPastUsers ? "" : `<span class="row-sub us-past-names">${esc(pastSorted.map((u) => u.name || u.email || "—").join(" · "))}</span>`}</td></tr>
+    ${showPastUsers ? pastSorted.map(rowHtml).join("") : ""}` : "";
+  const ORG_COLOURS = 8;
+  tbody.innerHTML = (ordered.length ? ordered.map((g, i) => { orgCls = `us-org us-org-${i % ORG_COLOURS}`; return `
+    <tr class="us-group ${orgCls}"><td colspan="${cols}"><span class="us-group-name">${esc(g.label || "No organization")}</span><span class="us-group-n">${g.list.length}</span></td></tr>
+    ${g.list.map(rowHtml).join("")}`; }).join("") : `<tr><td colspan="${cols}" class="empty-note">Nobody active — everyone is under Past users.</td></tr>`) + (orgCls = "", pastHtml);
+  // ⋯ opens one small menu at a time; any click elsewhere closes it
+  const closeMenus = () => tbody.querySelectorAll(".us-menu:not([hidden])").forEach((m) => { m.hidden = true; m.closest("tr").classList.remove("us-menu-open"); });
+  tbody.querySelectorAll("[data-usmenu]").forEach((b) => b.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const menu = b.nextElementSibling, open = menu.hidden;
+    closeMenus();
+    if (open) { menu.hidden = false; b.closest("tr").classList.add("us-menu-open"); }
+  }));
+  tbody.querySelectorAll(".us-menu button").forEach((b) => b.addEventListener("click", () => closeMenus()));
+  if (!tbody.dataset.menuWired) { tbody.dataset.menuWired = "1"; document.addEventListener("click", closeMenus); document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenus(); }); }
+  tbody.querySelector("[data-pasttoggle]")?.addEventListener("click", () => { showPastUsers = !showPastUsers; try { localStorage.setItem("sw-users-past", showPastUsers ? "1" : ""); } catch {} render(); });
   const find = (id) => id.startsWith("inv:") ? invites.find((i) => i.email === id.slice(4)) : users.find((u) => u.uid === id);
   tbody.querySelectorAll("[data-edit]").forEach((b) => b.addEventListener("click", () => editUser(find(b.dataset.edit))));
   tbody.querySelectorAll("[data-invite]").forEach((b) => b.addEventListener("click", () => inviteMessage(find(b.dataset.invite))));
