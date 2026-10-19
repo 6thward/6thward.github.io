@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792387744";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792387744";
+import { db } from "./firebase-init.js?v=1792387946";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792387946";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792387744";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792387744";
-import { openCouncilDate } from "./council.js?v=1792387744";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792387744";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792387946";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792387946";
+import { openCouncilDate } from "./council.js?v=1792387946";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792387946";
 
 let events = [];
 let viewStart; // ISO date of the Sunday the grid starts on — the current week by default, so past weeks aren't shown (2026-10-18)
@@ -346,6 +346,7 @@ function designateHtml(date) {
     <div class="dv-opts dv-kindsel"><label>What is it<select id="dv-kind" name="dv-kind"><option value="">Choose…</option>${kinds.map(([k, l]) => `<option value="${k}"${dvSel.kind === k ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></label><div class="row-sub" id="dv-kind-hint"></div></div>
     <div class="dv-opts" id="dv-opts"></div>
     <div class="dv-opts dv-opts-row dv-repeat"><label>Repeat<select id="dv-rep">${repeatChoices(date).map(([v, l]) => `<option value="${v}"${String(dvSel.rep || "0") === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></label><label id="dv-until-wrap"${dvSel.rep ? "" : " hidden"}>Until<input type="date" id="dv-until" value="${esc(dvSel.until || addDaysIso(date, 56))}"></label></div>
+    ${pickDaysHtml(date, "dv-pick")}
     <div class="dv-err hidden" id="dv-err"></div>
     <div class="dv-form-actions"><button type="button" class="btn" id="dv-cancel">Cancel</button><button type="button" class="btn btn-primary" id="dv-save">Add</button></div>`;
 }
@@ -388,7 +389,8 @@ function focusHtml(date, blocks) {
         <label>Where<select id="dv-f-place"><option value="office"${w.place !== "home" ? " selected" : ""}>Bishop's office</option><option value="home"${w.place === "home" ? " selected" : ""}>Home visits</option></select></label>
         <label>For<select id="dv-f-group"><option value=""${!w.group ? " selected" : ""}>Anyone</option><option value="families"${w.group === "families" ? " selected" : ""}>Families</option><option value="widows"${w.group === "widows" ? " selected" : ""}>Widows</option></select></label></div>
         <div class="dv-opts"><label>Reserved for <small>(optional — shows on the sign-up page)</small><input id="dv-f-note" maxlength="60" value="${esc(w.note || "")}" placeholder="e.g. Primary parents" autocomplete="off"></label></div>
-        <div class="dv-opts dv-opts-row dv-f-repeat"><label>Repeat this block<select id="dv-f-rep">${repeatChoices(date).map(([v, l]) => `<option value="${v}">${esc(v === "0" ? "Doesn't repeat" : l)}</option>`).join("")}</select></label><label id="dv-f-until-wrap" hidden>Until<input type="date" id="dv-f-until" value="${esc(addDaysIso(date, 56))}"></label><button type="button" class="btn btn-sm" id="dv-f-repgo" hidden>Add repeats</button></div>` : ""}
+        <div class="dv-opts dv-opts-row dv-f-repeat"><label>Repeat this block<select id="dv-f-rep">${repeatChoices(date).map(([v, l]) => `<option value="${v}">${esc(v === "0" ? "Doesn't repeat" : l)}</option>`).join("")}</select></label><label id="dv-f-until-wrap" hidden>Until<input type="date" id="dv-f-until" value="${esc(addDaysIso(date, 56))}"></label><button type="button" class="btn btn-sm" id="dv-f-repgo" hidden>Add repeats</button></div>
+        ${pickDaysHtml(date, "dv-f-pick")}` : ""}
       <h4 class="dv-side-h">Signed up <span class="pill pill-role-member">${booked.length}</span></h4>
       ${booked.length ? booked.map((s) => `<div class="dv-item dv-item-tithing"><b>${fmtClock(s.min)}</b><span>${esc(signups[s.id].name)}${signups[s.id].phone ? ` <span class="row-sub">· ${esc(signups[s.id].phone)}</span>` : ""}</span></div>`).join("") : `<div class="row-sub">Nobody yet.</div>`}
       <div class="dv-form-actions">${ed ? `<button type="button" class="btn btn-ghost btn-danger" id="dv-f-remove">Remove block</button>` : ""}<button type="button" class="btn" id="dv-back">Back</button></div>`;
@@ -427,7 +429,8 @@ function wireSide(date, blocks, keep) {
     redrawOpts();
     const syncTimes = () => { const a = toMinutes(side.querySelector("#dv-start").value), b = toMinutes(side.querySelector("#dv-end").value); if (b > a) { dvSel.a = a; dvSel.b = b; const g = document.getElementById("dv-grid"); const selEl = g?.querySelector(".dv-sel"); if (selEl) { selEl.style.top = `${(a - DAY_START) * PX_MIN}px`; selEl.style.height = `${(b - a) * PX_MIN}px`; selEl.querySelector("span").textContent = `${fmtClock(a)} – ${fmtClock(b)}`; } } };
     side.querySelector("#dv-start").addEventListener("change", syncTimes); side.querySelector("#dv-end").addEventListener("change", syncTimes);
-    side.querySelector("#dv-rep").addEventListener("change", (e) => { dvSel.rep = e.target.value === "0" ? 0 : e.target.value; side.querySelector("#dv-until-wrap").hidden = !dvSel.rep; });
+    side.querySelector("#dv-rep").addEventListener("change", (e) => { dvSel.rep = e.target.value === "0" ? 0 : e.target.value; });
+    wireRepeatSel(side.querySelector("#dv-rep"), side.querySelector("#dv-until-wrap"), side.querySelector("#dv-pick")); wirePickDays(side.querySelector("#dv-pick"));
     side.querySelector("#dv-until").addEventListener("change", (e) => { dvSel.until = e.target.value; });
     side.querySelector("#dv-save").addEventListener("click", () => saveDesignation(date, kindNow(), side));
   }
@@ -440,12 +443,13 @@ function wireSide(date, blocks, keep) {
   }));
   side.querySelector("#dv-f-note")?.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); e.target.blur(); } });
   // repeat an existing tithing block onto later dates (2026-10-18)
-  side.querySelector("#dv-f-rep")?.addEventListener("change", (e) => { const on = e.target.value !== "0"; side.querySelector("#dv-f-until-wrap").hidden = !on; side.querySelector("#dv-f-repgo").hidden = !on; });
+  side.querySelector("#dv-f-rep")?.addEventListener("change", (e) => { side.querySelector("#dv-f-repgo").hidden = e.target.value === "0"; });
+  wireRepeatSel(side.querySelector("#dv-f-rep"), side.querySelector("#dv-f-until-wrap"), side.querySelector("#dv-f-pick")); wirePickDays(side.querySelector("#dv-f-pick"));
   side.querySelector("#dv-f-repgo")?.addEventListener("click", async () => {
     const id = dvFocus.slice(2), w = (season.windows || []).find((x) => x.id === id); if (!w) return;
     const rule = side.querySelector("#dv-f-rep").value, until = side.querySelector("#dv-f-until").value;
     const cur = season.windows || [];
-    const dates = repeatDates(w.date, rule, until).slice(1).filter((d) => !cur.some((x) => x.date === d && toMinutes(x.start) < toMinutes(w.end) && toMinutes(w.start) < toMinutes(x.end)));
+    const dates = repeatDates(w.date, rule, until, pickedDays(side.querySelector("#dv-f-pick"))).slice(1).filter((d) => !cur.some((x) => x.date === d && toMinutes(x.start) < toMinutes(w.end) && toMinutes(w.start) < toMinutes(x.end)));
     if (!dates.length) return toast("Those days already have a block at this time");
     const adds = dates.map((d) => ({ ...w, id: "w" + Math.random().toString(36).slice(2, 9), date: d }));
     await saveTithingWindows([...cur, ...adds], `Added on ${dates.length} more day${dates.length === 1 ? "" : "s"} — they're on the sign-up page now`);
@@ -523,12 +527,35 @@ function repeatChoices(date) {
   const out = [["0", "Just this day"], ["7", "Every week"], ["14", "Every 2 weeks"], ["m-nth", `Every month — ${ORD[n]} ${wd}`]];
   if (isLastOfMonth(date)) out.push(["m-last", `Every month — last ${wd}`]);
   out.push(["m-date", `Every month — the ${d.getDate()}${[1, 21, 31].includes(d.getDate()) ? "st" : [2, 22].includes(d.getDate()) ? "nd" : [3, 23].includes(d.getDate()) ? "rd" : "th"}`]);
+  out.push(["pick", `Pick the ${wd}s…`]); // click the exact days, like the ward council dates (Jordan 10/18)
   return out;
 }
+// "Pick the days": the next 26 same-weekday dates as day chips grouped by month; click to toggle (same look as the council dates)
+function pickDaysHtml(date, id) {
+  const days = Array.from({ length: 26 }, (_, i) => addDaysIso(date, 7 * (i + 1)));
+  const months = [...new Set(days.map((d) => d.slice(0, 7)))];
+  return `<div class="dv-pick" id="${id}">
+    <div class="dv-pick-head"><b>Also on these ${WD[new Date(date + "T12:00:00").getDay()]}s</b><span><button type="button" class="btn btn-sm btn-ghost" data-pickall="1">All</button><button type="button" class="btn btn-sm btn-ghost" data-pickall="0">None</button></span></div>
+    ${months.map((mk) => `<div class="dv-pick-month"><div class="dv-pick-mname">${new Date(mk + "-15T12:00:00").toLocaleDateString("en-US", { month: "long", year: "numeric" })}</div><div class="dv-pick-days">${days.filter((d) => d.slice(0, 7) === mk).map((d) => `<button type="button" class="wcd-day" data-d="${d}" title="${esc(fmtDate(d))}">${Number(d.slice(8))}</button>`).join("")}</div></div>`).join("")}
+  </div>`;
+}
+function wirePickDays(box) {
+  if (!box) return;
+  box.querySelectorAll(".wcd-day").forEach((b) => b.addEventListener("click", () => b.classList.toggle("on")));
+  box.querySelectorAll("[data-pickall]").forEach((b) => b.addEventListener("click", () => box.querySelectorAll(".wcd-day").forEach((d) => d.classList.toggle("on", b.dataset.pickall === "1"))));
+}
+const pickedDays = (box) => (box ? [...box.querySelectorAll(".wcd-day.on")].map((b) => b.dataset.d).sort() : []);
+// a repeat select drives one Until box and one day picker: Until for the rules, the picker for "pick"
+function wireRepeatSel(sel, untilWrap, pickBox) {
+  if (!sel) return;
+  const sync = () => { const v = sel.value; if (untilWrap) untilWrap.hidden = v === "0" || v === "pick"; if (pickBox) pickBox.hidden = v !== "pick"; };
+  sel.addEventListener("change", sync); sync();
+}
 const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-function repeatDates(date, rule, until) {
+function repeatDates(date, rule, until, picked) {
   const out = [date];
   if (!rule || rule === "0") return out;
+  if (rule === "pick") return [...out, ...(picked || []).filter((d) => d !== date)];
   const stop = until && /^\d{4}-\d{2}-\d{2}$/.test(until) ? until : addDaysIso(date, 56);
   const step = Number(rule);
   if (step) { for (let d = addDaysIso(date, step), i = 0; d <= stop && i < 60; d = addDaysIso(d, step), i++) out.push(d); return out; }
@@ -594,7 +621,7 @@ async function saveDesignation(date, kind, side) {
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = "Saving…"; }
   const rule = side.querySelector("#dv-rep")?.value || "0", until = side.querySelector("#dv-until")?.value || "";
   if (rule !== "0" && until && until < date) return toast("The end date is before the first day");
-  const dates = repeatDates(date, rule, until), many = dates.length > 1;
+  const dates = repeatDates(date, rule, until, pickedDays(side.querySelector("#dv-pick"))), many = dates.length > 1;
   try {
     if (kind === "tithing") {
       if (!can("tithing", "edit")) return toast("You can't change tithing declaration times");
@@ -720,7 +747,8 @@ function eventFormHtml(e, defaultDate, canEdit, inline) {
       <div class="field full"><span>Colour <span class="row-sub">(optional)</span></span>${swatches("ev-color", e?.color)}</div>
       ${e?.series ? `<label class="field full ev-series"><input type="checkbox" id="ev-series"> <span>Also change the other repeats of this meeting (title, times, location, colour)</span></label>` : canEdit ? `
       <label class="field">Repeat<select id="ev-rep">${repeatChoices(e?.date || defaultDate || todayISO()).map(([v, l]) => `<option value="${v}">${esc(v === "0" ? "Doesn't repeat" : l)}</option>`).join("")}</select></label>
-      <label class="field" id="ev-until-wrap" hidden>Until<input type="date" id="ev-until" value="${esc(addDaysIso(e?.date || defaultDate || todayISO(), 56))}"></label>` : ""}
+      <label class="field" id="ev-until-wrap" hidden>Until<input type="date" id="ev-until" value="${esc(addDaysIso(e?.date || defaultDate || todayISO(), 56))}"></label>
+      <div class="full" id="ev-pick-wrap" hidden>${pickDaysHtml(e?.date || defaultDate || todayISO(), "ev-pick")}</div>` : ""}
       ${e && !e.tithing && /tith/i.test(e.title || "") && can("tithing", "edit") ? `<div class="full ev-tithing-hint">This is a plain appointment — members can't sign up for it. <button type="button" class="btn btn-sm" id="ev-make-tithing">Make it a sign-up block</button></div>` : ""}
       <div class="full cal-clash hidden" id="ev-clash"></div>
     </div>
@@ -753,7 +781,7 @@ function wireEventForm(root, e, canEdit, done) {
   };
   ["#ev-cal", "#ev-date", "#ev-start", "#ev-end"].forEach((sel) => root.querySelector(sel).addEventListener("change", clashNote));
   clashNote();
-  root.querySelector("#ev-rep")?.addEventListener("change", (ev) => { root.querySelector("#ev-until-wrap").hidden = ev.target.value === "0"; });
+  wireRepeatSel(root.querySelector("#ev-rep"), root.querySelector("#ev-until-wrap"), root.querySelector("#ev-pick-wrap")); wirePickDays(root.querySelector("#ev-pick"));
   // a plain event someone typed as "Tithing declaration" becomes a real sign-up block (same day and times; 15-minute office visits)
   root.querySelector("#ev-make-tithing")?.addEventListener("click", async () => {
     if (!e.startTime || !e.endTime) return toast("Give it a start and end time first");
@@ -812,7 +840,7 @@ function wireEventForm(root, e, canEdit, done) {
       updatedAt: serverTimestamp(),
     };
     const rule = root.querySelector("#ev-rep")?.value || "0", until = root.querySelector("#ev-until")?.value || "";
-    const repeats = rule !== "0" ? repeatDates(data.date, rule, until).slice(1) : [];
+    const repeats = rule !== "0" ? repeatDates(data.date, rule, until, pickedDays(root.querySelector("#ev-pick"))).slice(1) : [];
     if (repeats.length) data.series = "r" + Math.random().toString(36).slice(2, 9); // this one and its copies belong together
     try {
       if (isNew) {
