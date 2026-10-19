@@ -2308,3 +2308,7 @@ tr.us-menu-open td { background: #f7f9fb; }
 .tx-actions .right { display: flex; gap: .4rem; margin-left: auto; }
 .tx-save { display: flex; gap: .35rem; align-items: center; } .tx-save .src-in { width: 14rem; }
 .btn.btn-disabled { opacity: .5; cursor: not-allowed; }
+/* Users: Mobile column (2026-10-18) */
+#users-table th.us-col-phone, #users-table td.us-col-phone { width: 8.5rem; white-space: nowrap; }
+.us-phone { font-variant-numeric: tabular-nums; font-size: .8rem; }
+#users-table th.us-col-email, #users-table td.us-col-email { width: 13%; }
