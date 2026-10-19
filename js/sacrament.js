@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1792376293";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1792376293";
+import { db } from "./firebase-init.js?v=1792376483";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1792376483";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1792376293";
-import { HYMNS } from "./hymns.js?v=1792376293";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1792376293";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1792376483";
+import { HYMNS } from "./hymns.js?v=1792376483";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1792376483";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -896,19 +896,18 @@ function statusChips(m, date) {
   // combined pill: a headline plus one line per slot, each line with its own
   // click-to-confirm dot. Green when every slot is named AND confirmed,
   // yellow once anything is named, red/grey when empty.
-  const groupChip = (label, qe, lines, subhead, footer) => {
-    // lines marked "none" (no speaker planned this week) don't count as
-    // missing: a pill of all-none goes grey, and the rest can still go green
+  // lines marked "none" (no speaker planned this week) don't count as
+  // missing: a pill of all-none goes grey, and the rest can still go green
+  // 2026-09-20 (Jordan) — green only when EVERY slot is filled AND confirmed;
+  // amber while any slot is still empty or anyone is unconfirmed; red when
+  // nobody is named at all.
+  const chipCls = (lines) => {
     const real = lines.filter((l) => !l.none);
     const named = real.filter((l) => l.name);
-    // 2026-09-20 (Jordan) — green only when EVERY slot is filled AND confirmed;
-    // amber while any slot is still empty or anyone is unconfirmed; red when
-    // nobody is named at all.
     const allConfirmed = named.length === real.length && named.every((l) => l.confirmed);
-    const cls = real.length === 0
-      ? "st-off"
-      : named.length === 0 ? (planned ? "st-miss" : "st-off") : allConfirmed ? "st-ok" : "st-pending";
-    const body = lines.map((l) => {
+    return real.length === 0 ? "st-off" : named.length === 0 ? (planned ? "st-miss" : "st-off") : allConfirmed ? "st-ok" : "st-pending";
+  };
+  const chipBody = (lines) => lines.map((l) => {
       if (l.none) {
         const editAttr = l.inlineEdit && can ? ` data-ed='${JSON.stringify(l.inlineEdit)}' title="Click to type here"` : "";
         const dragAttrN = can && l.k && DRAG_KINDS.has(l.k) ? ` draggable="true" data-drag='${JSON.stringify({ k: l.k, o: l.o })}'` : "";
@@ -932,6 +931,8 @@ function statusChips(m, date) {
       const topicBtn = l.topicable ? `<span class="st-topic${l.topic ? " has" : ""}" data-topic='${JSON.stringify({ k: l.k, o: l.o })}' title="${l.topic ? esc(l.topic) + (can ? " — click to change" : "") : (can ? "Add a topic" : "No topic yet")}">topic</span>` : "";
       return `<span class="st-line${l.light ? " st-line-light" : ""}${dragAttr ? " st-drag" : ""}${l.name && !l.confirmed && !l.light ? " st-li-unconf" : ""}"${editAttr}${dragAttr}><span class="st-li-tag">${esc(l.tag)}:</span> <span class="st-li-name${l.light ? " st-li-light" : ""}${l.nameHtml ? " st-li-hymn" : ""}">${l.nameHtml || (l.name ? esc(l.name) : "—")}</span>${orgTag}${topicBtn}${l.light ? "" : dot}</span>`;
     }).join("");
+  const groupChip = (label, qe, lines, subhead, footer) => {
+    const cls = chipCls(lines), body = chipBody(lines);
     // no icon in the headline — the title stays cleanly centered; state
     // lives in the pill color and the per-line marks
     const sh = subhead ? (typeof subhead === "string" ? { html: subhead, attrs: "" } : subhead) : null;
@@ -939,6 +940,8 @@ function statusChips(m, date) {
     return `<span class="st st-group ${cls}${can ? " st-click" : ""}"${can ? ` data-qe='${JSON.stringify(qe)}' title="Click to edit"` : ""}><span class="st-head">${label}</span>${shHtml}${body}${footer || ""}</span>`;
   };
 
+  // one box, several sections that each carry their own red / amber / green (2026-10-18) — the Other Music pattern
+  const splitChip = (label, qe, sections) => `<span class="st st-group st-split st-split-spk${can ? " st-click" : ""}"${can ? ` data-qe='${JSON.stringify(qe)}' title="Click to edit"` : ""}><span class="st-head">${label}</span>${sections.map((sec) => `<span class="st-sec ${chipCls(sec.lines)}"><span class="st-prelude-lbl st-sub-lbl">${esc(sec.label)}</span>${chipBody(sec.lines)}${sec.footer || ""}</span>`).join("")}</span>`;
   const spkLines = (kind, tagFn) => of(kind).map((it, i) => ({
     tag: tagFn(it, i), name: it.name, confirmed: isConf(it), confirmedBy: it.confirmedBy, k: kind, o: i,
     topic: it.topic || "", topicable: !!it.name, // 2026-09-13 — topic button once there's a speaker
@@ -1096,9 +1099,15 @@ function statusChips(m, date) {
     ...spkLines("youthSpeaker", (it, i) => yth.length > 1 ? `Youth ${i + 1}` : "Youth"),
   ];
   if (!hide.youth && (youthLines.length || (can && type !== "fast"))) {
-    // 2026-09-19 — "+" adds another youth or primary speaker right on the pill
-    const addY = can ? `<span class="st-add-row"><span class="st-add" data-addspk="youthSpeaker" title="Add another youth speaker">+ youth</span><span class="st-add" data-addspk="primarySpeaker" title="Add another primary speaker">+ primary</span></span>` : "";
-    chips.push(groupChip(`Youth Speakers${xBtn("youth", "Youth Speakers")}`, { t: "py" }, youthLines, null, addY));
+    // 2026-10-18 (Jordan) — Primary and Youth are separate sections with their own status; "+" adds another speaker in that section
+    const primLines = spkLines("primarySpeaker", (it, i) => prim.length > 1 ? `Primary ${i + 1}` : "Primary");
+    const ythLines = spkLines("youthSpeaker", (it, i) => yth.length > 1 ? `Youth ${i + 1}` : "Youth");
+    const addP = can ? `<span class="st-add-row"><span class="st-add" data-addspk="primarySpeaker" title="Add another primary speaker">+ primary</span></span>` : "";
+    const addYo = can ? `<span class="st-add-row"><span class="st-add" data-addspk="youthSpeaker" title="Add another youth speaker">+ youth</span></span>` : "";
+    chips.push(splitChip(`Youth Speakers${xBtn("youth", "Youth Speakers")}`, { t: "py" }, [
+      { label: "Primary", lines: primLines, footer: addP },
+      { label: "Youth", lines: ythLines, footer: addYo },
+    ]));
   }
   if (adultSpk.length) {
     // "+" under the last speaker line: opens the editor with a fresh row ready

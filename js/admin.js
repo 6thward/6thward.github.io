@@ -15,14 +15,14 @@
 // whose profile doc carries `alias: <googleUid>` plus a mirror of the name /
 // organization / calling / pages, so the rules see the same access either
 // way. The table shows one row; the mirror is kept in step on every save.
-import { db } from "./firebase-init.js?v=1792376293";
-import { ctx, AREAS, normalizePerms } from "./app.js?v=1792376293";
+import { db } from "./firebase-init.js?v=1792376483";
+import { ctx, AREAS, normalizePerms } from "./app.js?v=1792376483";
 import {
   collection, onSnapshot, updateDoc, setDoc, deleteDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { orgColor } from "./org-colors.js?v=1792376293";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1792376293";
-import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1792376293";
+import { orgColor } from "./org-colors.js?v=1792376483";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1792376483";
+import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1792376483";
 
 let sort = { key: "created", dir: 1 }; // default: oldest at the top; click a header for A→Z / Z→A (2026-09-19)
 let showPastUsers = (() => { try { return localStorage.getItem("sw-users-past") === "1"; } catch { return false; } })(); // Past users folded unless they chose to see them (2026-10-18)
@@ -198,7 +198,7 @@ function render() {
       <td class="us-col-council">${u.councilMember ? `<span class="pill us-council-pill" title="Ward council member">Council</span>` : ""}</td>
       <td class="us-col-signin">${signInPill(u)}</td>
       <td class="us-col-email">${email ? `<span class="row-sub us-email" title="${esc(email)}">${esc(email)}</span>` : ""}</td>
-      <td class="us-col-phone">${u.phone ? `<button type="button" class="us-phone us-phone-ed" data-phone="${esc(id)}" title="Click to change">${esc(u.phone)}</button>` : `<button type="button" class="us-phone-add" data-phone="${esc(id)}" title="Add a mobile number">+</button>`}</td>
+      <td class="us-col-phone">${u.phone ? `<button type="button" class="us-phone us-phone-ed" data-phone="${esc(id)}" title="Click to change">${esc(fmtPhone(u.phone))}</button>` : `<button type="button" class="us-phone-add" data-phone="${esc(id)}" title="Add a mobile number">+</button>`}</td>
       <td class="us-col-organization"><span class="us-trunc" title="${esc(u.organization || "")}">${esc(u.organization || "")}</span></td>
       <td class="us-col-calling"><span class="us-trunc" title="${esc(u.calling || "")}">${esc(u.calling || "")}</span></td>
       <td class="us-access"><div class="us-pills">${u.revoked ? `<span class="pill pill-muted">—</span>` : accessPills(permsOf(u), id)}</div></td>
@@ -225,7 +225,7 @@ function render() {
     let done = false;
     const finish = async (commit) => {
       if (done) return; done = true;
-      const v = inp.value.trim();
+      const v = fmtPhone(inp.value);
       if (commit && v !== initial) {
         try {
           await updateDoc(doc(db, u.invite ? "invites" : "users", u.invite ? u.email : u.uid), { phone: v });
@@ -342,7 +342,7 @@ function editUser(u) {
     const name = el.querySelector("#uu-name").value.trim();
     const organization = el.querySelector("#uu-org").value.trim();
     const calling = el.querySelector("#uu-calling").value.trim();
-    const phone = el.querySelector("#uu-phone").value.trim();
+    const phone = fmtPhone(el.querySelector("#uu-phone").value);
     const newPerms = bishop ? null : readPerms();
     const councilMember = el.querySelector("#uu-council").checked;
     if (councilMember && newPerms) newPerms.council = "edit";
@@ -540,6 +540,8 @@ function changePin(u) {
 // Pick who (ward council, an organization, a saved group, or people one by one), write the message,
 // and "Open in Messages" hands it to the phone's own texting app through an sms: link. Nothing is
 // sent by the app itself — it just fills in the numbers and the words.
+// "(435) 201-2105" for any US number however it was typed; anything else stays as typed (2026-10-18)
+const fmtPhone = (p) => { const d = String(p || "").replace(/\D/g, ""); const n = d.length === 11 && d[0] === "1" ? d.slice(1) : d; return n.length === 10 ? `(${n.slice(0, 3)}) ${n.slice(3, 6)}-${n.slice(6)}` : String(p || "").trim(); };
 const normPhone = (p) => { const d = String(p || "").replace(/\D/g, ""); return d.length === 10 ? "+1" + d : d.length === 11 && d[0] === "1" ? "+" + d : d ? "+" + d : ""; };
 const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 function smsLink(numbers, body) {
@@ -582,7 +584,7 @@ function textTool() {
         <input type="checkbox" data-uid="${esc(u.uid)}" ${chosen.has(u.uid) ? "checked" : ""} ${withPhone(u) ? "" : "disabled"}>
         <span class="tx-name">${esc(u.name || u.email || "—")}</span>
         <span class="tx-meta">${esc([u.organization, u.calling].filter(Boolean).join(" · "))}</span>
-        <span class="tx-phone">${withPhone(u) ? esc(u.phone) : "no number"}</span>
+        <span class="tx-phone">${withPhone(u) ? esc(fmtPhone(u.phone)) : "no number"}</span>
       </label>`).join("") || `<div class="empty-note">Nobody matches.</div>`;
     list.querySelectorAll("input[data-uid]").forEach((cb) => cb.addEventListener("change", () => { cb.checked ? chosen.add(cb.dataset.uid) : chosen.delete(cb.dataset.uid); draw(); }));
   };

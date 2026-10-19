@@ -2323,3 +2323,7 @@ tr.us-menu-open td { background: #f7f9fb; }
 .us-phone-add { font: inherit; width: 1.5rem; height: 1.5rem; border-radius: 6px; border: 1px dashed #c3c9d1; background: #fff; color: #9aa4b1; cursor: pointer; line-height: 1; padding: 0; }
 .us-phone-add:hover { border-color: var(--brand); color: var(--brand); }
 .us-phone-in { font: inherit; font-size: .85rem; width: 8rem; padding: .2rem .4rem; border: 1px solid var(--brand); border-radius: 6px; }
+/* Youth Speakers: Primary and Youth sections colour on their own (2026-10-18) */
+.st.st-split-spk .st-sec { align-items: stretch; }
+.st.st-split-spk .st-sec .st-sub-lbl { align-self: center; }
+.st.st-split-spk .st-sec .st-add-row { margin-top: .2rem; }
