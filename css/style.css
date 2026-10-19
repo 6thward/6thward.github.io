@@ -2438,3 +2438,4 @@ tr.us-menu-open td { background: #f7f9fb; }
 .list-row-colored { border-left: 3px solid var(--evc); }
 .cal-tag-bishop[style] { background: color-mix(in srgb, var(--evc) 18%, #fff); color: color-mix(in srgb, var(--evc) 72%, #000); }
 .ev-series { display: flex; align-items: center; gap: .5rem; font-size: .88rem; }
+.dv-kindsel { margin-bottom: .5rem; } .dv-kindsel select { font-size: 1rem; }

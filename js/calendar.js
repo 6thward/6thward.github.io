@@ -2,14 +2,14 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792385896";
-import { ctx, hasRole, can } from "./app.js?v=1792385896";
+import { db } from "./firebase-init.js?v=1792385910";
+import { ctx, hasRole, can } from "./app.js?v=1792385910";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792385896";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792385896";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792385896";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList } from "./tithing-shared.js?v=1792385910";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792385910";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792385910";
 
 let events = [];
 let viewYear, viewMonth; // 0-based month
@@ -208,13 +208,25 @@ function render() {
 // name on), or anything else. Existing events, standing meetings and tithing blocks sit on the same
 // timeline so you can see the whole day at once.
 const DAY_START = 7 * 60, DAY_END = 21 * 60, PX_MIN = 1.15, SNAP = 5;
+// what a stretch of the day can be (2026-10-18): a dropdown — tithing and interviews are special (slots),
+// the rest are plain Bishop-calendar meetings with a preset title and colour; "Something else" takes any title
 const KINDS = [
   ["tithing", "Tithing declaration", "Members sign up for these times through the link / QR"],
-  ["council", "Ward council", "Goes on the Bishop calendar"],
-  ["bishopric", "Bishopric meeting", "Goes on the Bishop calendar"],
   ["interviews", "Interviews", "Slots you fill with names yourself"],
-  ["other", "Something else", "Any other appointment on the Bishop calendar"],
+  ["sacrament", "Sacrament meeting", "", "#1f4e79"],
+  ["council", "Ward council", "", "#7a4fb5"],
+  ["bishopric", "Bishopric meeting", "", "#7a4fb5"],
+  ["stake", "Stake training", "", "#b98a2f"],
+  ["bishoptrain", "Bishop training", "", "#b98a2f"],
+  ["ymlead", "Young Men leadership", "", "#2e7d4f"],
+  ["ywlead", "Young Women leadership", "", "#cf6d96"],
+  ["quorum", "Quorum presidency", "", "#1f8a83"],
+  ["rspres", "Relief Society presidency", "", "#cf6d96"],
+  ["primarypres", "Primary presidency", "", "#dd9257"],
+  ["welfare", "Welfare / self-reliance", "", "#1f8a83"],
+  ["other", "Something else…", "Any other appointment on the Bishop calendar"],
 ];
+const kindOf = (k) => KINDS.find((x) => x[0] === k);
 const TITHING_LENS = [10, 15, 20, 30], INTERVIEW_LENS = [10, 15, 20, 30, 60];
 // colours a meeting can wear on the calendar (2026-10-18); the same colour shows in the month grid, the day timeline and Coming up
 const EV_COLORS = [["#7a4fb5", "Purple"], ["#1f4e79", "Blue"], ["#1f8a83", "Teal"], ["#2e7d4f", "Green"], ["#b98a2f", "Gold"], ["#dd9257", "Orange"], ["#c0392b", "Red"], ["#cf6d96", "Pink"], ["#4b5563", "Grey"]];
@@ -311,7 +323,7 @@ function designateHtml(date) {
   const kinds = KINDS.filter(([k]) => k !== "tithing" || can("tithing", "edit"));
   return `<h4 class="dv-side-h">What is this?</h4>
     <div class="dv-time"><label>From<input type="time" id="dv-start" step="300" value="${hhmmOf(dvSel.a)}"></label><label>To<input type="time" id="dv-end" step="300" value="${hhmmOf(dvSel.b)}"></label></div>
-    <div class="dv-kinds">${kinds.map(([k, l, hint]) => `<label class="dv-kind${dvSel.kind === k ? " on" : ""}"><input type="radio" name="dv-kind" value="${k}"${dvSel.kind === k ? " checked" : ""}><span><b>${l}</b><small>${hint}</small></span></label>`).join("")}</div>
+    <div class="dv-opts dv-kindsel"><label>What is it<select id="dv-kind" name="dv-kind"><option value="">Choose…</option>${kinds.map(([k, l]) => `<option value="${k}"${dvSel.kind === k ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></label><div class="row-sub" id="dv-kind-hint"></div></div>
     <div class="dv-opts" id="dv-opts"></div>
     <div class="dv-opts dv-opts-row dv-repeat"><label>Repeat<select id="dv-rep">${repeatChoices(date).map(([v, l]) => `<option value="${v}"${String(dvSel.rep || "0") === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></label><label id="dv-until-wrap"${dvSel.rep ? "" : " hidden"}>Until<input type="date" id="dv-until" value="${esc(dvSel.until || addDaysIso(date, 56))}"></label></div>
     <div class="dv-err hidden" id="dv-err"></div>
@@ -331,9 +343,11 @@ function optsHtml(kind) {
     <label>Where<select id="dv-place"><option value="office">🏛 Bishop's office</option><option value="home">🏠 Home visits</option></select></label>
     <label>Set aside for<select id="dv-group"><option value="">Anyone</option><option value="families">Families with kids at home</option><option value="widows">Widows</option></select></label>`;
   if (kind === "interviews") return `<label>Each interview<select id="dv-len">${INTERVIEW_LENS.map((n) => opt(n, n + " minutes", dvSel.len || 15)).join("")}</select></label><label>Label<input id="dv-title" value="Interviews" autocomplete="off"></label><label>Colour <small>(optional)</small>${swatches("dv-color", dvSel.color)}</label>`;
-  const color = `<label>Colour <small>(optional)</small>${swatches("dv-color", dvSel.color)}</label>`;
-  if (kind === "other") return `<label>Title<input id="dv-title" placeholder="e.g. Sacrament meeting, Temple recommend — Hansen" autocomplete="off"></label><label>Location <small>(optional)</small><input id="dv-loc" placeholder="e.g. Chapel — leave blank if it doesn't matter" autocomplete="off"></label>${color}`;
-  return color;
+  const preset = kindOf(kind)?.[3] || "";
+  const color = `<label>Colour <small>(optional)</small>${swatches("dv-color", dvSel.color || preset)}</label>`;
+  const loc = `<label>Location <small>(optional)</small><input id="dv-loc" placeholder="e.g. Chapel — leave blank if it doesn't matter" autocomplete="off"></label>`;
+  if (kind === "other") return `<label>Title<input id="dv-title" placeholder="e.g. Temple recommend — Hansen" autocomplete="off"></label>${loc}${color}`;
+  return loc + color;
 }
 function focusHtml(date, blocks) {
   const [t, id] = [dvFocus.slice(0, 1), dvFocus.slice(2)];
@@ -364,10 +378,10 @@ function wireSide(date, blocks) {
   // designate form
   if (dvSel) {
     const opts = side.querySelector("#dv-opts");
-    const kindNow = () => side.querySelector("input[name=dv-kind]:checked")?.value || "";
+    const kindNow = () => side.querySelector("#dv-kind")?.value || "";
     // nothing is picked to start with: the extra fields (visit length, where, who for) only appear for the kind that needs them
-    const redrawOpts = () => { dvSel.kind = kindNow(); opts.innerHTML = dvSel.kind ? optsHtml(dvSel.kind) : ""; wireSwatches(opts.querySelector("#dv-color")); side.querySelectorAll(".dv-kind").forEach((l) => l.classList.toggle("on", l.querySelector("input").checked)); const sv = side.querySelector("#dv-save"); if (sv) sv.disabled = !dvSel.kind; side.querySelector(".dv-repeat")?.classList.toggle("hidden", !dvSel.kind); };
-    side.querySelectorAll("input[name=dv-kind]").forEach((r) => r.addEventListener("change", redrawOpts));
+    const redrawOpts = () => { dvSel.kind = kindNow(); opts.innerHTML = dvSel.kind ? optsHtml(dvSel.kind) : ""; wireSwatches(opts.querySelector("#dv-color")); const h = side.querySelector("#dv-kind-hint"); if (h) h.textContent = kindOf(dvSel.kind)?.[2] || ""; const sv = side.querySelector("#dv-save"); if (sv) sv.disabled = !dvSel.kind; side.querySelector(".dv-repeat")?.classList.toggle("hidden", !dvSel.kind); };
+    side.querySelector("#dv-kind").addEventListener("change", redrawOpts);
     redrawOpts();
     const syncTimes = () => { const a = toMinutes(side.querySelector("#dv-start").value), b = toMinutes(side.querySelector("#dv-end").value); if (b > a) { dvSel.a = a; dvSel.b = b; const g = document.getElementById("dv-grid"); const selEl = g?.querySelector(".dv-sel"); if (selEl) { selEl.style.top = `${(a - DAY_START) * PX_MIN}px`; selEl.style.height = `${(b - a) * PX_MIN}px`; selEl.querySelector("span").textContent = `${fmtClock(a)} – ${fmtClock(b)}`; } } };
     side.querySelector("#dv-start").addEventListener("change", syncTimes); side.querySelector("#dv-end").addEventListener("change", syncTimes);
@@ -486,7 +500,7 @@ async function saveDesignation(date, kind, side) {
       dvSel = null; drawDay();
       return;
     }
-    const title = kind === "council" ? "Ward council" : kind === "bishopric" ? "Bishopric meeting" : (side.querySelector("#dv-title")?.value.trim() || (kind === "interviews" ? "Interviews" : ""));
+    const title = kind === "other" ? side.querySelector("#dv-title")?.value.trim() || "" : kind === "interviews" ? (side.querySelector("#dv-title")?.value.trim() || "Interviews") : (kindOf(kind)?.[1] || "");
     if (!title) { if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "Add"; } return toast("Give it a title"); }
     const series = many ? "r" + Math.random().toString(36).slice(2, 9) : null; // the repeats know they belong together
     const color = swatchValue(side.querySelector("#dv-color"));
