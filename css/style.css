@@ -2381,9 +2381,14 @@ tr.us-menu-open td { background: #f7f9fb; }
 .dv-tithing { background: #fdf3da; border-color: #e6c35c; color: #6e5100; }
 .dv-interviews { background: #ece6f7; border-color: #c4b3e6; color: #5b3fa0; }
 .dv-block.dv-focus { box-shadow: 0 0 0 2px var(--brand); }
-.dv-slots { position: absolute; left: .3rem; right: .3rem; top: 1.45rem; bottom: 0; }
-.dv-slot { position: absolute; left: 0; right: 0; border-top: 1px dashed rgba(0,0,0,.14); font-size: .7rem; line-height: 1.1; padding: .05rem .25rem; color: inherit; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; box-sizing: border-box; }
-.dv-slot.booked { background: rgba(255,255,255,.7); font-weight: 600; }
+.dv-slots { position: absolute; left: 0; right: 0; top: 0; bottom: 0; }
+/* sign-up / interview blocks: slot rows fill the block ("11:05 (10 min) The Smiths"); the block's name floats top-right (2026-10-18) */
+.dv-block.dv-slotted { padding: 0; }
+.dv-block-tag { position: absolute; top: 2px; right: 6px; z-index: 1; font-size: .66rem; font-weight: 700; opacity: .75; background: rgba(255,255,255,.75); border-radius: 6px; padding: 0 .35rem; max-width: 55%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.dv-slot { position: absolute; left: 0; right: 0; border-top: 1px dashed rgba(0,0,0,.14); font-size: .72rem; line-height: 1.1; padding: .1rem .45rem; color: inherit; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; box-sizing: border-box; display: flex; align-items: center; gap: .3rem; }
+.dv-slot:first-child { border-top: 0; }
+.dv-slot b { font-weight: 700; min-width: 2.4rem; } .dv-slot i { font-style: normal; opacity: .65; font-size: .66rem; } .dv-slot span { font-weight: 500; opacity: .55; }
+.dv-slot.booked { background: rgba(255,255,255,.7); } .dv-slot.booked span { font-weight: 600; opacity: 1; }
 .dv-slot.off { background: repeating-linear-gradient(135deg, transparent 0 4px, rgba(0,0,0,.06) 4px 8px); }
 .dv-sel { position: absolute; left: 2px; right: 2px; background: rgba(31,78,121,.14); border: 2px dashed var(--brand); border-radius: 8px; pointer-events: none; display: flex; align-items: flex-start; padding: .2rem .4rem; box-sizing: border-box; }
 .dv-sel span { font-size: .74rem; font-weight: 700; color: var(--brand); background: #fff; border-radius: 6px; padding: .05rem .4rem; }
@@ -2450,7 +2455,7 @@ tr.us-menu-open td { background: #f7f9fb; }
 .dv-grid-wrap { max-height: 78vh; }
 .dv-block { font-size: .78rem; padding: .18rem .4rem; }
 .dv-block-title { font-size: .78rem; }
-.dv-slots { top: 1.2rem; }
+.dv-slot { font-size: .68rem; }
 .ev-agenda { margin-top: .6rem; }
 /* month grid: taller days, up to 7 pills each (2026-10-18) */
 .cal-cell { min-height: 10.5rem; }
@@ -2476,3 +2481,10 @@ tr.us-menu-open td { background: #f7f9fb; }
 .ev-inline-wrap textarea { min-height: 4rem; }
 .ev-inline-wrap .modal-actions { margin-top: .6rem; }
 .ev-inline-hint { background: #f1f6fb; border-radius: 8px; padding: .4rem .6rem; }
+/* "Reserved for" note on tithing blocks + repeat options in the editors (2026-10-18) */
+.td-pill-note, .td-tag-note { background: #fdf1d6; color: #8a5a00; }
+.td-flag-note { background: #fdf1d6; color: #8a5a00; }
+.form-grid .field[hidden] { display: none; }
+.ev-tithing-hint { background: #fdf1d6; color: #5c3d00; border-radius: 8px; padding: .4rem .6rem; font-size: .85rem; display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+.dv-f-repeat button[hidden] { display: none; }
+.dv-f-repeat { align-items: flex-end; }

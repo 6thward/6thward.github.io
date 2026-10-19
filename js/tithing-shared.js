@@ -4,7 +4,8 @@
 // tithing/{token}                 { open, ward, note, windows[], blocked[slotId], busy{ slotId: event title }, slots{ id: minutes }, created }
 //   busy = sign-up times covered by something on the bishop's calendar (events with cal: "bishop"); kept in
 //   step by the app whenever his calendar or the availability changes, since the public page can't read events
-//   windows[]                     { id, date, start "HH:MM", end "HH:MM", len, place, group }
+//   windows[]                     { id, date, start "HH:MM", end "HH:MM", len, place, group, note }
+//   note = "reserved for" wording the sign-up page shows on that block (2026-10-18), e.g. "Primary parents"
 // tithing/{token}/taken/{slotId}  { len, at }           — public: only WHICH times are gone
 // tithing/{token}/signups/{slotId}{ name, phone, address, at } — private: who took them
 // slotId = "2026-12-06_1415"
@@ -44,7 +45,7 @@ export function slotsOf(windows, blocked) {
       const id = slotId(w.date, t);
       if (seen.has(id)) continue;
       seen.add(id);
-      out.push({ id, date: w.date, min: t, len, place: w.place || "office", group: w.group || "", win: w.id, blocked: off.has(id) });
+      out.push({ id, date: w.date, min: t, len, place: w.place || "office", group: w.group || "", note: w.note || "", win: w.id, blocked: off.has(id) });
     }
   });
   return out;

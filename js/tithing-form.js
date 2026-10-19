@@ -2,13 +2,13 @@
 // No sign-in. Anyone with the link sees the open times (never who took the
 // others), picks one, and leaves a name — plus a phone number if they'd like
 // a text reminder.
-import { db } from "./firebase-init.js?v=1792387254";
+import { db } from "./firebase-init.js?v=1792387744";
 import {
   doc, getDoc, collection, onSnapshot, writeBatch, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import {
   GROUPS, PLACES, esc, fmtClock, fmtLongDay, slotsOf, sortWindows, parseSlotId, todayIso, nowMin, offList,
-} from "./tithing-shared.js?v=1792387254";
+} from "./tithing-shared.js?v=1792387744";
 
 export async function initTithingForm(mount, token) {
   const fail = (title, msg) => { mount.innerHTML = `<div class="td-card td-msg"><h2>${esc(title)}</h2><p>${esc(msg)}</p></div>`; };
@@ -61,6 +61,7 @@ export async function initTithingForm(mount, token) {
             <div class="td-win-head">
               <span class="td-place">${PLACES[w.place]?.icon || "🏛"} ${esc(PLACES[w.place]?.pub || PLACES.office.pub)}</span>
               ${g ? `<span class="td-flag td-flag-${g.cls}">Set aside for ${esc(g.label.toLowerCase())}</span>` : ""}
+              ${w.note ? `<span class="td-flag td-flag-note">Reserved for ${esc(w.note)}</span>` : ""}
               <span class="td-len">${Number(w.len) || 15}-minute visits</span>
             </div>
             <div class="td-slots">
@@ -99,6 +100,7 @@ export async function initTithingForm(mount, token) {
       <h2>${esc(fmtLongDay(s.date))}</h2>
       <p class="td-when">${fmtClock(s.min)} · ${s.len} minutes<br>${PLACES[s.place]?.icon || ""} ${esc(whereLine(s))}</p>
       ${g ? `<p class="td-flag td-flag-${g.cls} td-flag-block">This time is set aside for ${esc(g.label.toLowerCase())}. If that's you, go right ahead.</p>` : ""}
+      ${s.note ? `<p class="td-flag td-flag-note td-flag-block">This time is reserved for ${esc(s.note)}. If that's you, go right ahead.</p>` : ""}
       <label class="td-field"><span>Your name <i>(or family name)</i></span><input id="td-name" autocomplete="name" maxlength="80" placeholder="e.g. The Hansen family"></label>
       <label class="td-field"><span>Mobile number <i>(optional — only if you'd like a text reminder)</i></span><input id="td-phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="30" placeholder="(435) 555-0123"></label>
       ${s.place === "home" ? `<label class="td-field"><span>Your address <i>(optional)</i></span><input id="td-addr" autocomplete="street-address" maxlength="160" placeholder="Street address"></label>` : ""}
