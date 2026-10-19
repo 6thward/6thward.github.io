@@ -2217,3 +2217,19 @@ tr.us-menu-open td { background: #f7f9fb; }
 .st-step.on .st-dot { background: #2e7d4f; border-color: #2e7d4f; box-shadow: inset 0 0 0 2px #fff; }
 .st-seg { flex: 1; min-width: .8rem; height: 2px; background: #d9dee4; border-radius: 1px; } .st-seg.on { background: #2e7d4f; }
 .call-person-row .step-track { padding-left: .3rem; }
+/* Callings board, style D (2026-10-18, Jordan's pick): soft filled name chips, uppercase helper labels,
+   organization as a tiny uppercase tag, calling name in the organization colour, lone names plain */
+.call-card .call-card-title { background: color-mix(in srgb, var(--col) 14%, #fff) !important; color: color-mix(in srgb, var(--col) 72%, #000) !important; font-weight: 600 !important; font-size: .95rem !important; }
+.call-card .call-card-title .call-org-tag { font-size: .6rem; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; background: #fff; border-radius: 4px; padding: .1rem .4rem; color: color-mix(in srgb, var(--col) 70%, #000) !important; }
+.call-person, .cand-line .cand-name-txt.call-person { background: #eef1f4; border: none; border-radius: 8px; font-weight: 600; font-size: .92rem; padding: .2rem .65rem; }
+.call-person:hover { background: #e3e9f0; }
+.call-person.call-solo { background: none; padding: .2rem .1rem; font-size: .98rem; border-radius: 4px; }
+.call-person.call-solo:hover { background: #f1f4f7; }
+.call-card .call-card-line > .row-sub, .call-card > .row-sub:not(:has(.cand-line, .cand-add)), .stake-list .call-card .call-card-line .row-sub { font-size: .64rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #8a94a1 !important; opacity: 1 !important; } /* stamps only — the candidate list also lives in a .row-sub */
+.call-card .call-card-line .btn, .call-card .call-card-actions .btn:not(.btn-primary) { background: #eef1f4; border: none; border-radius: 8px; font-weight: 600; color: var(--ink); }
+.call-card .call-card-line .btn:hover { background: #e3e9f0; }
+.call-card .btn-primary { border-radius: 8px; }
+.bb-col > h3 { font-size: .74rem !important; font-weight: 800 !important; text-transform: uppercase; letter-spacing: .07em; color: var(--brand); }
+.bb-col > h3 .btn { text-transform: none; letter-spacing: 0; }
+.bb-col > p.row-sub { font-size: .64rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #8a94a1; }
+.cand-line .cand-name-txt { font-weight: 600; }

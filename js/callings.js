@@ -5,13 +5,13 @@
 //   4. Complete
 // Releases run a parallel flow: decided → notified → released → recorded.
 // Plus a standing pool of members who need callings.
-import { db } from "./firebase-init.js?v=1792371034";
+import { db } from "./firebase-init.js?v=1792371130";
 import {
   collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc } from "./ui.js?v=1792371034";
-import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1792371034";
+import { openModal, closeModal, toast, esc } from "./ui.js?v=1792371130";
+import { addSustainingToNext, removeSustaining } from "./sacrament.js?v=1792371130";
 
 const CALL_STAGES = [
   ["fill", "Calling to Fill"],
@@ -275,11 +275,11 @@ const peoplePills = (c, extra) => {
   const names = namesOf(c);
   if (!names.length) return `<div class="row-title">—</div>`;
   const many = names.length > 1;
-  return `<div class="call-people${extra ? " call-people-col" : ""}">${names.map((n) => `<div class="call-person-row"><span class="call-person" draggable="true" data-person="${esc(n)}" title="${many ? "Drag just this person to another column — the others stay here" : "Drag the card to move it along"}">${esc(n)}</span>${extra ? extra(n) : ""}</div>`).join("")}</div>`;
+  return `<div class="call-people${extra ? " call-people-col" : ""}">${names.map((n) => `<div class="call-person-row"><span class="call-person${many ? "" : " call-solo"}" draggable="true" data-person="${esc(n)}" title="${many ? "Drag just this person to another column — the others stay here" : "Drag the card to move it along"}">${esc(n)}</span>${extra ? extra(n) : ""}</div>`).join("")}</div>`; // one name shows plain, several show as pills (style D, 2026-10-18)
 };
 
 // title band (option B, 2026-10-18): soft tint of the organization colour with dark text; org as a dot + name on the right
-const titleBand = (c, del = true) => `<div class="call-card-title">${esc(c.calling)}${c.organization ? `<span class="call-card-org"><i class="call-org-dot"></i>${esc(c.organization)}</span>` : ""}${del ? delBtn(c) : ""}</div>`;
+const titleBand = (c, del = true) => `<div class="call-card-title">${esc(c.calling)}${c.organization ? `<span class="call-card-org call-org-tag">${esc(c.organization)}</span>` : ""}${del ? delBtn(c) : ""}</div>`;
 // Set apart / MLS as a two-dot progress track under each name (option B, 2026-10-18); dots and labels both toggle
 const stepTrack = (steps) => `<div class="step-track">${steps.map((st, i) => `${i ? `<span class="st-seg${steps[i - 1].on && st.on ? " on" : ""}"></span>` : ""}<button type="button" class="st-step${st.on ? " on" : ""}" ${st.attrs} title="${esc(st.title)}"><i class="st-dot"></i>${esc(st.label)}</button>`).join("")}</div>`; // one row: ◉ Set apart ── ○ MLS (2026-10-18)
 // small ✕ in the title band deletes the calling (with a confirm) — 2026-09-20
@@ -299,7 +299,7 @@ function openStake(prefillName = "") {
   const rec = stakes.filter((c) => c.stage === "recommend"), called = stakes.filter((c) => c.stage === "called");
   const card = (c, action) => `
     <div class="list-row call-card call-card-v" data-id="${c.id}" ${cardStyle(c.calling, c.organization)}>
-      <div class="call-card-title">${esc(c.calling)}${c.organization ? `<span class="call-card-org"><i class="call-org-dot"></i>${esc(c.organization)}</span>` : ""}<span class="call-del" data-sdel="${c.id}" title="Delete" role="button">✕</span></div>
+      <div class="call-card-title">${esc(c.calling)}${c.organization ? `<span class="call-card-org call-org-tag">${esc(c.organization)}</span>` : ""}<span class="call-del" data-sdel="${c.id}" title="Delete" role="button">✕</span></div>
       <div class="row-title">${esc(c.name || "—")}</div>
       ${action}
     </div>`;
