@@ -2261,3 +2261,9 @@ tr.us-menu-open td { background: #f7f9fb; }
 /* Users: organization colours now come from the shared palette (same as Callings); text uses a darker shade (2026-10-18) */
 #users-table tr.us-group.us-org .us-group-name, #users-table tr.us-group.us-org .us-group-n { color: color-mix(in srgb, var(--org) 70%, #000); }
 #users-table tr.us-group.us-org .us-group-n { background: color-mix(in srgb, var(--org) 16%, #fff); filter: none; }
+/* Set apart / MLS track: smaller (2026-10-18) */
+.call-people-col .st-step { font-size: .66rem; gap: .2rem; padding: .05rem .05rem; }
+.call-people-col .st-dot { width: .75rem; height: .75rem; border-width: 1.5px; }
+.call-people-col .st-step.on .st-dot { box-shadow: inset 0 0 0 1.5px #fff; }
+.call-people-col .st-seg { flex: 0 1 .9rem; min-width: .3rem; height: 1.5px; }
+.call-people-col .step-track { flex: 0 1 auto; gap: .3rem; margin-left: auto; }
