@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792686884";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792686884";
+import { db } from "./firebase-init.js?v=1792687330";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792687330";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT } from "./tithing-shared.js?v=1792686884";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792686884";
-import { openCouncilDate } from "./council.js?v=1792686884";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792686884";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT } from "./tithing-shared.js?v=1792687330";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792687330";
+import { openCouncilDate } from "./council.js?v=1792687330";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792687330";
 
 let events = [];
 let users = []; // app users, for the People picker on an event (2026-10-19)
@@ -243,6 +243,9 @@ const KINDS = [
   ["other", "Something else…", "Any other appointment on the Bishop calendar"],
 ];
 const kindOf = (k) => KINDS.find((x) => x[0] === k);
+// a title that is just "Tithing declaration" (any spelling of declaration) is a sign-up block by default; a longer title
+// like "Hansen family — tithing and recommend" is an ordinary appointment (10/22)
+const isTithingTitle = (t) => /^\s*tithing(\s+dec\w*)?\s*$/i.test(t || "");
 const TITHING_LENS = [10, 15, 20, 30], INTERVIEW_LENS = [10, 15, 20, 30, 60];
 // colours a meeting can wear on the calendar (2026-10-18); the same colour shows in the month grid, the day timeline and Coming up
 const EV_COLORS = [["#7a4fb5", "Purple"], ["#1f4e79", "Blue"], ["#1f8a83", "Teal"], ["#2e7d4f", "Green"], ["#b98a2f", "Gold"], ["#dd9257", "Orange"], ["#c0392b", "Red"], ["#cf6d96", "Pink"], ["#4b5563", "Grey"]];
@@ -251,7 +254,8 @@ const wireSwatches = (box) => box?.querySelectorAll(".ev-swatch").forEach((b) =>
 const swatchValue = (box) => box?.querySelector(".ev-swatch.on")?.dataset.color || "";
 const evStyle = (e) => (e && e.color ? ` style="--evc:${esc(e.color)}"` : "");
 let openDay = null, dvSel = null, dvFocus = null; // the day that's open, the dragged selection, the block being looked at
-let dvRetime = null;  // an event id waiting for new times: the next drag on the timeline sets them (2026-10-18)
+let dvRetime = null;
+let dvNew = null;     // a new event being written in the side panel: its preset times (from "+ Add event", 10/22)  // an event id waiting for new times: the next drag on the timeline sets them (2026-10-18)
 let dragJustHappened = false; // a block was just moved / resized — swallow the click that follows
 const hhmmOf = (min) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 const snap = (min) => Math.round(min / SNAP) * SNAP;
@@ -270,7 +274,7 @@ function dayView(date) {
   el.classList.add("modal-wide", "cal-dayview");
   el.querySelector("#dv-close").addEventListener("click", () => { openDay = null; dvRetime = null; closeModal(); });
   el.querySelector("#dv-retime-cancel")?.addEventListener("click", (e) => { e.preventDefault(); dvRetime = null; drawDay(); el.querySelector("#dv-hint").textContent = "Drag across the timeline to add something."; });
-  el.querySelector("#dv-add").addEventListener("click", () => editEvent(null, date));
+  el.querySelector("#dv-add").addEventListener("click", () => { dvNew = { startTime: dvSel ? hhmmOf(dvSel.a) : "", endTime: dvSel ? hhmmOf(dvSel.b) : "" }; dvSel = null; dvFocus = "new:"; drawDay(); });
   drawDay();
   wireDrag(el.querySelector("#dv-grid"));
 }
@@ -335,8 +339,9 @@ function drawDay() {
   }));
   // the side panel: the designate form while something is selected, a block's details when one is clicked, else the day's list.
   // An inline event editor stays put across live redraws so nothing typed is lost; only its time boxes follow a drag.
-  if (dvFocus && dvFocus.startsWith("edit:") && side.querySelector("#ev-title")) { wireSide(date, blocks, true); return; }
-  side.innerHTML = dvSel && !(dvFocus && dvFocus.startsWith("edit:")) ? designateHtml(date) : dvFocus ? focusHtml(date, blocks) : listHtml(date, blocks, allDay);
+  const inlineForm = dvFocus && (dvFocus.startsWith("edit:") || dvFocus === "new:");
+  if (inlineForm && side.querySelector("#ev-title")) { wireSide(date, blocks, true); return; }
+  side.innerHTML = dvSel && !inlineForm ? designateHtml(date) : dvFocus ? focusHtml(date, blocks) : listHtml(date, blocks, allDay);
   wireSide(date, blocks);
 }
 function listHtml(date, blocks, allDay) {
@@ -378,6 +383,7 @@ function optsHtml(kind) {
   return title(kind === "other" ? "e.g. Temple recommend — Hansen" : "") + loc + color;
 }
 function focusHtml(date, blocks) {
+  if (dvFocus === "new:") return `<div class="ev-inline-wrap">${eventFormHtml(null, date, can("calendar", "edit"), true, dvNew)}</div>`;
   if (dvFocus.startsWith("edit:")) {
     const ev = events.find((x) => x.id === dvFocus.slice(5));
     if (!ev) { dvFocus = null; return listHtml(date, blocks, []); }
@@ -422,6 +428,7 @@ function focusHtml(date, blocks) {
 function wireSide(date, blocks, keep) {
   const side = document.getElementById("dv-side"); if (!side) return;
   if (keep) return; // the inline editor is already wired
+  if (dvFocus === "new:" && side.querySelector("#ev-title")) { wireEventForm(side, null, can("calendar", "edit"), () => { dvFocus = null; dvNew = null; drawDay(); }); side.querySelector("#ev-title").focus(); return; }
   if (dvFocus && dvFocus.startsWith("edit:") && side.querySelector("#ev-title")) {
     const ev = events.find((x) => x.id === dvFocus.slice(5));
     if (ev) { wireEventForm(side, ev, can("calendar", "edit") || ev.createdBy === ctx.uid, () => { dvFocus = null; drawDay(); }); return; }
@@ -531,7 +538,7 @@ function wireDrag(grid) {
   grid.addEventListener("pointerdown", (e) => {
     if (e.button !== 0 || e.target.closest("[data-block], .dv-sel")) return;
     startMin = minAt(e); moved = false;
-    if (!(dvFocus && dvFocus.startsWith("edit:"))) dvFocus = null; // an inline editor stays open: the drag is its new time
+    if (!(dvFocus && (dvFocus.startsWith("edit:") || dvFocus === "new:"))) dvFocus = null; // an inline editor stays open: the drag is its new time
     dvSel = { a: startMin, b: startMin + SNAP, kind: "", len: dvSel?.len };
     grid.setPointerCapture(e.pointerId);
     drawDay();
@@ -548,6 +555,11 @@ function wireDrag(grid) {
     if (startMin == null) return;
     startMin = null;
     if (!moved || dvSel.b - dvSel.a < 10) dvSel = { ...dvSel, b: Math.min(DAY_END, dvSel.a + 60) }; // a tap gives an hour to start from
+    if (dvFocus === "new:") { // writing a new event in the side panel: the drag fills its times, nothing is saved until Save
+      const { a, b } = dvSel; dvSel = null;
+      const side = document.getElementById("dv-side"); if (side?.querySelector("#ev-start")) { side.querySelector("#ev-start").value = hhmmOf(a); side.querySelector("#ev-end").value = hhmmOf(b); }
+      drawDay(); return;
+    }
     if (!dvRetime && dvFocus && dvFocus.startsWith("edit:")) dvRetime = dvFocus.slice(5); // editing in the side panel: a drag on empty time is this event's new time
     if (dvRetime) { // the editor asked for new times: apply them to that event and stop
       const id = dvRetime, { a, b } = dvSel; dvRetime = null; dvSel = null;
@@ -681,7 +693,7 @@ async function saveDesignation(date, kind, side) {
       return;
     }
     const title = side.querySelector("#dv-title")?.value.trim() || (kind === "other" ? "" : kindOf(kind)?.[1] || "");
-    if (kind === "other" && /tith/i.test(title) && can("tithing", "edit")) { // typed "Tithing declaration" under Something else: it's a sign-up block by default
+    if (kind === "other" && isTithingTitle(title) && can("tithing", "edit")) { // typed "Tithing declaration" under Something else: it's a sign-up block by default
       await ensureSeason();
       const adds = dates.map((d) => ({ id: "w" + Math.random().toString(36).slice(2, 9), date: d, start: hhmmOf(a), end: hhmmOf(b), len: 15, place: "office", group: "" }));
       await saveTithingWindows([...(season.windows || []), ...adds], "Added as tithing declaration sign-up times (15-minute visits — change that on the block)");
@@ -798,15 +810,16 @@ const peopleValue = (box) => (box ? [...box.querySelectorAll(".ev-chip")].map((c
 // The event form: the same fields whether it opens as its own window or inside the day view's side
 // panel (2026-10-18 — Jordan: see the timeline and the settings at the same time). `root` is wherever
 // it was drawn; `done()` closes it.
-function eventFormHtml(e, defaultDate, canEdit, inline) {
+function eventFormHtml(e, defaultDate, canEdit, inline, preset) {
   const isNew = !e;
+  const st = e?.startTime || preset?.startTime || "", en = e?.endTime || preset?.endTime || "";
   return `
     <h3>${isNew ? "New event" : canEdit ? "Edit event" : "Event"}</h3>
     <div class="form-grid two-col${inline ? " ev-inline" : ""}">
       <label class="field full">Title
         <input id="ev-title" value="${esc(e?.title || "")}" ${canEdit ? "" : "disabled"}>
       </label>
-      ${e && !e.tithing && /tith/i.test(e.title || "") && can("tithing", "edit") ? `<div class="full ev-tithing-hint">This is a plain appointment — members can't sign up for it. Save turns it into a sign-up block (15-minute visits; change that on the block afterwards). <button type="button" class="btn btn-sm" id="ev-make-tithing">Make it a sign-up block now</button></div>
+      ${e && !e.tithing && isTithingTitle(e.title) && can("tithing", "edit") ? `<div class="full ev-tithing-hint">This is a plain appointment — members can't sign up for it. Save turns it into a sign-up block (15-minute visits; change that on the block afterwards). <button type="button" class="btn btn-sm" id="ev-make-tithing">Make it a sign-up block now</button></div>
       <label class="field full ev-series"><input type="checkbox" id="ev-pri"> <span>Priority time slots <span class="row-sub">(marked on the sign-up page — the wording is in Tithing Declaration settings)</span></span></label>` : ""}
       <label class="field">Date
         <input type="date" id="ev-date" value="${e?.date || defaultDate || todayISO()}" ${canEdit ? "" : "disabled"}>
@@ -815,10 +828,10 @@ function eventFormHtml(e, defaultDate, canEdit, inline) {
         <select id="ev-cal" ${canEdit ? "" : "disabled"}><option value="ward"${calOf(e || {}) === "ward" && !(isNew && calView === "bishop") ? " selected" : ""}>Ward</option><option value="bishop"${calOf(e || {}) === "bishop" || (isNew && calView === "bishop") ? " selected" : ""}>Bishop</option></select>
       </label>
       <label class="field">Start time
-        <input type="time" id="ev-start" value="${e?.startTime || ""}" ${canEdit ? "" : "disabled"}>
+        <input type="time" id="ev-start" value="${st}" ${canEdit ? "" : "disabled"}>
       </label>
       <label class="field">End time
-        <input type="time" id="ev-end" value="${e?.endTime || ""}" ${canEdit ? "" : "disabled"}>
+        <input type="time" id="ev-end" value="${en}" ${canEdit ? "" : "disabled"}>
       </label>
       ${inline && canEdit ? `<div class="full row-sub ev-inline-hint">Drag the block on the timeline to move it, its bottom edge to stretch it, or drag across empty time to set it — the times fill in here.</div>` : ""}
       <label class="field full">Location <span class="row-sub">(optional)</span>
@@ -928,7 +941,7 @@ function wireEventForm(root, e, canEdit, done) {
     const rule = root.querySelector("#ev-rep")?.value || "0", until = root.querySelector("#ev-until")?.value || "";
     const repeats = rule !== "0" ? repeatDates(data.date, rule, until, pickedDays(root.querySelector("#ev-pick"))).slice(1) : [];
     // "Tithing declaration" is a sign-up block by default (Jordan 10/18): save it as sign-up times, not a plain appointment
-    if (/tith/i.test(title) && can("tithing", "edit")) {
+    if (isTithingTitle(title) && can("tithing", "edit")) {
       if (!data.startTime || !data.endTime) return toast("Give it a start and end time — sign-up times need both");
       try {
         await ensureSeason();
