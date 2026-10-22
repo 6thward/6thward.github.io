@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792390072";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792390072";
+import { db } from "./firebase-init.js?v=1792686884";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792686884";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT } from "./tithing-shared.js?v=1792390072";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792390072";
-import { openCouncilDate } from "./council.js?v=1792390072";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792390072";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT } from "./tithing-shared.js?v=1792686884";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792686884";
+import { openCouncilDate } from "./council.js?v=1792686884";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792686884";
 
 let events = [];
 let users = []; // app users, for the People picker on an event (2026-10-19)
@@ -368,13 +368,14 @@ function optsHtml(kind) {
   if (kind === "tithing") return `<label>Each visit<select id="dv-len">${TITHING_LENS.map((n) => opt(n, n + " minutes", dvSel.len || 15)).join("")}</select></label>
     <label>Where<select id="dv-place"><option value="office">🏛 Bishop's office</option><option value="home">🏠 Home visits</option></select></label>
     <label class="dv-check"><input type="checkbox" id="dv-pri"> Priority <small>(marked on the sign-up page — the wording is in Tithing Declaration settings)</small></label>`;
-  if (kind === "interviews") return `<label>Each interview<select id="dv-len">${INTERVIEW_LENS.map((n) => opt(n, n + " minutes", dvSel.len || 15)).join("")}</select></label><label>Label<input id="dv-title" value="Interviews" autocomplete="off"></label><label>Colour <small>(optional)</small>${swatches("dv-color", dvSel.color)}</label>`;
+  // every appointment gets a Title, prefilled with the kind's name so it can be made specific ("Interviews — youth", "Stake training — Bishops") (Jordan 10/22)
+  const title = (ph) => `<label>Title<input id="dv-title" value="${esc(kind === "other" ? "" : kindOf(kind)?.[1] || "")}" placeholder="${esc(ph)}" autocomplete="off"></label>`;
+  if (kind === "interviews") return `${title("e.g. Interviews — youth")}<label>Each interview<select id="dv-len">${INTERVIEW_LENS.map((n) => opt(n, n + " minutes", dvSel.len || 15)).join("")}</select></label><label>Colour <small>(optional)</small>${swatches("dv-color", dvSel.color)}</label>`;
   const preset = kindOf(kind)?.[3] || "";
   const color = `<label>Colour <small>(optional)</small>${swatches("dv-color", dvSel.color || preset)}</label>`;
   const loc = `<label>Location <small>(optional)</small><input id="dv-loc" placeholder="e.g. Chapel — leave blank if it doesn't matter" autocomplete="off"></label>
     <label>People <small>(optional — who's in this meeting)</small>${peopleHtml("dv-people", [], true)}</label>`;
-  if (kind === "other") return `<label>Title<input id="dv-title" placeholder="e.g. Temple recommend — Hansen" autocomplete="off"></label>${loc}${color}`;
-  return loc + color;
+  return title(kind === "other" ? "e.g. Temple recommend — Hansen" : "") + loc + color;
 }
 function focusHtml(date, blocks) {
   if (dvFocus.startsWith("edit:")) {
@@ -679,7 +680,7 @@ async function saveDesignation(date, kind, side) {
       dvSel = null; drawDay();
       return;
     }
-    const title = kind === "other" ? side.querySelector("#dv-title")?.value.trim() || "" : kind === "interviews" ? (side.querySelector("#dv-title")?.value.trim() || "Interviews") : (kindOf(kind)?.[1] || "");
+    const title = side.querySelector("#dv-title")?.value.trim() || (kind === "other" ? "" : kindOf(kind)?.[1] || "");
     if (kind === "other" && /tith/i.test(title) && can("tithing", "edit")) { // typed "Tithing declaration" under Something else: it's a sign-up block by default
       await ensureSeason();
       const adds = dates.map((d) => ({ id: "w" + Math.random().toString(36).slice(2, 9), date: d, start: hhmmOf(a), end: hhmmOf(b), len: 15, place: "office", group: "" }));
