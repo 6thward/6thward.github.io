@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1792722903";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1792722903";
+import { db } from "./firebase-init.js?v=1792723633";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1792723633";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1792722903";
-import { HYMNS } from "./hymns.js?v=1792722903";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1792722903";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1792723633";
+import { HYMNS } from "./hymns.js?v=1792723633";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1792723633";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -850,7 +850,8 @@ function themeHtml(theme) {
   const t = String(theme || "");
   const m = /high\s+council/i.exec(t);
   if (!m) return esc(t);
-  return `${esc(t.slice(0, m.index))}<a class="hc-link" href="${HC_URL}" target="_blank" rel="noopener" title="High council speaking — stgeorgeeast.org">${esc(m[0])}</a>${esc(t.slice(m.index + m[0].length))}`;
+  // the whole theme reads as plain bold text; one small link icon after it opens the stake's speaking page (10/22)
+  return `${esc(t)}<a class="hc-link" href="${HC_URL}" target="_blank" rel="noopener" title="Who's speaking — high council assignments on stgeorgeeast.org">↗</a>`;
 }
 
 // ---- Quick status chips ----
