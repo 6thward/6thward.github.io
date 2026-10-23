@@ -1382,8 +1382,8 @@ th.us-sort:hover, th.us-sort.on { color: var(--brand); }
 @media (max-width: 650px) { .sr-money-cols { grid-template-columns: 1fr; } }
 
 /* "High Council" in a theme links to the stake's speaking page (2026-09-27) */
-.theme-tag .hc-link { color: var(--brand); text-decoration: none; font-size: .78em; margin-left: .3rem; vertical-align: super; cursor: pointer; opacity: .75; }
-.theme-tag .hc-link:hover { opacity: 1; text-decoration: underline; }
+.theme-tag .hc-link { color: inherit; text-decoration: none; cursor: pointer; }
+.theme-tag .hc-link:hover { color: var(--brand); text-decoration: underline; text-underline-offset: 2px; }
 
 /* Ward Council notes: bullets + to-do boxes (2026-10-04) */
 .wc-cnotes { white-space: normal; }
