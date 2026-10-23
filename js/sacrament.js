@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1792687330";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1792687330";
+import { db } from "./firebase-init.js?v=1792722903";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1792722903";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1792687330";
-import { HYMNS } from "./hymns.js?v=1792687330";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1792687330";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1792722903";
+import { HYMNS } from "./hymns.js?v=1792722903";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1792722903";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -1221,10 +1221,9 @@ function renderCards(wrap) {
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:.75rem;flex-wrap:wrap">
         <div>
           <h3 style="margin:0"><span class="card-date">${fmtDay(date, { year: true })}</span>
-            ${m?.theme
-              ? `<span class="theme-tag${canEdit ? " st-click" : ""}"${canEdit ? ` data-qe='{"t":"theme"}' title="Click to edit the theme"` : ""}>“${themeHtml(m.theme)}”</span>`
-              : (canEdit && !isConf ? `<span class="theme-tag theme-add" data-qe='{"t":"theme"}' title="Add a theme for this Sunday">+ theme</span>` : "")}
-            ${megaphone}${wbIcon}${hbIcon}${type !== "sacrament" || canEdit ? `<span class="pill head-pill type-pill type-${esc(type)} ${isConf ? "pill-conf" : type === "fast" ? "pill-fast" : type === "sacrament" ? "pill-type-plain" : "pill-approved"}${canEdit ? " st-click" : ""}"${canEdit ? ` data-type="${date}" title="Click to change the meeting type"` : ""}>${esc(typeLabel(m, date))}</span>` : ""}${type === "highcouncil" ? `<a class="pill head-pill hc-pill" href="${HC_URL}" target="_blank" rel="noopener" title="High council speaking assignments — stgeorgeeast.org">🔗 who's speaking</a>` : ""}${nth === 5 ? `<span class="nth-pill nth-5 head-pill">5th Sunday</span>` : ""}${babies.map((b, bi) => `<span class="pill-baby-bold head-pill${canEdit ? " st-click" : ""}" ${canEdit ? `data-baby="${bi}" title="Click to edit"` : ""}>Blessing${b.name ? ": " + esc(b.name) : ""}${b.by ? ` <span class="pill-baby-by">by ${esc(b.by)}</span>` : ""}</span>`).join("")}
+            ${megaphone}${wbIcon}${hbIcon}${type !== "sacrament" || canEdit ? `<span class="pill head-pill type-pill type-${esc(type)} ${isConf ? "pill-conf" : type === "fast" ? "pill-fast" : type === "sacrament" ? "pill-type-plain" : "pill-approved"}${canEdit ? " st-click" : ""}"${canEdit ? ` data-type="${date}" title="Click to change the meeting type"` : ""}>${esc(typeLabel(m, date))}</span>` : ""}${m?.theme
+              ? `<span class="theme-tag${canEdit ? " st-click" : ""}"${canEdit ? ` data-qe='{"t":"theme"}' title="Click to edit the theme"` : ""}>${themeHtml(m.theme)}</span>`
+              : (canEdit && !isConf ? `<span class="theme-tag theme-add" data-qe='{"t":"theme"}' title="Add a theme for this Sunday">+ theme</span>` : "")}${type === "highcouncil" ? `<a class="pill head-pill hc-pill" href="${HC_URL}" target="_blank" rel="noopener" title="High council speaking assignments — stgeorgeeast.org">🔗 who's speaking</a>` : ""}${nth === 5 ? `<span class="nth-pill nth-5 head-pill">5th Sunday</span>` : ""}${babies.map((b, bi) => `<span class="pill-baby-bold head-pill${canEdit ? " st-click" : ""}" ${canEdit ? `data-baby="${bi}" title="Click to edit"` : ""}>Blessing${b.name ? ": " + esc(b.name) : ""}${b.by ? ` <span class="pill-baby-by">by ${esc(b.by)}</span>` : ""}</span>`).join("")}
           </h3>
           <div class="row-sub" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">${condChip}${isConf ? "<span>no sacrament meeting</span>" : ""}</div>
         </div>
@@ -1481,6 +1480,15 @@ function renderCards(wrap) {
   // pill lines edit in place: click swaps the line for inputs (hymn lines get
   // the #/title pair with datalist autofill; prayer/speaker lines a name box);
   // Enter or clicking away saves, Esc cancels
+  // while a name is being typed in a card, the first click anywhere else just finishes that edit — it must not also
+  // open the editor window (which would show the card without the name that is still saving) (Jordan 10/22)
+  if (!wrap._inlineGuard) {
+    wrap._inlineGuard = true;
+    wrap.addEventListener("click", (e) => {
+      const open = wrap.querySelector(".st-line input, .st-line select");
+      if (open && !open.closest(".st-line").contains(e.target)) { e.stopPropagation(); e.preventDefault(); open.blur(); }
+    }, true);
+  }
   const wireInline = (line, inputs, commitFn) => {
     let done = false;
     const commit = () => { if (done) return; done = true; commitFn(); };

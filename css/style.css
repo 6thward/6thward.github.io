@@ -289,10 +289,10 @@ label.field input:focus, label.field select:focus, label.field textarea:focus {
 .conf-card { background: #eceef1; color: var(--ink-soft); box-shadow: none; }
 .conf-card h3 { color: var(--ink-soft); }
 .pill-conf { background: #dde1e6; color: var(--ink-soft); }
-.theme-tag {
-  font-size: .88rem; font-weight: 600; font-style: italic;
-  color: var(--violet);
-  vertical-align: middle;
+.theme-tag { /* the Sunday's theme sits right after the meeting-type tag, bold and black (Jordan 10/22) */
+  font-size: .95rem; font-weight: 700; font-style: normal;
+  color: var(--ink);
+  vertical-align: middle; margin-left: .45rem;
 }
 
 .pill-baby { background: #fde7f0; color: #b0407a; }
@@ -965,8 +965,7 @@ table.simple select { font: inherit; font-size: .88rem; border: 1px solid var(--
 /* click-to-edit theme on cards (2026-09-13) */
 .theme-tag.st-click { cursor:pointer; border-radius:6px; padding:0 .25rem; }
 .theme-tag.st-click:hover { background:var(--violet-soft); text-decoration:none; }
-.theme-tag.theme-add { color:#b7bfcb; font-style:normal; font-weight:600; font-size:.72rem; cursor:pointer; border:1px dashed #d3d9e1; border-radius:99px; padding:.05rem .5rem; opacity:0; transition:opacity .15s; }
-.card:hover .theme-tag.theme-add { opacity:1; }
+.theme-tag.theme-add { color:#8c96a3; font-style:normal; font-weight:600; font-size:.72rem; cursor:pointer; border:1px dashed #d3d9e1; border-radius:99px; padding:.05rem .5rem; } /* always visible, next to the meeting tag (10/22) */
 .theme-tag.theme-add:hover { color:var(--violet); border-color:var(--violet); }
 
 /* "not confirmed yet" mark (the exception) — amber "!" (2026-09-13) */
