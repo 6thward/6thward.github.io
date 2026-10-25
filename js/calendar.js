@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792901864";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792901864";
+import { db } from "./firebase-init.js?v=1792902022";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792902022";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT } from "./tithing-shared.js?v=1792901864";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792901864";
-import { openCouncilDate } from "./council.js?v=1792901864";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792901864";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792902022";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792902022";
+import { openCouncilDate } from "./council.js?v=1792902022";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792902022";
 
 let events = [];
 let users = []; // app users, for the People picker on an event (2026-10-19)
@@ -696,15 +696,17 @@ function repeatDates(date, rule, until, picked) {
 // drag a timed event block to move it; drag its bottom edge to stretch it (2026-10-18)
 function wireBlockDrag(grid, timed) {
   timed.forEach((b) => {
-    if (b.kind !== "event" && b.kind !== "interviews") return;
-    const ev = b.ev; if (!ev || !(can("calendar", "edit") || ev.createdBy === ctx.uid)) return;
-    const n = grid.querySelector(`[data-block="e:${CSS.escape(b.id)}"]`); if (!n) return;
+    const isTithing = b.kind === "tithing"; // tithing blocks move too (Jordan 10/24); sign-ups move with them
+    if (isTithing ? !can("tithing", "edit") : (b.kind !== "event" && b.kind !== "interviews")) return;
+    const ev = b.ev; if (!isTithing && (!ev || !(can("calendar", "edit") || ev.createdBy === ctx.uid))) return;
+    const n = grid.querySelector(`[data-block="${isTithing ? "t" : "e"}:${CSS.escape(b.id)}"]`); if (!n) return;
     n.classList.add("dv-movable");
     n.insertAdjacentHTML("beforeend", `<div class="dv-resize" title="Drag to change the end time"></div>`);
     let mode = null, startY = 0, moved = false, ns = b.start, ne = b.end;
     n.addEventListener("pointerdown", (e) => {
       if (e.button !== 0 || e.target.closest("[data-islot]")) return;
       mode = e.target.classList.contains("dv-resize") ? "resize" : "move"; startY = e.clientY; moved = false; ns = b.start; ne = b.end;
+      if (isTithing && mode === "resize" && b.slots.some((x) => signups[x.id])) { mode = null; return toast("People are signed up in this block — move the whole block instead, or change its length on the Tithing Declaration page"); }
       n.setPointerCapture(e.pointerId); e.stopPropagation();
     });
     n.addEventListener("pointermove", (e) => {
@@ -716,12 +718,14 @@ function wireBlockDrag(grid, timed) {
       else { ne = Math.max(b.start + SNAP, Math.min(DAY_END, b.end + dy)); ns = b.start; }
       n.style.top = `${(ns - DAY_START) * PX_MIN}px`; n.style.height = `${Math.max(14, (ne - ns) * PX_MIN)}px`;
       const t = n.querySelector(".dv-block-title span"); if (t) t.textContent = `${fmtClock(ns)}–${fmtClock(ne)}`;
+      if (isTithing) n.querySelectorAll(".dv-slot b").forEach((el, i) => { const m = ns + i * b.win.len; if (m + b.win.len <= ne) el.textContent = fmtClock(m).replace(/ [AP]M$/, ""); });
     });
     const done = async (e) => {
       if (!mode) return;
       const m = mode; mode = null;
       if (!moved) return; // a plain click — the click handler opens it
       e.stopPropagation(); dragJustHappened = true; setTimeout(() => { dragJustHappened = false; }, 300);
+      if (isTithing) return moveTithingBlock(b, ns, ne);
       const side = document.getElementById("dv-side");
       if (dvFocus === "edit:" + b.id && side?.querySelector("#ev-start")) { side.querySelector("#ev-start").value = hhmmOf(ns); side.querySelector("#ev-end").value = hhmmOf(ne); }
       try {
@@ -732,6 +736,21 @@ function wireBlockDrag(grid, timed) {
     };
     n.addEventListener("pointerup", done); n.addEventListener("pointercancel", done);
   });
+}
+// a tithing block dragged to a new time: the window moves, and every sign-up in it moves to the same place in the new block (10/24)
+async function moveTithingBlock(b, ns, ne) {
+  const w = b.win, delta = ns - b.start;
+  const booked = b.slots.filter((x) => signups[x.id]);
+  if (booked.length && delta && !confirm(`${booked.length} ${booked.length === 1 ? "person is" : "people are"} signed up in this block. Move ${booked.length === 1 ? "their time" : "their times"} by ${Math.abs(delta)} minutes ${delta > 0 ? "later" : "earlier"} too?`)) { drawDay(); return; }
+  try {
+    if (booked.length && delta) {
+      const batch = writeBatch(db), at = (c, id) => doc(db, "tithing", season.token, c, id);
+      booked.forEach((x) => { const nid = slotId(w.date, x.min + delta); batch.set(at("signups", nid), signups[x.id]); batch.set(at("taken", nid), { len: x.len, at: serverTimestamp() }); batch.delete(at("signups", x.id)); batch.delete(at("taken", x.id)); });
+      await batch.commit();
+    }
+    const windows = (season.windows || []).map((x) => (x.id === w.id ? { ...x, start: hhmmOf(ns), end: hhmmOf(ne) } : x));
+    await saveTithingWindows(windows, `Moved to ${fmtClock(ns)} – ${fmtClock(ne)}${booked.length && delta ? " — sign-ups moved too; let them know" : ""}`);
+  } catch (err) { toast("Couldn't move: " + (err.code || err.message)); drawDay(); }
 }
 async function saveDesignation(date, kind, side) {
   const saveBtn = side.querySelector("#dv-save");
