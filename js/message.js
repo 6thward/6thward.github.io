@@ -1,12 +1,12 @@
 // Message page (2026-10-18): pick the ward council, an organization, a saved group, or people one
 // by one; write the text; "Text them" opens the phone's own Messages app with everyone addressed.
 // The app never sends anything itself — it only fills in the numbers and the words.
-import { db } from "./firebase-init.js?v=1792936743";
-import { ctx, can } from "./app.js?v=1792936743";
+import { db } from "./firebase-init.js?v=1792945466";
+import { ctx, can } from "./app.js?v=1792945466";
 import { collection, onSnapshot, setDoc, deleteDoc, doc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc } from "./ui.js?v=1792936743";
-import { orgColor } from "./org-colors.js?v=1792936743";
-import { fmtPhone, normPhone, smsLink } from "./phone.js?v=1792936743";
+import { toast, esc } from "./ui.js?v=1792945466";
+import { orgColor } from "./org-colors.js?v=1792945466";
+import { fmtPhone, normPhone, smsLink } from "./phone.js?v=1792945466";
 
 let users = [], groups = [], started = false;
 const chosen = new Set();

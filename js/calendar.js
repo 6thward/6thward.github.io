@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792936743";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792936743";
+import { db } from "./firebase-init.js?v=1792945466";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792945466";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792936743";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792936743";
-import { openCouncilDate } from "./council.js?v=1792936743";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792936743";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792945466";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792945466";
+import { openCouncilDate } from "./council.js?v=1792945466";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792945466";
 
 let events = [];
 let users = []; // app users, for the People picker on an event (2026-10-19)
@@ -308,22 +308,24 @@ function dayBlocks(date, who) { // who: a schedule tab's owner — ward items + 
 }
 // one block on a timeline (day view, and the Sundays view) — `style` places it (2026-10-24)
 const layoutCols = (timed) => { timed.sort((a, b) => a.start - b.start); const cols = []; timed.forEach((b) => { let c = cols.findIndex((lastEnd) => lastEnd <= b.start); if (c < 0) { c = cols.length; cols.push(0); } cols[c] = b.end; b.col = c; }); return Math.max(1, cols.length); };
+// ✕ on a block (Jordan 10/25): a quick way to delete a meeting or a tithing block right from the timeline
+const blockX = (b) => (b.kind === "standing" ? "" : `<button type="button" class="dv-block-x" data-xblock="${b.kind === "tithing" ? "t" : "e"}:${esc(b.id)}" title="${b.kind === "tithing" ? "Remove this tithing declaration block" : "Delete this meeting"}">✕</button>`);
 function blockMarkup(b, style) {
 if (b.kind === "tithing") {
     // every sign-up time is its own row: "11:05 (10 min) The Smiths" as people book, "open" until they do (Jordan 10/18)
     const ticks = b.slots.map((s) => { const su = signups[s.id]; const st = su?.status === "attended" ? " came" : su?.status === "noshow" ? " noshow" : ""; return `<div class="dv-slot${su ? " booked" + st : s.blocked ? " off" : ""}" style="top:${(s.min - b.start) * PX_MIN}px;height:${s.len * PX_MIN}px" title="${fmtClock(s.min)}${su ? " · " + esc(su.name) + (su.phone ? " · " + esc(su.phone) : "") + (st === " came" ? " · came" : st === " noshow" ? " · no-show" : "") : s.blocked ? " · blocked" : " · open"}"><b>${fmtClock(s.min).replace(/ [AP]M$/, "")}</b> <i>(${s.len} min)</i> <span>${st === " came" ? "✓ " : st === " noshow" ? "✗ " : ""}${su ? esc(su.name) : s.blocked ? "blocked" : "open"}</span></div>`; }).join("");
     const booked = b.slots.filter((s) => signups[s.id]).length;
-    return `<div class="dv-block dv-tithing dv-slotted${dvFocus === "t:" + b.id ? " dv-focus" : ""}" data-block="t:${esc(b.id)}" style="${style}"><div class="dv-block-tag">Tithing declaration · ${booked}/${b.slots.filter((s) => !s.blocked || signups[s.id]).length} booked</div>${isPriority(b.win) ? `<div class="dv-block-tag dv-block-note">🔒 Priority</div>` : ""}<div class="dv-slots">${ticks}</div></div>`;
+    return `<div class="dv-block dv-tithing dv-slotted${dvFocus === "t:" + b.id ? " dv-focus" : ""}" data-block="t:${esc(b.id)}" style="${style}">${blockX(b)}<div class="dv-block-tag">Tithing declaration · ${booked}/${b.slots.filter((s) => !s.blocked || signups[s.id]).length} booked</div>${isPriority(b.win) ? `<div class="dv-block-tag dv-block-note">🔒 Priority</div>` : ""}<div class="dv-slots">${ticks}</div></div>`;
   }
   if (b.kind === "interviews") {
     const len = Number(b.ev.len) || 15, names = b.ev.slots || {}; const ticks = [];
     for (let m = b.start; m + len <= b.end; m += len) { const k = hhmmOf(m); ticks.push(`<div class="dv-slot${names[k] ? " booked" : ""}" data-islot="${k}" style="top:${(m - b.start) * PX_MIN}px;height:${len * PX_MIN}px" title="${fmtClock(m)}${names[k] ? " · " + esc(names[k]) : " · open — click to add a name"}"><b>${fmtClock(m).replace(/ [AP]M$/, "")}</b> <i>(${len} min)</i> <span>${names[k] ? esc(names[k]) : "open"}</span></div>`); }
-    return `<div class="dv-block dv-interviews dv-slotted${dvFocus === "e:" + b.id ? " dv-focus" : ""}${b.ev.color ? " dv-colored" : ""}" data-block="e:${esc(b.id)}" style="${style}${b.ev.color ? `;--evc:${b.ev.color}` : ""}"><div class="dv-block-tag">${esc(b.title)} · ${Object.keys(names).length}/${ticks.length} filled</div><div class="dv-slots">${ticks.join("")}</div></div>`;
+    return `<div class="dv-block dv-interviews dv-slotted${dvFocus === "e:" + b.id ? " dv-focus" : ""}${b.ev.color ? " dv-colored" : ""}" data-block="e:${esc(b.id)}" style="${style}${b.ev.color ? `;--evc:${b.ev.color}` : ""}">${blockX(b)}<div class="dv-block-tag">${esc(b.title)} · ${Object.keys(names).length}/${ticks.length} filled</div><div class="dv-slots">${ticks.join("")}</div></div>`;
   }
   const cls = b.kind === "standing" ? "dv-standing" : b.ev?.kind === "blocked" ? "dv-blocked" : b.cal === "bishop" ? "dv-bishop" : "dv-ward";
   const colored = b.ev?.color ? `;--evc:${b.ev.color}` : "";
   const who = peopleNames(b.ev?.people), own = b.kind === "event" && b.cal === "bishop" && ownerOf(b.ev) !== "bishop" ? ownerLabel(ownerOf(b.ev)) : "";
-  return `<div class="dv-block ${cls}${colored ? " dv-colored" : ""}" data-block="${b.kind === "standing" ? "s:" : "e:"}${esc(b.id)}" style="${style}${colored}" title="${esc(b.title)}${own ? " · " + own : ""}${who ? " · with " + esc(who) : ""}"><div class="dv-block-title">${esc(b.title)} <span>${fmtClock(b.start)}–${fmtClock(b.end)}</span>${own ? `<span class="dv-block-who">· ${own}</span>` : ""}${who ? `<span class="dv-block-who">· ${esc(who)}</span>` : ""}</div></div>`;
+  return `<div class="dv-block ${cls}${colored ? " dv-colored" : ""}" data-block="${b.kind === "standing" ? "s:" : "e:"}${esc(b.id)}" style="${style}${colored}" title="${esc(b.title)}${own ? " · " + own : ""}${who ? " · with " + esc(who) : ""}">${blockX(b)}<div class="dv-block-title">${esc(b.title)} <span>${fmtClock(b.start)}–${fmtClock(b.end)}</span>${own ? `<span class="dv-block-who">· ${own}</span>` : ""}${who ? `<span class="dv-block-who">· ${esc(who)}</span>` : ""}</div></div>`;
 }
 function drawDay() {
   const grid = document.getElementById("dv-grid"), side = document.getElementById("dv-side");
@@ -341,6 +343,7 @@ function drawDay() {
   grid.style.height = `${(DAY_END - DAY_START) * PX_MIN + 20}px`;
   grid.innerHTML = `${hours.join("")}<div class="dv-blocks">${timed.map(blockHtml).join("")}${selHtml}</div>`;
   wireBlockDrag(grid, timed);
+  grid.querySelectorAll("[data-xblock]").forEach((x) => { x.addEventListener("pointerdown", (e) => e.stopPropagation()); x.addEventListener("click", (e) => { e.stopPropagation(); deleteFromBlock(x.dataset.xblock, document.getElementById("dv-side")); }); });
   grid.querySelectorAll("[data-block]").forEach((n) => n.addEventListener("click", (e) => {
     e.stopPropagation();
     if (dragJustHappened) { dragJustHappened = false; return; }
@@ -594,6 +597,12 @@ function drawSchedule(pid, who) {
   const sc = grid.querySelector(".sv-scroll"); sc.scrollTop = keepScroll ?? (6.5 * 60 - lo) * PX_MIN; // first draw opens at 6:30 AM; redraws keep the place
   // open a Sunday with the clicked block selected, or ready to add at the clicked time
   const openAt = (date, focus) => { dayView(date); if (focus) { dvFocus = focus; drawDay(); } };
+  grid.querySelectorAll("[data-xblock]").forEach((x) => x.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const ref = x.dataset.xblock, ev = ref.startsWith("e:") ? events.find((y) => y.id === ref.slice(2)) : null;
+    if (ev?.series) { dayView(ev.date); dvFocus = "edit:" + ev.id; drawDay(); setTimeout(() => deleteFromBlock(ref, document.getElementById("dv-side")), 50); return; }
+    deleteFromBlock(ref, null);
+  }));
   grid.querySelectorAll("[data-block]").forEach((n) => n.addEventListener("click", (e) => {
     e.stopPropagation();
     const date = n.closest("[data-sv-date]").dataset.svDate, [t, id] = [n.dataset.block.slice(0, 1), n.dataset.block.slice(2)];
@@ -1102,6 +1111,30 @@ function wireEventForm(root, e, canEdit, done) {
       toast("Couldn't save: " + (err.code || err.message));
     }
   });
+}
+// delete from a block's ✕ (day view or a schedule tab): a tithing block goes if nobody's signed up; a meeting asks about its repeats
+async function deleteFromBlock(ref, host) {
+  const [t, id] = [ref.slice(0, 1), ref.slice(2)];
+  if (t === "t") {
+    const w = (season?.windows || []).find((x) => x.id === id); if (!w) return;
+    const booked = slotsOf([w], []).some((sl) => signups[sl.id]);
+    if (booked) return toast("People are signed up in this block — clear their times first (click the block), then remove it");
+    if (!confirm(`Remove the tithing declaration block ${fmtClock(toMinutes(w.start))} – ${fmtClock(toMinutes(w.end))} on ${fmtDate(w.date)}?`)) return;
+    if (dvFocus === "t:" + id) dvFocus = null;
+    await saveTithingWindows((season.windows || []).filter((x) => x.id !== id), "Block removed");
+    return;
+  }
+  const e = events.find((x) => x.id === id); if (!e) return;
+  if (!(can("calendar", "edit") || e.createdBy === ctx.uid)) return toast("You can't delete this one");
+  let targets = [e];
+  if (e.series) { if (!host) return toast("Open the day to delete a repeating meeting"); targets = await askSeriesScope(host, e, "Delete"); if (!targets) return; }
+  else if (!confirm(`Delete “${e.title}”?`)) return;
+  try {
+    await Promise.all(targets.map((x) => deleteDoc(doc(db, "events", x.id))));
+    if (dvFocus === "edit:" + id || dvFocus === "e:" + id) dvFocus = null;
+    toast(targets.length > 1 ? `Deleted ${targets.length} meetings` : "Deleted");
+    if (calOf(e) === "bishop") syncBusy(events.filter((x) => !targets.some((y) => y.id === x.id)));
+  } catch (err) { toast("Couldn't delete: " + (err.code || err.message)); }
 }
 // A change to a repeating meeting asks which ones it's for (Jordan 10/24): just this one, this and the later ones, or all.
 // Drawn as a small box inside `host` (the editor, or the day view's side panel) — the day view is already a window.
