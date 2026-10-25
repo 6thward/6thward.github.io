@@ -2,13 +2,13 @@
 // No sign-in. Anyone with the link sees the open times (never who took the
 // others), picks one, and leaves a name — plus a phone number if they'd like
 // a text reminder.
-import { db } from "./firebase-init.js?v=1792902951";
+import { db } from "./firebase-init.js?v=1792903041";
 import {
   doc, getDoc, collection, onSnapshot, writeBatch, serverTimestamp, setDoc, deleteDoc,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import {
-  GROUPS, PLACES, esc, fmtClock, fmtLongDay, slotsOf, sortWindows, parseSlotId, todayIso, nowMin, offList, isPriority, PRIORITY_TEXT,
-} from "./tithing-shared.js?v=1792902951";
+  GROUPS, PLACES, esc, fmtClock, fmtLongDay, slotsOf, sortWindows, parseSlotId, todayIso, nowMin, offList, isPriority, PRIORITY_TEXT, toMin,
+} from "./tithing-shared.js?v=1792903041";
 
 export async function initTithingForm(mount, token) {
   const fail = (title, msg) => { mount.innerHTML = `<div class="td-card td-msg"><h2>${esc(title)}</h2><p>${esc(msg)}</p></div>`; };
@@ -33,7 +33,7 @@ export async function initTithingForm(mount, token) {
   let holds = new Map(); // slotId -> { at: ms, k }
   const isHeld = (s) => { const h = holds.get(s.id); return !!h && h.k !== myKey && Date.now() - h.at < HOLD_MS; };
   // only the next few open times each day are offered, so nobody picks 4 PM while 1:10 sits empty (Jordan 10/24)
-  const OPEN_AHEAD = Number(season.openAhead ?? 3);
+  const OPEN_AHEAD = Number(season.openAhead ?? 4);
 
   const isTaken = (s) => {
     if (taken.has(s.id)) return true;
@@ -65,8 +65,9 @@ export async function initTithingForm(mount, token) {
       const offered = new Set([...openToday.filter((s) => s.priority), ...(OPEN_AHEAD > 0 ? regular.slice(0, OPEN_AHEAD) : regular)].map((s) => s.id));
       const hidden = OPEN_AHEAD > 0 ? Math.max(0, regular.length - OPEN_AHEAD) : 0;
       const blocks = wins.map((w) => {
-        const list = upcoming.filter((s) => s.win === w.id && (isTaken(s) || offered.has(s.id)));
-        if (!list.length) return "";
+        const all = upcoming.filter((s) => s.win === w.id); if (!all.length) return ""; // every window of the day shows, even before its times open up
+        const list = all.filter((s) => isTaken(s) || offered.has(s.id));
+        const span = `${fmtClock(toMin(w.start))} – ${fmtClock(toMin(w.end))}`;
         // a priority block is an amber panel with its own heading (wireframe A, 2026-10-18); the wording is in the intro
         // "At the Bishop's office" is left unsaid — only a home visit says where
         const pri = isPriority(w);
@@ -74,9 +75,11 @@ export async function initTithingForm(mount, token) {
           <div class="td-win${pri ? " td-win-res" : ""}">
             ${pri ? `<div class="td-res-h">🔒 Priority time slots</div>${w.priorityText && w.priorityText !== (season.priorityText || PRIORITY_TEXT) ? `<p class="td-res-txt">${esc(w.priorityText)}</p>` : ""}` : ""}
             <div class="td-win-head">
+              <span class="td-span">${span}</span>
               ${w.place === "home" ? `<span class="td-place">🏠 ${esc(PLACES.home.pub)}</span>` : ""}
               <span class="td-len">${Number(w.len) || 15}-minute visits</span>
             </div>
+            ${list.length ? "" : `<p class="td-later">These times open up as the earlier ones fill.</p>`}
             <div class="td-slots">
               ${list.map((s) => (isTaken(s)
                 ? `<span class="td-slot td-slot-taken" aria-disabled="true">${fmtClock(s.min)}</span>`
@@ -96,7 +99,7 @@ export async function initTithingForm(mount, token) {
         <p>Pick a time that works for you and your family, then add your name. That's it.</p>
         ${anyPriority ? `<p class="td-legend">${esc(season.priorityText || PRIORITY_TEXT)}</p>` : ""}
       </div>
-      ${mineSlot ? `<div class="td-card td-mine"><div class="td-tick">✓</div><div><b>You're signed up${mine.name ? ", " + esc(mine.name) : ""}.</b><div>${esc(describe(mineSlot))}</div><div class="td-sub">${esc(whereLine(mineSlot))}. Need to change it? Contact the bishop or the executive secretary.</div></div></div>` : ""}
+      ${mineSlot ? `<div class="td-card td-mine"><div class="td-tick">✓</div><div><b>You're signed up${mine.name ? ", " + esc(mine.name) : ""}.</b><div>${esc(describe(mineSlot))}</div><div class="td-sub">${mineSlot.place === "home" ? esc(whereLine(mineSlot)) + ". " : ""}Need to change it? Contact the bishop or the executive secretary.</div></div></div>` : ""}
       ${dayHtml || `<div class="td-card td-msg"><h2>No open times right now</h2><p>Please check back, or contact the bishop or the executive secretary.</p></div>`}
       ${dayHtml && !openCount ? `<div class="td-card td-msg"><p>Every time is taken at the moment. Please contact the bishop or the executive secretary.</p></div>` : ""}
       <p class="td-foot">Only the bishop and the people who help him schedule can see who signed up.</p>

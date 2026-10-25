@@ -30,6 +30,9 @@
   .td-slot-held { border-style: dashed; border-color: #c9d1db; color: #8a94a1; background: #f6f7f9; cursor: default; display: flex; flex-direction: column; align-items: center; line-height: 1.15; }
   .td-slot-held small { font-size: .62rem; font-weight: 600; letter-spacing: .02em; }
   .td-more { margin: .5rem 0 0; font-size: .85rem; color: var(--soft); }
+  .td-span { font-weight: 700; }
+  .td-later { margin: 0 0 .3rem; font-size: .85rem; color: var(--soft); font-style: italic; }
+  .td-slots:empty { display: none; }
   /* reserved block = amber panel (wireframe A, 2026-10-18) */
   .td-win-res { background: #fdf1d6; border: 1px solid #e6c35c; border-radius: 12px; padding: .7rem .8rem .8rem; margin-top: .6rem; border-top: 1px solid #e6c35c; }
   .td-day h2 + .td-win-res { padding-top: .7rem; }
@@ -76,7 +79,7 @@
 <body>
 <div id="td"><div class="td-loading">Opening the sign-up…</div></div>
 <script type="module">
-  import { initTithingForm } from "./js/tithing-form.js?v=1792902951";
+  import { initTithingForm } from "./js/tithing-form.js?v=1792903041";
   initTithingForm(document.getElementById("td"), new URLSearchParams(location.search).get("k") || "");
 </script>
 </body>
