@@ -9,16 +9,16 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1792934852";
-import { ctx, can } from "./app.js?v=1792934852";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1792934852";
-import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1792934852";
+import { db } from "./firebase-init.js?v=1792935474";
+import { ctx, can } from "./app.js?v=1792935474";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1792935474";
+import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1792935474";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { watchBishopCal, bishopCalConfig } from "./bishop-cal.js?v=1792934852";
+import { watchBishopCal, bishopCalConfig } from "./bishop-cal.js?v=1792935474";
 const clock12 = (hhmm) => { const [h, m] = String(hhmm).split(":").map(Number); return `${h % 12 || 12}:${String(m || 0).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`; };
-import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1792934852";
+import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1792935474";
 
 // One agenda page per "board": Ward Council (councils/…) and, since 2026-10-25, the Bishopric meeting (bishopric/…).
 // The same code runs twice with a config; a Bishopric item can be sent to the next ward council agenda.
@@ -81,13 +81,15 @@ function init() {
       <button class="btn btn-sm" id="wc-prev" title="Previous meeting">‹</button>
       <div class="hs-date wc-date" id="wc-date"></div>
       <button class="btn btn-sm" id="wc-next" title="Next meeting">›</button>
-      ${cfg.dates ? `<button class="btn btn-sm" id="wc-dates" title="Which Sundays have ward council, and what time it meets">📅 Council dates <span id="wc-time-lbl" class="wc-time-lbl"></span></button>`
+      ${cfg.dates ? `<button class="btn btn-sm" id="wc-dates" title="Which Sundays have ward council, and what time it meets">📅 Council dates <span id="wc-time-lbl" class="wc-time-lbl"></span></button>
+      <button class="btn btn-sm" id="wc-upcoming" title="The next councils at a glance — what's on each, who has the prayers">📋 Upcoming</button>`
         : `<span class="row-sub wc-time-note" title="Set the day and time under Calendar → Standing meetings">Meets <span id="wc-time-lbl" class="wc-time-lbl"></span></span>`}
     </div>
     <div id="wc-body"><div class="empty-note">Loading…</div></div>`;
   panel.querySelector("#wc-prev").addEventListener("click", () => { date = stepDate(date, -1); render(); });
   panel.querySelector("#wc-next").addEventListener("click", () => { date = stepDate(date, 1); render(); });
   panel.querySelector("#wc-dates")?.addEventListener("click", () => editDates());
+  panel.querySelector("#wc-upcoming")?.addEventListener("click", () => showUpcoming());
   watchBishopCal(() => { // the meeting time shows on the button; the Calendar's standing-meeting setting is the same record (2026-10-18)
     const co = bishopCalConfig()[cfg.calKey] || {}, lbl = panel.querySelector("#wc-time-lbl");
     if (lbl) lbl.textContent = co.on && co.start ? `${cfg.dates ? "· " : (["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"][Number(co.weekday) || 0] + " ")}${clock12(co.start)}${co.end ? " – " + clock12(co.end) : ""}` : (cfg.dates ? "" : "— not set");
@@ -187,6 +189,32 @@ function editDates(year) {
   });
 }
 
+// The upcoming councils at a glance (Jordan 10/25): date, time, how much is on the agenda, who has the prayers; click one to open it
+function showUpcoming() {
+  const today = todayIso();
+  const dates = (hasSchedule() ? schedule.filter((d) => d >= today) : Array.from({ length: 8 }, (_, i) => shiftWeek(upcomingSunday(), i))).slice(0, 12);
+  const co = bishopCalConfig()[cfg.calKey] || {};
+  const time = co.on && co.start ? `${clock12(co.start)}${co.end ? " – " + clock12(co.end) : ""}` : "";
+  const rowHtml = (d) => {
+    const items = itemsFor(d), open = items.filter((i) => !i.discussed).length, fus = ((councils[d] || {}).followups || []).filter((f) => !f.done).length;
+    const asg = (councils[d] || {}).assign || {};
+    const who = ASSIGN.map(([k, l]) => (asg[k] ? `<span class="wc-up-asg" title="${esc(l)}">${esc(l.replace("Scripture & thought", "Thought").replace("Handbook training", "Training"))}: <b>${esc(asg[k])}</b></span>` : "")).filter(Boolean).join("");
+    const titles = items.filter((i) => !i.discussed).map((i) => (i.kind === "board" ? `${i.k.name} · ${i.t.title}` : i.x.title)).slice(0, 4);
+    return `<div class="wc-up${d === date ? " cur" : ""}" data-upd="${d}">
+      <div class="wc-up-head"><b>${esc(fmtDay(d))}</b>${time ? `<span class="row-sub">${esc(time)}</span>` : ""}
+        <span class="wc-up-pills"><span class="pill ${open ? "pill-approved" : "pill-role-member"}">${open} item${open === 1 ? "" : "s"}</span>${fus ? `<span class="pill pill-pending">${fus} follow-up${fus === 1 ? "" : "s"}</span>` : ""}${isNextAgenda(d) ? `<span class="pill pill-approved">next</span>` : ""}</span></div>
+      ${titles.length ? `<div class="wc-up-items">${titles.map((t) => `<span>• ${esc(t)}</span>`).join("")}${items.filter((i) => !i.discussed).length > 4 ? `<span class="row-sub">+${items.filter((i) => !i.discussed).length - 4} more</span>` : ""}</div>` : ""}
+      ${who ? `<div class="wc-up-who">${who}</div>` : `<div class="row-sub wc-up-who">No assignments yet</div>`}
+    </div>`;
+  };
+  const el = openModal(`<h3>Upcoming ${esc(cfg.noun || "ward councils")}</h3>
+    <p class="row-sub" style="margin:0 0 .6rem">${hasSchedule() ? "The council Sundays you've set. " : "No council dates are set, so every Sunday is shown. "}Click one to open its agenda.</p>
+    <div class="wc-up-list">${dates.length ? dates.map(rowHtml).join("") : `<div class="empty-note">No upcoming dates — add some under 📅 Council dates.</div>`}</div>
+    <div class="modal-actions">${can(cfg.area, "edit") ? `<button class="btn" id="wc-up-dates" type="button" title="Tick which Sundays have ward council, and set the time">📅 Set the dates</button>` : "<span></span>"}<button class="btn" id="wc-up-close" type="button">Close</button></div>`);
+  el.querySelector("#wc-up-close").addEventListener("click", closeModal);
+  el.querySelector("#wc-up-dates")?.addEventListener("click", () => { closeModal(); editDates(); });
+  el.querySelectorAll("[data-upd]").forEach((r) => r.addEventListener("click", () => { closeModal(); openDate(r.dataset.upd); }));
+}
 // Council dates (2026-10-04). The ward chooses which Sundays have ward
 // council (councils/_dates.dates); agendas exist only for those. With no
 // dates chosen yet, every Sunday counts, as before.
@@ -1018,7 +1046,7 @@ function render() {
 
 const COUNCIL = makeAgenda({
   key: "council", area: "council", coll: "councils", panel: "panel-council", calKey: "council", dates: true, board: true, showOnCouncil: false,
-  title: "Ward Council", info: "An agenda for each meeting. Items flagged “Ward council” on the Member Board join the next agenda automatically.",
+  title: "Ward Council", noun: "ward councils", info: "An agenda for each meeting. Items flagged “Ward council” on the Member Board join the next agenda automatically.",
   isMember: (u) => !!u.councilMember,
 });
 // the Bishopric meeting (2026-10-25): bishop, counselors, clerk and secretaries; weekly on the day set under Standing meetings

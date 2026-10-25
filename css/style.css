@@ -2594,3 +2594,9 @@ tr.us-menu-open td { background: #f7f9fb; }
 /* "New members" agenda item (2026-10-25) */
 .wca-type { margin: 0 0 .7rem; }
 .wc-type-badge { font-size: .95em; }
+/* Ward Council: Upcoming list (2026-10-25) */
+.wc-up-list { display: flex; flex-direction: column; gap: .45rem; max-height: 62vh; overflow: auto; }
+.wc-up { border: 1px solid var(--line); border-radius: 10px; padding: .5rem .7rem; cursor: pointer; } .wc-up:hover { background: var(--brand-soft); } .wc-up.cur { border-color: var(--brand); }
+.wc-up-head { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; } .wc-up-pills { margin-left: auto; display: inline-flex; gap: .3rem; }
+.wc-up-items { display: flex; flex-direction: column; gap: .05rem; margin: .3rem 0 0; font-size: .88rem; }
+.wc-up-who { margin-top: .3rem; font-size: .82rem; display: flex; flex-wrap: wrap; gap: .3rem .8rem; } .wc-up-asg { color: var(--ink-soft); } .wc-up-asg b { color: var(--ink); font-weight: 600; }
