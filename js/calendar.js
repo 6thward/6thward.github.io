@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792903092";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792903092";
+import { db } from "./firebase-init.js?v=1792903213";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792903213";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792903092";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792903092";
-import { openCouncilDate } from "./council.js?v=1792903092";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792903092";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792903213";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792903213";
+import { openCouncilDate } from "./council.js?v=1792903213";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792903213";
 
 let events = [];
 let users = []; // app users, for the People picker on an event (2026-10-19)
@@ -175,7 +175,7 @@ function render() {
       <div class="cal-cell ${cellDate < today ? "other-month" : ""} ${cellDate === today ? "today" : ""}" data-date="${cellDate}">
         <span class="cal-daynum">${displayNum}</span>
         ${evs.slice(0, 7).map((e) => `
-          <div class="cal-event ${isSunday ? "ev-sunday" : ""}${e.tithing ? " ev-tithing" : calOf(e) === "bishop" ? " ev-bishop" : ""}${e.standing ? " ev-standing" : ""}${e.color ? " ev-colored" : ""}"${evStyle(e)} title="${esc(e.title)}${e.sub ? " · " + esc(e.sub) : ""}">
+          <div class="cal-event ${isSunday ? "ev-sunday" : ""}${e.tithing ? " ev-tithing" : calOf(e) === "bishop" ? " ev-bishop" : ""}${e.standing ? " ev-standing" : ""}${e.kind === "blocked" ? " ev-blocked" : ""}${e.color ? " ev-colored" : ""}"${evStyle(e)} title="${esc(e.title)}${e.sub ? " · " + esc(e.sub) : ""}">
             ${e.startTime ? fmtTime(e.startTime) + " " : ""}${esc(e.title)}
           </div>`).join("")}
         ${evs.length > 7 ? `<div class="cal-event">+${evs.length - 7} more</div>` : ""}
@@ -250,6 +250,7 @@ const KINDS = [
   ["rspres", "Relief Society presidency", "", "#cf6d96"],
   ["primarypres", "Primary presidency", "", "#dd9257"],
   ["welfare", "Welfare / self-reliance", "", "#1f8a83"],
+  ["blocked", "Blocked out", "Not available — nothing gets scheduled here, and tithing times under it are hidden from the sign-up page", "#4b5563"],
   ["other", "Something else…", "Any other appointment on the Bishop calendar"],
 ];
 const kindOf = (k) => KINDS.find((x) => x[0] === k);
@@ -316,7 +317,7 @@ if (b.kind === "tithing") {
     for (let m = b.start; m + len <= b.end; m += len) { const k = hhmmOf(m); ticks.push(`<div class="dv-slot${names[k] ? " booked" : ""}" data-islot="${k}" style="top:${(m - b.start) * PX_MIN}px;height:${len * PX_MIN}px" title="${fmtClock(m)}${names[k] ? " · " + esc(names[k]) : " · open — click to add a name"}"><b>${fmtClock(m).replace(/ [AP]M$/, "")}</b> <i>(${len} min)</i> <span>${names[k] ? esc(names[k]) : "open"}</span></div>`); }
     return `<div class="dv-block dv-interviews dv-slotted${dvFocus === "e:" + b.id ? " dv-focus" : ""}${b.ev.color ? " dv-colored" : ""}" data-block="e:${esc(b.id)}" style="${style}${b.ev.color ? `;--evc:${b.ev.color}` : ""}"><div class="dv-block-tag">${esc(b.title)} · ${Object.keys(names).length}/${ticks.length} filled</div><div class="dv-slots">${ticks.join("")}</div></div>`;
   }
-  const cls = b.kind === "standing" ? "dv-standing" : b.cal === "bishop" ? "dv-bishop" : "dv-ward";
+  const cls = b.kind === "standing" ? "dv-standing" : b.ev?.kind === "blocked" ? "dv-blocked" : b.cal === "bishop" ? "dv-bishop" : "dv-ward";
   const colored = b.ev?.color ? `;--evc:${b.ev.color}` : "";
   const who = peopleNames(b.ev?.people), own = b.kind === "event" && b.cal === "bishop" && ownerOf(b.ev) !== "bishop" ? ownerLabel(ownerOf(b.ev)) : "";
   return `<div class="dv-block ${cls}${colored ? " dv-colored" : ""}" data-block="${b.kind === "standing" ? "s:" : "e:"}${esc(b.id)}" style="${style}${colored}" title="${esc(b.title)}${own ? " · " + own : ""}${who ? " · with " + esc(who) : ""}"><div class="dv-block-title">${esc(b.title)} <span>${fmtClock(b.start)}–${fmtClock(b.end)}</span>${own ? `<span class="dv-block-who">· ${own}</span>` : ""}${who ? `<span class="dv-block-who">· ${esc(who)}</span>` : ""}</div></div>`;
@@ -794,6 +795,7 @@ async function saveDesignation(date, kind, side) {
     const color = swatchValue(side.querySelector("#dv-color"));
     const base = { title, startTime: hhmmOf(a), endTime: hhmmOf(b), location: side.querySelector("#dv-loc")?.value.trim() || "", people: peopleValue(side.querySelector("#dv-people")), notes: "", ...(color ? { color } : {}), cal: "bishop", owner: side.querySelector("#dv-owner")?.value || "bishop", createdBy: ctx.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), ...(series ? { series } : {}) };
     if (kind === "interviews") { base.kind = "interviews"; base.len = Number(side.querySelector("#dv-len").value); }
+    if (kind === "blocked") base.kind = "blocked"; // drawn hatched, reads as unavailable (Jordan 10/24)
     const made = [];
     for (const d of dates) { const data = { ...base, date: d, ...(kind === "interviews" ? { slots: {} } : {}) }; const ref = await addDoc(collection(db, "events"), data); made.push({ ...data, id: ref.id }); }
     dvSel = null;
