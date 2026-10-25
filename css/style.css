@@ -2586,3 +2586,5 @@ tr.us-menu-open td { background: #f7f9fb; }
 .ev-series-note { background: #f1f6fb; border-radius: 8px; padding: .35rem .6rem; }
 #ev-scopewrap { margin: .5rem 0; }
 .ev-people-groups { display: flex; flex-wrap: wrap; gap: .3rem; } .ev-people-groups .btn { text-transform: none; letter-spacing: 0; font-weight: 600; }
+.td-sheet-days { display: flex; flex-direction: column; gap: .35rem; max-height: 50vh; overflow: auto; }
+.td-sheet-day { display: flex; align-items: center; gap: .5rem; padding: .35rem .5rem; border: 1px solid var(--line); border-radius: 9px; cursor: pointer; }

@@ -1,17 +1,17 @@
 // Tithing declaration sign-ups (2026-10-04) — the bishop's side, its own page
 // ("Tithing Declaration" tab, area key "tithing"): set when you're available, share the link / QR code, and see
 // who signed up. The public page is tithing.html (js/tithing-form.js).
-import { db } from "./firebase-init.js?v=1792905408";
-import { ctx, can } from "./app.js?v=1792905408";
+import { db } from "./firebase-init.js?v=1792930817";
+import { ctx, can } from "./app.js?v=1792930817";
 import {
   collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { watchBishopCal, standingEvents } from "./bishop-cal.js?v=1792905408";
-import { openModal, closeModal, toast } from "./ui.js?v=1792905408";
+import { watchBishopCal, standingEvents } from "./bishop-cal.js?v=1792930817";
+import { openModal, closeModal, toast } from "./ui.js?v=1792930817";
 import {
   GROUPS, PLACES, SLOT_LENGTHS, esc, toMin, fmtClock, fmtLongDay, fmtShortDay, slotsOf, slotMap, isPriority, PRIORITY_TEXT,
   sortWindows, overlaps, newToken, parseSlotId, todayIso, addDays, hhmm, busyFromEvents, sameBusy, offList,
-} from "./tithing-shared.js?v=1792905408";
+} from "./tithing-shared.js?v=1792930817";
 
 let mount = null, season = null, signups = [], unsubSignups = null, started = false, dirty = false;
 let events = null; // the ward calendar (events with cal: "bishop" block sign-up times); null until it loads
@@ -165,6 +165,7 @@ function render() {
       <div class="td-stat-actions">
         ${sel && editor ? `<button class="btn btn-primary" id="td-remind" type="button" ${withPhone.length ? "" : "disabled"} title="${withPhone.length ? "One text at a time — each opens in Messages with the reminder written" : "Nobody on this day gave a mobile number"}">💬 Text reminders${withPhone.length ? ` (${withPhone.length})` : ""}</button>` : ""}
         ${sel ? `<button class="btn" id="td-print" type="button">🖨 Print ${esc(dayLabel(dayPick).toLowerCase())}</button>` : ""}
+        ${futureD.length ? `<button class="btn" id="td-sheet" type="button" title="A paper sign-up sheet to pass around — open times only, with blanks to write in">📋 Sign-up sheet</button>` : ""}
       </div>
     </div>`;
   const tabs = `
@@ -285,6 +286,20 @@ function render() {
   });
   mount.querySelector("#td-print")?.addEventListener("click", () => printSchedule(rowsAll, byId, dayPick));
   mount.querySelector("#td-print-came")?.addEventListener("click", () => printList(people.filter((r) => r.status === "attended"), "Everyone who came"));
+  // a paper sign-up sheet (10/25): pick the days, then print the open times with blanks to write in
+  mount.querySelector("#td-sheet")?.addEventListener("click", () => {
+    const openByDay = (d) => slots.filter((s) => s.date === d && !s.blocked && !byId[s.id]);
+    const el = openModal(`<h3>Print a sign-up sheet</h3>
+      <p class="row-sub" style="margin:0 0 .6rem">Which Sundays go on the sheet? Only open times print — taken times are left off.</p>
+      <div class="td-sheet-days">${futureD.map((d) => { const n = openByDay(d).length; return `<label class="td-sheet-day"><input type="checkbox" data-sheetday="${d}" ${n ? "checked" : "disabled"}> <b>${esc(fmtLongDay(d))}</b> <span class="row-sub">${n ? `${n} open time${n === 1 ? "" : "s"}` : "nothing open"}</span></label>`; }).join("")}</div>
+      <div class="modal-actions"><button class="btn" id="tds-cancel" type="button">Cancel</button><button class="btn btn-primary" id="tds-go" type="button">🖨 Print</button></div>`);
+    el.querySelector("#tds-cancel").addEventListener("click", closeModal);
+    el.querySelector("#tds-go").addEventListener("click", () => {
+      const days = [...el.querySelectorAll("[data-sheetday]:checked")].map((x) => x.dataset.sheetday);
+      if (!days.length) return toast("Pick at least one Sunday");
+      closeModal(); printSignupSheet(days, openByDay);
+    });
+  });
   mount.querySelector("#td-print-inv")?.addEventListener("click", () => printInvites(invRows));
   if (!editor) return;
 
@@ -513,6 +528,35 @@ function printList(people, title) {
     td { border-bottom: 1px solid #cfd5dd; padding: .06in .08in; }`);
 }
 
+// the paper sign-up sheet: open times only, a blank for the name and mobile, priority times marked (10/25)
+function printSignupSheet(days, openByDay) {
+  printWindow("Tithing Declaration sign-up sheet", `
+    <div class="sheet">
+      <h1>Tithing Declaration <span>${esc(season.ward || "6th Ward")}</span></h1>
+      <p class="lead">Write your name next to a time, and a mobile number if you'd like a text reminder.</p>
+      <p class="first"><b>Please fill the first available time slots first.</b></p>
+      ${days.some((d) => openByDay(d).some((s) => s.priority)) ? `<p class="pri">🔒 <b>Priority</b> times: ${esc(season.priorityText || PRIORITY_TEXT)}</p>` : ""}
+      ${season.note ? `<p class="note">${esc(season.note)}</p>` : ""}
+      ${days.map((d) => { const list = openByDay(d); return `
+        <h2>${esc(fmtLongDay(d))}</h2>
+        <table><tr><th class="t">Time</th><th class="n">Name</th><th class="p">Mobile (optional)</th></tr>
+        ${list.map((s) => `<tr><td class="t">${fmtClock(s.min)}${s.priority ? ` <span class="tag">🔒 Priority</span>` : ""}${s.place === "home" ? ` <span class="tag">home visit</span>` : ""}</td><td class="n"></td><td class="p"></td></tr>`).join("")}</table>`; }).join("")}
+      <p class="foot">Or sign up online: ${esc(linkUrl())}</p>
+    </div>`, `
+    @page { size: letter; margin: .55in; }
+    .sheet { padding: .05in; }
+    .sheet h1 { font-size: 22pt; margin: 0; } .sheet h1 span { font-size: 11pt; font-weight: 400; color: #5b6675; margin-left: .5em; }
+    .lead { margin: .08in 0 0; } .first { margin: .06in 0 0; font-size: 12.5pt; }
+    .pri { margin: .1in 0 0; padding: .08in .12in; background: #fdf1d6; border-radius: 6px; font-size: 10.5pt; }
+    .note { margin: .1in 0 0; color: #5b6675; white-space: pre-wrap; }
+    .sheet h2 { font-size: 14pt; margin: .28in 0 .06in; break-after: avoid; }
+    table { width: 100%; border-collapse: collapse; } tr { break-inside: avoid; }
+    th { text-align: left; font-size: 9pt; text-transform: uppercase; letter-spacing: .05em; color: #5b6675; border-bottom: 1.5px solid #1f2733; padding: .04in .08in; }
+    td { border-bottom: 1px solid #9aa4b1; padding: .12in .08in; height: .22in; vertical-align: middle; }
+    td.t { width: 1.6in; font-weight: 700; white-space: nowrap; } td.p { width: 1.9in; }
+    .tag { font-weight: 600; font-size: 9pt; color: #8a5a00; background: #fdf1d6; border-radius: 99px; padding: .02in .1in; margin-left: .06in; }
+    .foot { margin-top: .3in; font-size: 9.5pt; color: #5b6675; word-break: break-all; }`);
+}
 function printSchedule(rowsAll, byId, onlyDay) { // one day: time · name · mobile, with a Came box to tick by hand
   const busyOf = (id) => ((season && season.busy) || {})[id] || "";
   const days = [...new Set(rowsAll.map((s) => s.date))].filter((d) => (onlyDay ? d === onlyDay : d >= todayIso()));
