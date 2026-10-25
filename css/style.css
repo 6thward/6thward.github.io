@@ -2627,3 +2627,20 @@ tr.us-menu-open td { background: #f7f9fb; }
 .wb-col h5 { margin: 0 0 .2rem; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); display: flex; align-items: center; gap: .3rem; } .wb-col h5 .n { background: #fff; border-radius: 99px; padding: 0 .4rem; font-size: .68rem; color: var(--ink); }
 .wb-col ul { padding-left: 1rem; }
 @media (max-width: 900px) { .st-top { grid-template-columns: 1fr; } .wb-cols { grid-template-columns: 1fr; } }
+/* Sunday card week strip (2026-10-25, wireframe H5) + the "From the pulpit" panel (option A) */
+#sunday-list .card.wk-card { padding: 0; overflow: hidden; }
+#sunday-list .card.wk-card.wk-card-now { border-color: #1f4e79; }
+.wk-inner { padding: .6rem 1rem 1rem; }
+.wk-strip { display: flex; align-items: center; gap: .7rem; padding: .45rem 1rem; background: #e9ecf0; color: var(--ink); border-bottom: 1px solid var(--line); }
+.wk-strip.wk-now { background: #1f4e79; color: #fff; border-bottom: 0; }
+.wk-big { font-size: 2rem; font-weight: 900; line-height: 1; letter-spacing: -.02em; }
+.wk-day { font-size: 1rem; font-weight: 700; }
+.wk-nth { border-radius: 99px; padding: .15rem .65rem; font-size: .78rem; font-weight: 700; background: #fff; color: var(--ink); border: 1px solid var(--line); }
+.wk-now .wk-nth { background: rgba(255,255,255,.18); color: #fff; border-color: rgba(255,255,255,.45); }
+.wk-nth.wk-nth-5, .wk-now .wk-nth.wk-nth-5 { background: #c76a12; color: #fff; border-color: #c76a12; } /* a 5th Sunday stands out */
+.wk-badge { margin-left: auto; background: #fff; color: #1f4e79; border-radius: 99px; padding: .1rem .55rem; font-size: .68rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+.st-pulpit { margin-top: .55rem; background: #eef1f5; border: 1.5px solid #1f2733; border-radius: 12px; padding: .5rem .6rem .6rem; }
+.st-pulpit-lbl { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--ink); margin: 0 0 .4rem; }
+.st-pulpit .st-top { margin-top: 0; }
+.conf-card .wk-strip { opacity: .75; }
+@media (max-width: 700px) { .wk-big { font-size: 1.5rem; } .wk-strip { gap: .45rem; padding: .35rem .7rem; } .wk-inner { padding: .5rem .7rem .8rem; } }

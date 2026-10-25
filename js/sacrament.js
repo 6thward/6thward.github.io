@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1792955393";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1792955393";
+import { db } from "./firebase-init.js?v=1792968684";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1792968684";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1792955393";
-import { HYMNS } from "./hymns.js?v=1792955393";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1792955393";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1792968684";
+import { HYMNS } from "./hymns.js?v=1792968684";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1792968684";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -1151,7 +1151,7 @@ function statusChips(m, date) {
       <div class="st-box-body"><div class="wb-cols">${wbCol("rel", "Releases", rel.map(person), "+ release")}${wbCol("sus", "Sustainings", sus.map(person), "+ sustaining")}${wbCol("oth", "Other", oth.map((o) => `<li>${esc(o)}</li>`), "+ item")}</div></div>
     </div>`;
   const topRestore = can ? [hid.ann ? `<span class="st-restore" data-unhide="ann" title="Bring the Announcements box back for this Sunday">+ Announcements</span>` : "", hid.wb ? `<span class="st-restore" data-unhide="wb" title="Bring the Ward business box back for this Sunday">+ Ward business</span>` : ""].filter(Boolean) : [];
-  const top = annBox || wbBox ? `<div class="st-top${!annBox || !wbBox ? " st-top-one" : ""}">${annBox}${wbBox}${topRestore.length ? `<span class="st-restore-wrap st-top-restore">${topRestore.join("")}</span>` : ""}</div>` : (topRestore.length ? `<div class="st-top-restore-row">${topRestore.join("")}</div>` : "");
+  const top = annBox || wbBox ? `<div class="st-pulpit"><div class="st-pulpit-lbl">From the pulpit</div><div class="st-top${!annBox || !wbBox ? " st-top-one" : ""}">${annBox}${wbBox}${topRestore.length ? `<span class="st-restore-wrap st-top-restore">${topRestore.join("")}</span>` : ""}</div></div>` : (topRestore.length ? `<div class="st-top-restore-row">${topRestore.join("")}</div>` : "");
   return `${top}<div class="st-row">${chips.join("")}</div>`;
 }
 
@@ -1186,10 +1186,12 @@ function renderCards(wrap) {
   const canEdit = canDo("sacrament", "edit");
   const today = todayISO();
 
+  const thisWeek = viewDates().find((d) => d >= today) || "";
   wrap.innerHTML = viewDates().map((date) => {
     const m = meetings[date];
     const type = m?.type || defaultTypeFor(date);
     const isPast = date < today;
+    const isThisWeek = date === thisWeek;
     const planned = !!m;
     const isConf = NO_MEETING(type);
     const nth = nthSunday(date);
@@ -1244,14 +1246,24 @@ function renderCards(wrap) {
     // plain text, no pill color — assigned reads quietly on the date line
     const condChip = isConf ? "" : `
       <span class="cond-inline${m?.conducting ? "" : " cond-empty"}${canEdit ? " st-click" : ""}"${canEdit ? ` data-qe='{"t":"c"}' title="Click to assign"` : ""}>Conducting: ${m?.conducting ? esc(m.conducting) : "—"}</span>`;
+    // the week strip (2026-10-25, wireframe H5): "Oct 25 · Sunday · 4th Sunday", this week in blue, the others grey
+    const dObj = new Date(date + "T12:00:00");
+    const strip = `<div class="wk-strip${isThisWeek ? " wk-now" : ""}">
+        <span class="wk-big">${esc(dObj.toLocaleDateString("en-US", { month: "short", day: "numeric" }))}</span>
+        <span class="wk-day">${esc(dObj.toLocaleDateString("en-US", { weekday: "long" }))}</span>
+        <span class="wk-nth${nth === 5 ? " wk-nth-5" : ""}">${["", "1st", "2nd", "3rd", "4th", "5th"][nth] || ""} Sunday</span>
+        ${isThisWeek ? `<span class="wk-badge">This week</span>` : ""}
+      </div>`;
     return `
-    <div class="card ${isConf ? "conf-card" : ""}" data-date="${date}" style="${isPast ? "opacity:.6" : ""}">
+    <div class="card wk-card${isConf ? " conf-card" : ""}${isThisWeek ? " wk-card-now" : ""}" data-date="${date}" style="${isPast ? "opacity:.6" : ""}">
+      ${strip}
+      <div class="wk-inner">
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:.75rem;flex-wrap:wrap">
         <div>
-          <h3 style="margin:0"><span class="card-date">${fmtDay(date, { year: true })}</span>
+          <h3 style="margin:0">
             ${megaphone}${wbIcon}${hbIcon}${type !== "sacrament" || canEdit ? `<span class="pill head-pill type-pill type-${esc(type)} ${isConf ? "pill-conf" : type === "fast" ? "pill-fast" : type === "sacrament" ? "pill-type-plain" : "pill-approved"}${canEdit ? " st-click" : ""}"${canEdit ? ` data-type="${date}" title="Click to change the meeting type"` : ""}>${esc(typeLabel(m, date))}</span>` : ""}${m?.theme
               ? `<span class="theme-tag${canEdit ? " st-click" : ""}"${canEdit ? ` data-qe='{"t":"theme"}' title="Click to edit the theme"` : ""}>${themeHtml(m.theme)}</span>`
-              : (canEdit && !isConf ? `<span class="theme-tag theme-add" data-qe='{"t":"theme"}' title="Add a theme for this Sunday">+ theme</span>` : "")}${type === "highcouncil" ? `<a class="pill head-pill hc-pill" href="${HC_URL}" target="_blank" rel="noopener" title="High council speaking assignments — stgeorgeeast.org">🔗 who's speaking</a>` : ""}${nth === 5 ? `<span class="nth-pill nth-5 head-pill">5th Sunday</span>` : ""}${babies.map((b, bi) => `<span class="pill-baby-bold head-pill${canEdit ? " st-click" : ""}" ${canEdit ? `data-baby="${bi}" title="Click to edit"` : ""}>Blessing${b.name ? ": " + esc(b.name) : ""}${b.by ? ` <span class="pill-baby-by">by ${esc(b.by)}</span>` : ""}</span>`).join("")}
+              : (canEdit && !isConf ? `<span class="theme-tag theme-add" data-qe='{"t":"theme"}' title="Add a theme for this Sunday">+ theme</span>` : "")}${type === "highcouncil" ? `<a class="pill head-pill hc-pill" href="${HC_URL}" target="_blank" rel="noopener" title="High council speaking assignments — stgeorgeeast.org">🔗 who's speaking</a>` : ""}${babies.map((b, bi) => `<span class="pill-baby-bold head-pill${canEdit ? " st-click" : ""}" ${canEdit ? `data-baby="${bi}" title="Click to edit"` : ""}>Blessing${b.name ? ": " + esc(b.name) : ""}${b.by ? ` <span class="pill-baby-by">by ${esc(b.by)}</span>` : ""}</span>`).join("")}
           </h3>
           <div class="row-sub" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">${condChip}${isConf ? "<span>no sacrament meeting</span>" : ""}</div>
         </div>
@@ -1263,6 +1275,7 @@ function renderCards(wrap) {
         </div>
       </div>
       ${statusChips(m, date)}
+      </div>
     </div>`;
   }).join("") + musicDatalists() + hymnDatalists();
 
