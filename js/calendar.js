@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792903041";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792903041";
+import { db } from "./firebase-init.js?v=1792903092";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792903092";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792903041";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792903041";
-import { openCouncilDate } from "./council.js?v=1792903041";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792903041";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792903092";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792903092";
+import { openCouncilDate } from "./council.js?v=1792903092";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792903092";
 
 let events = [];
 let users = []; // app users, for the People picker on an event (2026-10-19)
@@ -576,7 +576,7 @@ function drawSchedule(pid, who) {
   grid.innerHTML = `<div class="sv-scroll"><div class="sv-wrap" style="--sv-h:${height}px">
     <div class="sv-gutter"><div class="sv-head"></div><div class="sv-body">${hours.join("")}</div></div>
     ${days.map((d) => `<div class="sv-col${d.date === today ? " sv-today" : ""}${d.date < today ? " sv-past" : ""}" data-sv-date="${d.date}">
-      <div class="sv-head" title="Open this Sunday"><b>${esc(fmtDate(d.date))}</b>${d.allDay.length ? `<div class="sv-allday">${d.allDay.map((b) => `<span class="cal-event${b.cal === "bishop" ? " ev-bishop" : ""}" data-sv-open="${b.kind === "standing" ? "s:" : "e:"}${esc(b.id)}">${esc(b.title)}</span>`).join("")}</div>` : ""}</div>
+      <div class="sv-head" title="Open this Sunday"><div class="sv-date"><b>${esc(fmtDate(d.date))}</b><span class="sv-nth">${ORD[nthOf(d.date)]} Sunday</span></div>${d.allDay.length ? `<div class="sv-allday">${d.allDay.map((b) => `<span class="cal-event${b.cal === "bishop" ? " ev-bishop" : ""}" data-sv-open="${b.kind === "standing" ? "s:" : "e:"}${esc(b.id)}">${esc(b.title)}</span>`).join("")}</div>` : ""}</div>
       <div class="sv-body dv-grid" data-sv-body="${d.date}">${hours.map((x) => x.replace(/<span>.*?<\/span>/, "")).join("")}<div class="dv-blocks">${d.timed.map((b) => blockMarkup(b, `top:${top(Math.max(b.start, lo))}px;height:${h(Math.max(b.start, lo), Math.min(b.end, hi))}px;left:calc(${(b.col / d.nCols) * 100}% + 2px);width:calc(${100 / d.nCols}% - 4px)`)).join("")}</div></div>
     </div>`).join("")}
   </div></div>`;
