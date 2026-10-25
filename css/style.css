@@ -2548,3 +2548,9 @@ tr.us-menu-open td { background: #f7f9fb; }
 /* Blocked out time on the bishop's schedule (2026-10-24): hatched grey, nothing to see here */
 .dv-block.dv-blocked, .dv-block.dv-blocked.dv-colored { background: repeating-linear-gradient(135deg, #f1f3f6 0 6px, #e3e7ec 6px 12px); border-color: #c9d1db; color: #5b6675; }
 .cal-event.ev-blocked, .cal-event.ev-blocked.ev-colored { background: repeating-linear-gradient(135deg, #f1f3f6 0 4px, #e3e7ec 4px 8px); color: #5b6675; border-left-color: #9aa4b1; }
+/* pinned date row on the schedule tabs: a tinted band, so it reads apart from the hours while scrolling (2026-10-24) */
+.sv-scroll .sv-head { background: var(--brand-soft); border-bottom: 2px solid var(--brand); box-shadow: 0 3px 6px rgba(31, 78, 121, .12); border-radius: 0; padding: .35rem .45rem .35rem; height: auto; min-height: 2.2rem; margin: 0 0 .25rem; }
+.sv-scroll .sv-head b { color: var(--brand); }
+.sv-scroll .sv-head:hover { background: #dbe7f3; }
+.sv-scroll .sv-gutter .sv-head { background: var(--brand-soft); border-bottom-color: var(--brand); box-shadow: none; }
+.sv-wrap { gap: 0 .4rem; } .sv-scroll .sv-gutter .sv-head, .sv-scroll .sv-col .sv-head { box-sizing: border-box; }
