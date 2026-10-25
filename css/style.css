@@ -2539,3 +2539,7 @@ tr.us-menu-open td { background: #f7f9fb; }
 .sv-col .dv-slot { font-size: .64rem; padding: .05rem .3rem; gap: .2rem; } .sv-col .dv-slot b { min-width: 2rem; } .sv-col .dv-slot i { display: none; }
 .sv-col .dv-block-tag { font-size: .58rem; max-width: 70%; } .sv-col .dv-block-tag.dv-block-note { top: 14px; }
 @media (max-width: 900px) { .sv-wrap { grid-template-columns: 2.6rem repeat(4, minmax(0, 1fr)); } .sv-col .dv-block-who, .sv-col .dv-block-tag { display: none; } }
+/* the schedule tabs scroll through the whole day; the dates stay pinned at the top (2026-10-24) */
+.sv-scroll { max-height: 78vh; overflow: auto; border-radius: 10px; }
+.sv-scroll .sv-head { position: sticky; top: 0; z-index: 3; background: #fff; }
+.sv-gutter .sv-head { background: transparent; }

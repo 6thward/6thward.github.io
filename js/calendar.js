@@ -2,22 +2,29 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792902103";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792902103";
+import { db } from "./firebase-init.js?v=1792902653";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792902653";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792902103";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792902103";
-import { openCouncilDate } from "./council.js?v=1792902103";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792902103";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792902653";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792902653";
+import { openCouncilDate } from "./council.js?v=1792902653";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792902653";
 
 let events = [];
 let users = []; // app users, for the People picker on an event (2026-10-19)
 let viewStart; // ISO date of the Sunday the grid starts on — the current week by default, so past weeks aren't shown (2026-10-18)
 let started = false;
 let calView = "all";          // all | ward | bishop
-let bsStart = null;           // Bishop's Schedule tab: the first of the four Sundays shown (Jordan 10/24)
+// Whose schedule a Bishop-calendar item is on (10/24): the bishop's, or a counselor's. Ward items and standing meetings show on all three.
+const OWNERS = [["bishop", "Bishop"], ["c1", "1st Counselor"], ["c2", "2nd Counselor"]];
+const ownerOf = (e) => (e && OWNERS.some(([k]) => k === e.owner) ? e.owner : "bishop");
+const ownerLabel = (k) => OWNERS.find(([x]) => x === k)?.[1] || "Bishop";
+const ownerSel = (id, cur, canEdit) => `<select id="${id}" ${canEdit ? "" : "disabled"}>${OWNERS.map(([k, l]) => `<option value="${k}"${(cur || "bishop") === k ? " selected" : ""}>${l}</option>`).join("")}</select>`;
+// the three schedule tabs: each shows its own four Sundays
+const SCHEDULES = [["bishopsched", "bishop", "Bishop's Schedule"], ["c1sched", "c1", "1st Counselor's Schedule"], ["c2sched", "c2", "2nd Counselor's Schedule"]];
+const bsStart = {};             // first of the four Sundays shown, per schedule tab
 let season = null, signups = {}, unsubSignups = null; // tithing declaration (only loads for people who can see it)
 const calOf = (e) => (e.cal === "bishop" ? "bishop" : "ward");
 
@@ -282,11 +289,11 @@ function dayView(date) {
   wireDrag(el.querySelector("#dv-grid"));
 }
 // everything on this day as timeline blocks
-function dayBlocks(date) {
+function dayBlocks(date, who) { // who: a schedule tab's owner — ward items + that person's own + standing; tithing only for the bishop
   const out = [];
-  events.filter((e) => e.date === date && showIt(e)).forEach((e) => out.push({ kind: e.kind === "interviews" ? "interviews" : "event", id: e.id, title: e.title, start: e.startTime ? toMinutes(e.startTime) : null, end: e.endTime ? toMinutes(e.endTime) : (e.startTime ? toMinutes(e.startTime) + 60 : null), cal: calOf(e), ev: e }));
+  events.filter((e) => e.date === date && showIt(e) && (!who || calOf(e) !== "bishop" || ownerOf(e) === who)).forEach((e) => out.push({ kind: e.kind === "interviews" ? "interviews" : "event", id: e.id, title: e.title, start: e.startTime ? toMinutes(e.startTime) : null, end: e.endTime ? toMinutes(e.endTime) : (e.startTime ? toMinutes(e.startTime) + 60 : null), cal: calOf(e), ev: e }));
   standingEvents([date]).filter(showIt).forEach((e) => out.push({ kind: "standing", id: e.id, title: e.title, start: toMinutes(e.startTime), end: toMinutes(e.endTime), cal: "bishop", ev: { color: e.color || "" }, standing: e.standing }));
-  if (season && calView !== "ward") {
+  if (season && calView !== "ward" && (!who || who === "bishop")) {
     const slots = slotsOf(season.windows, offList(season)).filter((s) => s.date === date);
     (season.windows || []).filter((w) => w.date === date).forEach((w) => {
       const mine = slots.filter((s) => s.win === w.id);
@@ -311,8 +318,8 @@ if (b.kind === "tithing") {
   }
   const cls = b.kind === "standing" ? "dv-standing" : b.cal === "bishop" ? "dv-bishop" : "dv-ward";
   const colored = b.ev?.color ? `;--evc:${b.ev.color}` : "";
-  const who = peopleNames(b.ev?.people);
-  return `<div class="dv-block ${cls}${colored ? " dv-colored" : ""}" data-block="${b.kind === "standing" ? "s:" : "e:"}${esc(b.id)}" style="${style}${colored}" title="${esc(b.title)}${who ? " · with " + esc(who) : ""}"><div class="dv-block-title">${esc(b.title)} <span>${fmtClock(b.start)}–${fmtClock(b.end)}</span>${who ? `<span class="dv-block-who">· ${esc(who)}</span>` : ""}</div></div>`;
+  const who = peopleNames(b.ev?.people), own = b.kind === "event" && b.cal === "bishop" && ownerOf(b.ev) !== "bishop" ? ownerLabel(ownerOf(b.ev)) : "";
+  return `<div class="dv-block ${cls}${colored ? " dv-colored" : ""}" data-block="${b.kind === "standing" ? "s:" : "e:"}${esc(b.id)}" style="${style}${colored}" title="${esc(b.title)}${own ? " · " + own : ""}${who ? " · with " + esc(who) : ""}"><div class="dv-block-title">${esc(b.title)} <span>${fmtClock(b.start)}–${fmtClock(b.end)}</span>${own ? `<span class="dv-block-who">· ${own}</span>` : ""}${who ? `<span class="dv-block-who">· ${esc(who)}</span>` : ""}</div></div>`;
 }
 function drawDay() {
   const grid = document.getElementById("dv-grid"), side = document.getElementById("dv-side");
@@ -377,7 +384,7 @@ function optsHtml(kind) {
     <label>Where<select id="dv-place"><option value="office">🏛 Bishop's office</option><option value="home">🏠 Home visits</option></select></label>
     <label class="dv-check"><input type="checkbox" id="dv-pri"> Priority <small>(marked on the sign-up page — the wording is in Tithing Declaration settings)</small></label>`;
   // every appointment gets a Title, prefilled with the kind's name so it can be made specific ("Interviews — youth", "Stake training — Bishops") (Jordan 10/22)
-  const title = (ph) => `<label>Title<input id="dv-title" value="${esc(kind === "other" ? "" : kindOf(kind)?.[1] || "")}" placeholder="${esc(ph)}" autocomplete="off"></label>`;
+  const title = (ph) => `<label>Title<input id="dv-title" value="${esc(kind === "other" ? "" : kindOf(kind)?.[1] || "")}" placeholder="${esc(ph)}" autocomplete="off"></label><label>Whose schedule${ownerSel("dv-owner", dvSel.owner, true)}</label>`;
   if (kind === "interviews") return `${title("e.g. Interviews — youth")}<label>Each interview<select id="dv-len">${INTERVIEW_LENS.map((n) => opt(n, n + " minutes", dvSel.len || 15)).join("")}</select></label><label>Colour <small>(optional)</small>${swatches("dv-color", dvSel.color)}</label>`;
   const preset = kindOf(kind)?.[3] || "";
   const color = `<label>Colour <small>(optional)</small>${swatches("dv-color", dvSel.color || preset)}</label>`;
@@ -537,41 +544,43 @@ function wireSide(date, blocks, keep) {
 // Click a block to open that Sunday with it selected; click empty space to open the Sunday ready to add.
 const SUNDAYS_SHOWN = 4;
 const nextSunday = () => { const t = todayISO(), s = weekStartOf(t); return s < t ? addDaysIso(s, 7) : s; };
-export function initBishopSchedule() {
-  const panel = document.getElementById("panel-bishopsched"); if (!panel || panel.dataset.ready) return;
-  panel.dataset.ready = "1"; bsStart = nextSunday();
+export function initBishopSchedule() { SCHEDULES.forEach(([pid, who, title]) => initSchedule(pid, who, title)); }
+function initSchedule(pid, who, title) {
+  const panel = document.getElementById("panel-" + pid); if (!panel || panel.dataset.ready) return;
+  panel.dataset.ready = "1"; bsStart[pid] = nextSunday();
   panel.innerHTML = `
-    <div class="panel-head"><div><h2>Bishop's Schedule</h2><p class="panel-sub">The next four Sundays side by side. Click anything to change it; click an empty time to add.</p></div>
-      <div class="panel-actions">${can("calendar", "edit") ? `<button class="btn" id="bs-standing" type="button" title="Ward council and bishopric meeting times">⚙ Standing meetings</button>` : ""}</div></div>
+    <div class="panel-head"><div><h2>${esc(title)}</h2><p class="panel-sub">The next four Sundays side by side${who === "bishop" ? "" : " — ward meetings, standing meetings, and anything put on the " + esc(ownerLabel(who)) + "'s schedule"}. Click anything to change it; click an empty time to add.</p></div>
+      <div class="panel-actions">${can("calendar", "edit") ? `<button class="btn" data-standing type="button" title="Ward council and bishopric meeting times">⚙ Standing meetings</button>` : ""}</div></div>
     <div class="card">
-      <div class="cal-head"><button class="btn btn-sm" id="bs-prev" title="Back 4 Sundays">‹</button><h3 id="bs-title"></h3><button class="btn btn-sm" id="bs-next" title="Ahead 4 Sundays">›</button><button class="btn btn-sm" id="bs-today" title="Back to the coming Sunday">Today</button></div>
-      <div class="cal-grid cal-grid-sundays" id="bs-grid"></div>
+      <div class="cal-head"><button class="btn btn-sm" data-prev title="Back 4 Sundays">‹</button><h3 data-title></h3><button class="btn btn-sm" data-next title="Ahead 4 Sundays">›</button><button class="btn btn-sm" data-today title="Back to the coming Sunday">Today</button></div>
+      <div class="cal-grid cal-grid-sundays" data-grid></div>
     </div>`;
-  panel.querySelector("#bs-prev").addEventListener("click", () => { bsStart = addDaysIso(bsStart, -7 * SUNDAYS_SHOWN); drawSundays(); });
-  panel.querySelector("#bs-next").addEventListener("click", () => { bsStart = addDaysIso(bsStart, 7 * SUNDAYS_SHOWN); drawSundays(); });
-  panel.querySelector("#bs-today").addEventListener("click", () => { bsStart = nextSunday(); drawSundays(); });
-  panel.querySelector("#bs-standing")?.addEventListener("click", editStanding);
+  panel.querySelector("[data-prev]").addEventListener("click", () => { bsStart[pid] = addDaysIso(bsStart[pid], -7 * SUNDAYS_SHOWN); drawSundays(); });
+  panel.querySelector("[data-next]").addEventListener("click", () => { bsStart[pid] = addDaysIso(bsStart[pid], 7 * SUNDAYS_SHOWN); drawSundays(); });
+  panel.querySelector("[data-today]").addEventListener("click", () => { bsStart[pid] = nextSunday(); drawSundays(); });
+  panel.querySelector("[data-standing]")?.addEventListener("click", editStanding);
   drawSundays();
 }
-function drawSundays() {
-  const grid = document.getElementById("bs-grid"); if (!grid || !bsStart) return;
-  const dates = Array.from({ length: SUNDAYS_SHOWN }, (_, i) => addDaysIso(bsStart, 7 * i));
-  document.getElementById("bs-title").textContent = `${fmtDate(dates[0])} – ${fmtDate(dates[dates.length - 1], { year: true })}`;
-  const days = dates.map((d) => { const blocks = dayBlocks(d); const timed = blocks.filter((b) => b.start != null); const nCols = layoutCols(timed); return { date: d, timed, allDay: blocks.filter((b) => b.start == null), nCols }; });
-  // the hours shown: whatever the four Sundays need, at least 7 AM – 1 PM, whole hours
-  let lo = 7 * 60, hi = 13 * 60;
-  days.forEach((d) => d.timed.forEach((b) => { lo = Math.min(lo, b.start); hi = Math.max(hi, b.end); }));
-  lo = Math.max(DAY_START, Math.floor(lo / 60) * 60); hi = Math.min(DAY_END, Math.ceil(hi / 60) * 60);
+function drawSundays() { SCHEDULES.forEach(([pid, who]) => drawSchedule(pid, who)); }
+function drawSchedule(pid, who) {
+  const panel = document.getElementById("panel-" + pid), grid = panel?.querySelector("[data-grid]"); if (!grid || !bsStart[pid]) return;
+  const dates = Array.from({ length: SUNDAYS_SHOWN }, (_, i) => addDaysIso(bsStart[pid], 7 * i));
+  panel.querySelector("[data-title]").textContent = `${fmtDate(dates[0])} – ${fmtDate(dates[dates.length - 1], { year: true })}`;
+  const days = dates.map((d) => { const blocks = dayBlocks(d, who); const timed = blocks.filter((b) => b.start != null); const nCols = layoutCols(timed); return { date: d, timed, allDay: blocks.filter((b) => b.start == null), nCols }; });
+  // the whole day, 6 AM – 10 PM, in a scrolling panel (Jordan 10/24: "scroll and see the later hours")
+  const lo = DAY_START, hi = DAY_END;
+  const keepScroll = grid.querySelector(".sv-scroll")?.scrollTop;
   const top = (m) => (m - lo) * PX_MIN, h = (a, b) => Math.max(14, (b - a) * PX_MIN), height = (hi - lo) * PX_MIN;
   const today = todayISO();
   const hours = []; for (let m = lo; m <= hi; m += 60) hours.push(`<div class="dv-hour" style="top:${top(m)}px"><span>${fmtClock(m).replace(":00", "")}</span></div>`);
-  grid.innerHTML = `<div class="sv-wrap" style="--sv-h:${height}px">
+  grid.innerHTML = `<div class="sv-scroll"><div class="sv-wrap" style="--sv-h:${height}px">
     <div class="sv-gutter"><div class="sv-head"></div><div class="sv-body">${hours.join("")}</div></div>
     ${days.map((d) => `<div class="sv-col${d.date === today ? " sv-today" : ""}${d.date < today ? " sv-past" : ""}" data-sv-date="${d.date}">
       <div class="sv-head" title="Open this Sunday"><b>${esc(fmtDate(d.date))}</b>${d.allDay.length ? `<div class="sv-allday">${d.allDay.map((b) => `<span class="cal-event${b.cal === "bishop" ? " ev-bishop" : ""}" data-sv-open="${b.kind === "standing" ? "s:" : "e:"}${esc(b.id)}">${esc(b.title)}</span>`).join("")}</div>` : ""}</div>
       <div class="sv-body dv-grid" data-sv-body="${d.date}">${hours.map((x) => x.replace(/<span>.*?<\/span>/, "")).join("")}<div class="dv-blocks">${d.timed.map((b) => blockMarkup(b, `top:${top(Math.max(b.start, lo))}px;height:${h(Math.max(b.start, lo), Math.min(b.end, hi))}px;left:calc(${(b.col / d.nCols) * 100}% + 2px);width:calc(${100 / d.nCols}% - 4px)`)).join("")}</div></div>
     </div>`).join("")}
-  </div>`;
+  </div></div>`;
+  const sc = grid.querySelector(".sv-scroll"); sc.scrollTop = keepScroll ?? (6.5 * 60 - lo) * PX_MIN; // first draw opens at 6:30 AM; redraws keep the place
   // open a Sunday with the clicked block selected, or ready to add at the clicked time
   const openAt = (date, focus) => { dayView(date); if (focus) { dvFocus = focus; drawDay(); } };
   grid.querySelectorAll("[data-block]").forEach((n) => n.addEventListener("click", (e) => {
@@ -588,7 +597,7 @@ function drawSundays() {
   grid.querySelectorAll("[data-sv-body]").forEach((n) => n.addEventListener("click", (e) => {
     const date = n.dataset.svBody; if (!can("calendar", "edit")) return dayView(date);
     const r = n.getBoundingClientRect(), m = clampDay(snap(lo + (e.clientY - r.top) / PX_MIN)); // open the Sunday with that hour picked, ready to add
-    dayView(date); dvSel = { a: m, b: Math.min(DAY_END, m + 60), kind: "", len: 15 }; drawDay();
+    dayView(date); dvSel = { a: m, b: Math.min(DAY_END, m + 60), kind: "", len: 15, owner: who }; drawDay();
     document.getElementById("dv-grid")?.parentElement?.scrollTo({ top: Math.max(0, (m - DAY_START) * PX_MIN - 120) });
   }));
 }
@@ -783,7 +792,7 @@ async function saveDesignation(date, kind, side) {
     if (!title) { if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "Add"; } return toast("Give it a title"); }
     const series = many ? "r" + Math.random().toString(36).slice(2, 9) : null; // the repeats know they belong together
     const color = swatchValue(side.querySelector("#dv-color"));
-    const base = { title, startTime: hhmmOf(a), endTime: hhmmOf(b), location: side.querySelector("#dv-loc")?.value.trim() || "", people: peopleValue(side.querySelector("#dv-people")), notes: "", ...(color ? { color } : {}), cal: "bishop", createdBy: ctx.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), ...(series ? { series } : {}) };
+    const base = { title, startTime: hhmmOf(a), endTime: hhmmOf(b), location: side.querySelector("#dv-loc")?.value.trim() || "", people: peopleValue(side.querySelector("#dv-people")), notes: "", ...(color ? { color } : {}), cal: "bishop", owner: side.querySelector("#dv-owner")?.value || "bishop", createdBy: ctx.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), ...(series ? { series } : {}) };
     if (kind === "interviews") { base.kind = "interviews"; base.len = Number(side.querySelector("#dv-len").value); }
     const made = [];
     for (const d of dates) { const data = { ...base, date: d, ...(kind === "interviews" ? { slots: {} } : {}) }; const ref = await addDoc(collection(db, "events"), data); made.push({ ...data, id: ref.id }); }
@@ -908,6 +917,9 @@ function eventFormHtml(e, defaultDate, canEdit, inline, preset) {
       <label class="field">Calendar
         <select id="ev-cal" ${canEdit ? "" : "disabled"}><option value="ward"${calOf(e || {}) === "ward" && !(isNew && calView === "bishop") ? " selected" : ""}>Ward</option><option value="bishop"${calOf(e || {}) === "bishop" || (isNew && calView === "bishop") ? " selected" : ""}>Bishop</option></select>
       </label>
+      <label class="field" id="ev-owner-wrap"${(e ? calOf(e) : (calView === "bishop" ? "bishop" : "ward")) === "bishop" ? "" : " hidden"}>Whose schedule
+        ${ownerSel("ev-owner", e?.owner || preset?.owner, canEdit)}
+      </label>
       <label class="field">Start time
         <input type="time" id="ev-start" value="${st}" ${canEdit ? "" : "disabled"}>
       </label>
@@ -946,6 +958,7 @@ function wireEventForm(root, e, canEdit, done) {
   root.querySelector("#ev-retime")?.addEventListener("click", () => { closeModal(); dvFocus = "edit:" + e.id; dayView(e.date); });
   wireSwatches(root.querySelector("#ev-color"));
   wirePeople(root.querySelector("#ev-people"));
+  root.querySelector("#ev-cal").addEventListener("change", (ev) => { const w = root.querySelector("#ev-owner-wrap"); if (w) w.hidden = ev.target.value !== "bishop"; });
   // a bishop's event on top of tithing-declaration times: say so, and show who is already booked there
   const clashNote = () => {
     const box = root.querySelector("#ev-clash");
@@ -1017,6 +1030,7 @@ function wireEventForm(root, e, canEdit, done) {
       color: swatchValue(root.querySelector("#ev-color")) || null,
       notes: root.querySelector("#ev-notes").value.trim(),
       cal: root.querySelector("#ev-cal").value === "bishop" ? "bishop" : "ward",
+      owner: root.querySelector("#ev-cal").value === "bishop" ? (root.querySelector("#ev-owner")?.value || "bishop") : "bishop",
       updatedAt: serverTimestamp(),
     };
     const rule = root.querySelector("#ev-rep")?.value || "0", until = root.querySelector("#ev-until")?.value || "";
