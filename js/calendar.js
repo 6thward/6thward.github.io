@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792905091";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792905091";
+import { db } from "./firebase-init.js?v=1792905408";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792905408";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792905091";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792905091";
-import { openCouncilDate } from "./council.js?v=1792905091";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792905091";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792905408";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792905408";
+import { openCouncilDate } from "./council.js?v=1792905408";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792905408";
 
 let events = [];
 let users = []; // app users, for the People picker on an event (2026-10-19)
@@ -608,9 +608,16 @@ function drawSchedule(pid, who) {
   grid.querySelectorAll("[data-sv-body]").forEach((n) => n.addEventListener("click", (e) => {
     const date = n.dataset.svBody; if (!can("calendar", "edit")) return dayView(date);
     const r = n.getBoundingClientRect(), m = clampDay(snap(lo + (e.clientY - r.top) / PX_MIN)); // open the Sunday with that hour picked, ready to add
-    dayView(date); dvSel = { a: m, b: Math.min(DAY_END, m + 60), kind: "", len: 15, owner: who }; drawDay();
+    dayView(date); dvSel = { a: m, b: defaultEnd(date, m), kind: "", len: 15, owner: who }; drawDay();
     document.getElementById("dv-grid")?.parentElement?.scrollTo({ top: Math.max(0, (m - DAY_START) * PX_MIN - 120) });
   }));
+}
+// a tap on empty time: 30 minutes, or up to the start of the next thing that day if that's sooner — never a double booking by default (Jordan 10/24)
+function defaultEnd(date, a) {
+  const next = dayBlocks(date).filter((b) => b.start != null && b.start > a).map((b) => b.start).sort((x, y) => x - y)[0];
+  let end = Math.min(DAY_END, a + 30, next ?? Infinity);
+  if (end - a < SNAP) end = Math.min(DAY_END, a + 30); // already inside something: just give the 30 minutes
+  return end;
 }
 // drag on the empty timeline → a selection; release → the designate form
 function wireDrag(grid) {
@@ -636,7 +643,7 @@ function wireDrag(grid) {
   const finish = async () => {
     if (startMin == null) return;
     startMin = null;
-    if (!moved || dvSel.b - dvSel.a < 10) dvSel = { ...dvSel, b: Math.min(DAY_END, dvSel.a + 60) }; // a tap gives an hour to start from
+    if (!moved || dvSel.b - dvSel.a < 10) dvSel = { ...dvSel, b: defaultEnd(openDay, dvSel.a) }; // a tap: 30 minutes, or up to the next meeting
     if (dvFocus === "new:") { // writing a new event in the side panel: the drag fills its times, nothing is saved until Save
       const { a, b } = dvSel; dvSel = null;
       const side = document.getElementById("dv-side"); if (side?.querySelector("#ev-start")) { side.querySelector("#ev-start").value = hhmmOf(a); side.querySelector("#ev-end").value = hhmmOf(b); }
