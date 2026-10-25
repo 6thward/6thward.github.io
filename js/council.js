@@ -9,16 +9,21 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1792931054";
-import { ctx, can } from "./app.js?v=1792931054";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1792931054";
-import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1792931054";
+import { db } from "./firebase-init.js?v=1792933470";
+import { ctx, can } from "./app.js?v=1792933470";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1792933470";
+import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1792933470";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { watchBishopCal, bishopCalConfig } from "./bishop-cal.js?v=1792931054";
-import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1792931054";
+import { watchBishopCal, bishopCalConfig } from "./bishop-cal.js?v=1792933470";
+const clock12 = (hhmm) => { const [h, m] = String(hhmm).split(":").map(Number); return `${h % 12 || 12}:${String(m || 0).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`; };
+import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1792933470";
 
+// One agenda page per "board": Ward Council (councils/…) and, since 2026-10-25, the Bishopric meeting (bishopric/…).
+// The same code runs twice with a config; a Bishopric item can be sent to the next ward council agenda.
+function makeAgenda(cfg) {
+let panel = null;
 let cards = [];
 let councils = {};    // date -> doc
 let members = [];     // names of ward council members (Users tab → "Ward council member")
@@ -26,9 +31,10 @@ let members = [];     // names of ward council members (Users tab → "Ward coun
 const ASSIGN = [["openPrayer", "Opening prayer"], ["thought", "Scripture & thought"], ["training", "Handbook training"], ["closePrayer", "Closing prayer"]];
 let openNotesFor = null;
 // collapsed agenda items (2026-10-18): "date:key" entries; discussed items start folded
-const collapsed = new Set((() => { try { return JSON.parse(localStorage.getItem("sw-wc-folded") || "[]"); } catch { return []; } })());
+const FOLD_KEY = cfg.key === "council" ? "sw-wc-folded" : "sw-wc-folded-" + cfg.key;
+const collapsed = new Set((() => { try { return JSON.parse(localStorage.getItem(FOLD_KEY) || "[]"); } catch { return []; } })());
 const expandedDone = new Set(); // discussed items the user opened on purpose this visit
-const saveFolded = () => { try { localStorage.setItem("sw-wc-folded", JSON.stringify([...collapsed].slice(-400))); } catch {} }
+const saveFolded = () => { try { localStorage.setItem(FOLD_KEY, JSON.stringify([...collapsed].slice(-400))); } catch {} }
 const isFolded = (date, key, discussed) => collapsed.has(date + ":" + key) || (discussed && !expandedDone.has(date + ":" + key));
 let fuOpen = new Set(); // follow-up rows that are unfolded (2026-10-11)
 // organizations a follow-up can be handed to, besides a council member or any typed name
@@ -40,56 +46,63 @@ let started = false;
 const pad = (n) => String(n).padStart(2, "0");
 const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const todayIso = () => iso(new Date());
-function upcomingSunday(from = new Date()) {
+function upcomingSunday(from = new Date()) { // the next meeting weekday on or after a day (Sunday for ward council; the bishopric's own weekday)
+  const wd = cfg.weekday ? cfg.weekday() : 0;
   const d = new Date(from); d.setHours(12, 0, 0, 0);
-  d.setDate(d.getDate() + ((7 - d.getDay()) % 7));
+  d.setDate(d.getDate() + ((7 + wd - d.getDay()) % 7));
   return iso(d);
 }
 const shiftWeek = (isoDate, w) => { const d = new Date(isoDate + "T12:00:00"); d.setDate(d.getDate() + 7 * w); return iso(d); };
 const fmtDay = (v) => (v ? fmtDate(String(v).slice(0, 10), { year: true }) : "");
 
 // the Calendar links a ward council meeting to its agenda (2026-10-18)
-export function openCouncilDate(iso) {
+function openDate(iso) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(iso || "")) return;
   date = iso;
-  if (document.getElementById("wc-body")) render();
+  if (panel?.querySelector("#wc-body")) render();
 }
-export function initCouncil() {
+// the ward council's dates and agendas, as seen from the Bishopric page (to send an item there)
+let councilDocs = {}, councilDates = [];
+const nextWardCouncil = () => councilDates.find((d) => d >= todayIso()) || (() => { const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + ((7 - d.getDay()) % 7)); return iso(d); })();
+function init() {
   if (started) return;
   started = true;
   date = upcomingSunday();
   let positioned = false; // jump to the next scheduled council once the dates have loaded
-  const panel = document.getElementById("panel-council");
+  panel = document.getElementById(cfg.panel);
+  if (!panel) return;
   panel.innerHTML = `
     <div class="panel-head">
       <div>
-        <h2>Ward Council <button type="button" class="wc-info" aria-label="About this page" data-tip="An agenda for each meeting. Items flagged “Ward council” on the Member Board join the next agenda automatically.">*</button></h2>
+        <h2>${esc(cfg.title)} <button type="button" class="wc-info" aria-label="About this page" data-tip="${esc(cfg.info)}">*</button></h2>
       </div>
     </div>
     <div class="hs-nav">
       <button class="btn btn-sm" id="wc-prev" title="Previous meeting">‹</button>
       <div class="hs-date wc-date" id="wc-date"></div>
       <button class="btn btn-sm" id="wc-next" title="Next meeting">›</button>
-      <button class="btn btn-sm" id="wc-dates" title="Which Sundays have ward council, and what time it meets">📅 Council dates <span id="wc-time-lbl" class="wc-time-lbl"></span></button>
+      ${cfg.dates ? `<button class="btn btn-sm" id="wc-dates" title="Which Sundays have ward council, and what time it meets">📅 Council dates <span id="wc-time-lbl" class="wc-time-lbl"></span></button>`
+        : `<span class="row-sub wc-time-note" title="Set the day and time under Calendar → Standing meetings">Meets <span id="wc-time-lbl" class="wc-time-lbl"></span></span>`}
     </div>
     <div id="wc-body"><div class="empty-note">Loading…</div></div>`;
   panel.querySelector("#wc-prev").addEventListener("click", () => { date = stepDate(date, -1); render(); });
   panel.querySelector("#wc-next").addEventListener("click", () => { date = stepDate(date, 1); render(); });
-  panel.querySelector("#wc-dates").addEventListener("click", () => editDates());
+  panel.querySelector("#wc-dates")?.addEventListener("click", () => editDates());
   watchBishopCal(() => { // the meeting time shows on the button; the Calendar's standing-meeting setting is the same record (2026-10-18)
-    const co = bishopCalConfig().council || {}, lbl = panel.querySelector("#wc-time-lbl");
-    if (lbl) lbl.textContent = co.on && co.start ? `· ${clock12(co.start)}${co.end ? " – " + clock12(co.end) : ""}` : "";
+    const co = bishopCalConfig()[cfg.calKey] || {}, lbl = panel.querySelector("#wc-time-lbl");
+    if (lbl) lbl.textContent = co.on && co.start ? `${cfg.dates ? "· " : (["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"][Number(co.weekday) || 0] + " ")}${clock12(co.start)}${co.end ? " – " + clock12(co.end) : ""}` : (cfg.dates ? "" : "— not set");
+    if (!cfg.dates && !positioned) { date = upcomingSunday(); render(); } // the bishopric's weekday may have just loaded
   });
   onSnapshot(collection(db, "users"), (qs) => {
-    const names = qs.docs.map((d) => d.data()).filter((u) => u.councilMember && !u.revoked && !u.alias && u.name).map((u) => u.name.trim());
+    const names = qs.docs.map((d) => d.data()).filter((u) => cfg.isMember(u) && !u.revoked && !u.alias && u.name).map((u) => u.name.trim());
     members = [...new Set(names)].sort((a, b) => a.localeCompare(b));
     render();
   }, () => {});
-  onSnapshot(collection(db, "board"), (qs) => {
+  if (cfg.board) onSnapshot(collection(db, "board"), (qs) => {
     cards = qs.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
     render();
     }, () => {}); // council members without the Member Board page just don't get its items
-  onSnapshot(collection(db, "councils"), (qs) => {
+  onSnapshot(collection(db, cfg.coll), (qs) => {
     councils = {};
     schedule = [];
     qs.docs.forEach((d) => {
@@ -99,6 +112,11 @@ export function initCouncil() {
     if (!positioned) { positioned = true; date = nextCouncil(); }
     render();
   });
+  if (cfg.showOnCouncil) onSnapshot(collection(db, "councils"), (qs) => { // the Bishopric page sends items to the next ward council
+    councilDocs = {}; councilDates = [];
+    qs.docs.forEach((d) => { if (d.id === "_dates") councilDates = [...new Set((d.data().dates || []).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x)))].sort(); else councilDocs[d.id] = d.data(); });
+    render();
+  }, () => {});
 }
 
 // ---- choose the council Sundays ----
@@ -111,7 +129,7 @@ function editDates(year) {
   const chosen = new Set(schedule.filter(inYear));
   const past = schedule.filter((d) => !inYear(d)); // dates in other years ride along untouched
   const thisYear = new Date().getFullYear();
-  const co = bishopCalConfig().council || {};
+  const co = bishopCalConfig()[cfg.calKey] || {};
   const yearTabs = [thisYear, thisYear + 1, thisYear + 2].map((y) => `<button type="button" class="chip${y === year ? " active" : ""}" data-year="${y}">${y}${schedule.some((d) => d.startsWith(y + "-")) ? ` <span class="wcd-year-n">${schedule.filter((d) => d.startsWith(y + "-")).length}</span>` : ""}</button>`).join("");
   const nth = (d) => Math.ceil(new Date(d + "T12:00:00").getDate() / 7);
   const monthKey = (d) => d.slice(0, 7);
@@ -161,8 +179,8 @@ function editDates(year) {
     const time = { on: el.querySelector("#wcd-on").checked, start: el.querySelector("#wcd-start").value, end: el.querySelector("#wcd-end").value };
     if (time.on && !time.start) return toast("Give the meeting a start time");
     try {
-      await setDoc(doc(db, "councils", "_dates"), { dates, updatedAt: serverTimestamp(), updatedBy: ctx.name || "" });
-      if (time.on !== !!co.on || time.start !== (co.start || "") || time.end !== (co.end || "")) await setDoc(doc(db, "settings", "bishopCal"), { council: time, updatedAt: serverTimestamp() }, { merge: true }).catch((e) => toast("Dates saved, but the time didn't: " + (e.code || e.message)));
+      await setDoc(doc(db, cfg.coll, "_dates"), { dates, updatedAt: serverTimestamp(), updatedBy: ctx.name || "" });
+      if (time.on !== !!co.on || time.start !== (co.start || "") || time.end !== (co.end || "")) await setDoc(doc(db, "settings", "bishopCal"), { [cfg.calKey]: time, updatedAt: serverTimestamp() }, { merge: true }).catch((e) => toast("Dates saved, but the time didn't: " + (e.code || e.message)));
       schedule = dates; date = nextCouncil();
       toast(dates.length ? "Council dates saved" : "Cleared — every Sunday counts again"); closeModal(); render();
     } catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
@@ -203,7 +221,7 @@ function isFuture(d) { return d > nextCouncil(); }
 
 function itemsFor(d) {
   const fromBoard = [];
-  cards.forEach((k) => (k.todos || []).forEach((t) => {
+  if (cfg.board) cards.forEach((k) => (k.todos || []).forEach((t) => {
     if (t.done && !t.councilDiscussedAt) return;
     const discussedOn = t.councilDiscussedAt ? String(t.councilDiscussedAt).slice(0, 10) : "";
     if (discussedOn === d) fromBoard.push({ kind: "board", k, t, discussed: true });          // discussed at this meeting
@@ -222,7 +240,7 @@ function itemsFor(d) {
 const itemKey = (it) => (it.kind === "board" ? `b:${it.k.id}:${it.t.id}` : `x:${it.x.id}`);
 
 async function saveCouncil(d, patch) {
-  const ref = doc(db, "councils", d);
+  const ref = doc(db, cfg.coll, d);
   if (councils[d]) await updateDoc(ref, { ...patch, updatedAt: serverTimestamp() });
   else await setDoc(ref, { date: d, extra: [], notes: "", ...patch, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
 }
@@ -342,10 +360,10 @@ function lastAssigned(k, before) {
 const shortDay = (d) => new Date(d + "T12:00:00").toLocaleDateString("en-US", d.slice(0, 4) === String(new Date().getFullYear()) ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
 
 function render() {
-  const body = document.getElementById("wc-body");
-  const dateEl = document.getElementById("wc-date");
+  const body = panel?.querySelector("#wc-body");
+  const dateEl = panel?.querySelector("#wc-date");
   if (!body) return;
-  const editor = can("council", "edit");
+  const editor = can(cfg.area, "edit");
   const items = itemsFor(date);
   const open = items.filter((i) => !i.discussed);
   const done = items.filter((i) => i.discussed);
@@ -389,7 +407,8 @@ function render() {
           ${it.discussed
             ? `<span class="wc-act-wrap"><button class="btn btn-sm btn-ghost wc-act-btn" data-actions="1" type="button" title="Follow up at a later council, or copy / move this item">Actions ▾</button></span>
                <button class="btn btn-sm btn-ghost" data-act="reopen" title="Not finished after all — mark it open again">↩ Reopen</button>`
-            : `<button class="btn btn-sm btn-ghost" data-attach="1" type="button" title="Attach a document, PDF or image">📎 Attach</button>
+            : `${cfg.showOnCouncil && it.kind === "extra" ? (it.x.onCouncil ? `<button class="btn btn-sm wc-oncouncil on" data-act="offcouncil" type="button" title="On the ward council agenda for ${esc(fmtDay(it.x.onCouncil))} — click to take it off">✓ On ward council</button>` : `<button class="btn btn-sm btn-ghost wc-oncouncil" data-act="tocouncil" type="button" title="Put a copy of this item on the next ward council agenda">→ Ward council</button>`) : ""}
+               <button class="btn btn-sm btn-ghost" data-attach="1" type="button" title="Attach a document, PDF or image">📎 Attach</button>
                <span class="wc-act-wrap"><button class="btn btn-sm btn-ghost wc-act-btn" data-actions="1" type="button" title="Copy or move this item to another council">Actions ▾</button></span>
                <button class="btn btn-sm" data-act="discussed" title="Discussed — moves to this meeting's record${it.kind === "board" ? "; the to-do stays on the card" : ""}">Discussed ✓</button>
                <button class="btn btn-sm btn-ghost" data-act="remove" title="${it.kind === "board" ? "Take off the agenda (unflags the to-do)" : "Delete this agenda item"}">✕</button>`}
@@ -417,8 +436,8 @@ function render() {
           ? `<input class="wc-asg-in" data-asg="${k}" value="${esc(asg[k] || "")}" placeholder=" " title="Pick a council member or type any name" autocomplete="off">`
           : `<b class="wc-asg-ro${asg[k] ? "" : " wc-asg-open"}">${asg[k] ? esc(asg[k]) : "&nbsp;"}</b>`}</label>`).join("")}
       </div>
-      <datalist id="dl-council-members">${members.map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist>
-      ${editor && !members.length ? `<p class="row-sub" style="margin:.5rem 0 0">Tip: tick “Ward council member” for people on the Users tab and their names appear here as suggestions.</p>` : ""}
+      <datalist id="dl-${cfg.key}-members">${members.map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist>
+      ${editor && !members.length && cfg.board ? `<p class="row-sub" style="margin:.5rem 0 0">Tip: tick “Ward council member” for people on the Users tab and their names appear here as suggestions.</p>` : ""}
     </div>`;
 
   // Follow-ups (2026-10-04): everything assigned at this meeting, grouped by person
@@ -455,7 +474,7 @@ function render() {
       <h3 style="margin:0 0 .2rem;display:flex;align-items:center;gap:.5rem">Agenda <span class="pill ${open.length ? "pill-approved" : "pill-role-member"}">${open.length}</span>
         ${done.length ? `<span class="row-sub" style="font-weight:400">· ${done.length} discussed</span>` : ""}
         ${!next && !isFuture(date) ? `<span class="row-sub" style="margin-left:auto;font-weight:400">Past meeting — record only</span>` : ""}
-        ${isFuture(date) ? `<span class="row-sub" style="margin-left:auto;font-weight:400">Board items join once this becomes the next council</span>` : ""}
+        ${isFuture(date) && cfg.board ? `<span class="row-sub" style="margin-left:auto;font-weight:400">Board items join once this becomes the next council</span>` : ""}
       </h3>
       ${followupsHtml(cdoc, editor)}
       <div class="wc-list">
@@ -729,7 +748,7 @@ function render() {
     e.stopPropagation();
     const key = chip.closest(".wc-row").dataset.key;
     const inp = document.createElement("input");
-    inp.className = "wc-owner-inp"; inp.value = chip.dataset.owner || ""; inp.placeholder = "Owner"; inp.setAttribute("list", "dl-council-members"); inp.autocomplete = "off";
+    inp.className = "wc-owner-inp"; inp.value = chip.dataset.owner || ""; inp.placeholder = "Owner"; inp.setAttribute("list", `dl-${cfg.key}-members`); inp.autocomplete = "off";
     chip.replaceWith(inp); inp.focus(); inp.select();
     let done = false;
     const finish = async (save) => {
@@ -805,7 +824,7 @@ function render() {
       for (const [i, f] of chosen.entries()) {
         if (f.size > MAX_ATTACH_BYTES) { toast(`“${f.name}” is ${fmtBytes(f.size)} — the limit is ${fmtBytes(MAX_ATTACH_BYTES)}`); continue; }
         say(`Uploading ${f.name}${chosen.length > 1 ? ` (${i + 1} of ${chosen.length})` : ""}…`);
-        added.push(await uploadAttachment("councils", date, f, (p) => say(`Uploading ${f.name} — ${Math.round(p * 100)}%`)));
+        added.push(await uploadAttachment(cfg.coll, date, f, (p) => say(`Uploading ${f.name} — ${Math.round(p * 100)}%`)));
       }
       if (added.length) { await saveFiles(key, [...filesOf(key), ...added]); toast(added.length === 1 ? "Attached" : `${added.length} files attached`); }
     } catch (e) { toast("Couldn't attach: " + (e.code || e.message)); }
@@ -818,7 +837,7 @@ function render() {
       if (!confirm(`Remove “${meta.name}” from this item?`)) return;
       try {
         await saveFiles(key, filesOf(key).filter((f) => f.id !== meta.id));
-        if (!fileInUse(meta.id, key)) await deleteAttachment("councils", meta);
+        if (!fileInUse(meta.id, key)) await deleteAttachment(cfg.coll, meta);
         toast("Removed");
       } catch (err) { toast("Couldn't remove: " + (err.code || err.message)); }
       return;
@@ -941,11 +960,27 @@ function render() {
       if (key.startsWith("x:")) {
         const id = key.slice(2);
         let extra = cdoc.extra || [];
+        if (act === "tocouncil" || act === "offcouncil") { // a copy goes to (or comes off) the next ward council agenda
+          const item = extra.find((x) => x.id === id); if (!item) return;
+          if (act === "tocouncil") {
+            const target = nextWardCouncil(), tdoc = councilDocs[target] || {};
+            const copy = { id: "a" + Math.random().toString(36).slice(2, 9), title: item.title, notes: item.notes || "", files: item.files || [], due: item.due || "", discussed: false, discussedAt: "", fromBishopric: { date, id }, createdAt: new Date().toISOString(), by: ctx.name || "", owner: item.owner || item.by || "" };
+            const tref = doc(db, "councils", target);
+            if (councilDocs[target]) await updateDoc(tref, { extra: [...(tdoc.extra || []), copy], updatedAt: serverTimestamp() });
+            else await setDoc(tref, { date: target, extra: [copy], notes: "", createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+            await saveCouncil(date, { extra: extra.map((x) => (x.id === id ? { ...x, onCouncil: target, onCouncilId: copy.id } : x)) });
+            toast(`On the ward council agenda for ${fmtDay(target)}`); return;
+          }
+          const target = item.onCouncil, tdoc = councilDocs[target];
+          if (tdoc && item.onCouncilId) { const stillOpen = (tdoc.extra || []).find((x) => x.id === item.onCouncilId && !x.discussed); if (stillOpen) await updateDoc(doc(db, "councils", target), { extra: (tdoc.extra || []).filter((x) => x.id !== item.onCouncilId), updatedAt: serverTimestamp() }); }
+          await saveCouncil(date, { extra: extra.map((x) => { if (x.id !== id) return x; const { onCouncil: _a, onCouncilId: _b, ...rest } = x; return rest; }) });
+          toast("Taken off the ward council agenda"); return;
+        }
         if (act === "remove") {
           if (!confirm("Delete this agenda item?")) return;
           const gone = (extra.find((x) => x.id === id) || {}).files || [];
           extra = extra.filter((x) => x.id !== id);
-          for (const f of gone) if (!fileInUse(f.id, key)) deleteAttachment("councils", f).catch(() => {});
+          for (const f of gone) if (!fileInUse(f.id, key)) deleteAttachment(cfg.coll, f).catch(() => {});
         }
         else extra = extra.map((x) => (x.id === id ? { ...x, discussed: act === "discussed", discussedAt: act === "discussed" ? new Date().toISOString() : "" } : x));
         await saveCouncil(date, { extra });
@@ -967,4 +1002,24 @@ function render() {
 // ---- when ward council meets (2026-10-18) ----
 // Saved to settings/bishopCal.council — the same record the Calendar's "Standing meetings" uses — so the
 // meeting shows on the Bishop calendar on every council Sunday and blocks tithing declaration times.
-const clock12 = (hhmm) => { const [h, m] = String(hhmm).split(":").map(Number); return `${h % 12 || 12}:${String(m || 0).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`; };
+
+
+  return { init, openDate };
+}
+
+const COUNCIL = makeAgenda({
+  key: "council", area: "council", coll: "councils", panel: "panel-council", calKey: "council", dates: true, board: true, showOnCouncil: false,
+  title: "Ward Council", info: "An agenda for each meeting. Items flagged “Ward council” on the Member Board join the next agenda automatically.",
+  isMember: (u) => !!u.councilMember,
+});
+// the Bishopric meeting (2026-10-25): bishop, counselors, clerk and secretaries; weekly on the day set under Standing meetings
+const isBishopricPerson = (u) => u.role === "bishop" || /^(1st|2nd|first|second)\s+counselor$/i.test(String(u.calling || "").trim()) || /clerk/i.test(u.calling || "") || /^(assistant\s+)?(executive\s+)?secretary$/i.test(String(u.calling || "").trim());
+const BISHOPRIC = makeAgenda({
+  key: "bishopric", area: "bishopric", coll: "bishopric", panel: "panel-bishopric", calKey: "bishopric", dates: false, board: false, showOnCouncil: true,
+  title: "Bishopric", info: "An agenda for each bishopric meeting. “→ Ward council” on an item puts a copy on the next ward council agenda.",
+  isMember: isBishopricPerson,
+  weekday: () => Number((bishopCalConfig().bishopric || {}).weekday) || 0,
+});
+export function initCouncil() { COUNCIL.init(); }
+export function openCouncilDate(iso) { COUNCIL.openDate(iso); }
+export function initBishopric() { BISHOPRIC.init(); }

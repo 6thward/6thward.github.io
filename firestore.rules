@@ -268,6 +268,18 @@ service cloud.firestore {
       allow read: if canView('board');
       allow write: if canEdit('board');
     }
+    // Bishopric meeting agendas (2026-10-25): same shape as councils, its own page and permission
+    match /bishopric/{id} {
+      allow read: if canView('bishopric');
+      allow write: if canEdit('bishopric');
+      match /chunks/{cid} {
+        allow read: if canView('bishopric');
+        allow create: if canEdit('bishopric')
+          && request.resource.data.keys().hasOnly(['f', 'i', 'd'])
+          && request.resource.data.d is bytes && request.resource.data.d.size() <= 1000000;
+        allow delete: if canEdit('bishopric');
+      }
+    }
     match /councils/{id} {
       allow read: if canView('council');
       allow write: if canEdit('council');

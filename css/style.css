@@ -2588,3 +2588,6 @@ tr.us-menu-open td { background: #f7f9fb; }
 .ev-people-groups { display: flex; flex-wrap: wrap; gap: .3rem; } .ev-people-groups .btn { text-transform: none; letter-spacing: 0; font-weight: 600; }
 .td-sheet-days { display: flex; flex-direction: column; gap: .35rem; max-height: 50vh; overflow: auto; }
 .td-sheet-day { display: flex; align-items: center; gap: .5rem; padding: .35rem .5rem; border: 1px solid var(--line); border-radius: 9px; cursor: pointer; }
+/* Bishopric page (2026-10-25): an item sent to ward council */
+.wc-oncouncil.on { background: #e3f1e8; border-color: #2e7d4f; color: #2e7d4f; }
+.wc-time-note { margin-left: .3rem; }
