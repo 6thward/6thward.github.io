@@ -2591,8 +2591,6 @@ tr.us-menu-open td { background: #f7f9fb; }
 /* Bishopric page (2026-10-25): an item sent to ward council */
 .wc-oncouncil.on { background: #e3f1e8; border-color: #2e7d4f; color: #2e7d4f; }
 .wc-time-note { margin-left: .3rem; }
-/* Ward Council: New members (2026-10-25) */
-.wc-newmem { margin: 0; padding-left: 1.3rem; } .wc-newmem li { margin: .15rem 0; } .wc-newmem-x { margin-left: .3rem; padding: 0 .35rem; font-size: .75rem; }
-.wc-newmem-add { display: grid; grid-template-columns: minmax(10rem, 1fr) 2fr auto; gap: .4rem; margin-top: .5rem; }
-.wc-newmem-add input { font: inherit; padding: .4rem .55rem; border: 1px solid var(--line); border-radius: 8px; }
-@media (max-width: 700px) { .wc-newmem-add { grid-template-columns: 1fr; } }
+/* "New members" agenda item (2026-10-25) */
+.wca-type { margin: 0 0 .7rem; }
+.wc-type-badge { font-size: .95em; }

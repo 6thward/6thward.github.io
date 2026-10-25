@@ -9,16 +9,16 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1792934649";
-import { ctx, can } from "./app.js?v=1792934649";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1792934649";
-import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1792934649";
+import { db } from "./firebase-init.js?v=1792934852";
+import { ctx, can } from "./app.js?v=1792934852";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1792934852";
+import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1792934852";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { watchBishopCal, bishopCalConfig } from "./bishop-cal.js?v=1792934649";
+import { watchBishopCal, bishopCalConfig } from "./bishop-cal.js?v=1792934852";
 const clock12 = (hhmm) => { const [h, m] = String(hhmm).split(":").map(Number); return `${h % 12 || 12}:${String(m || 0).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`; };
-import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1792934649";
+import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1792934852";
 
 // One agenda page per "board": Ward Council (councils/…) and, since 2026-10-25, the Bishopric meeting (bishopric/…).
 // The same code runs twice with a config; a Bishopric item can be sent to the next ward council agenda.
@@ -376,11 +376,12 @@ function render() {
   const noteBlock = (key, text, placeholder) => {
     rawNotes.set(key, text || "");
     // editors also get "+ name card": a card for one person, added and edited right in place (2026-10-11)
-    const addCard = editor && key !== "m" ? `<span class="nt-card-add" data-addcard="${key}" title="Add a card for one person — their name on top, notes underneath">+ name card</span>` : "";
-    return `<div class="wc-cnotes${text ? "" : " wc-cnotes-empty"}${editor ? " wc-cnotes-edit" : ""}" data-cnotes="${key}" title="${editor ? "Click to add notes" : ""}">${text ? notesHtml(text, key, editor, null, { assign: true }) : (editor ? placeholder : "")}${addCard}</div>`;
+    const addCard = editor && key !== "m" ? `<span class="nt-card-add" data-addcard="${key}" title="Add a card for one person — their name on top, notes underneath">${placeholder === "+ member" ? "+ member" : "+ name card"}</span>` : "";
+    return `<div class="wc-cnotes${text ? "" : " wc-cnotes-empty"}${editor ? " wc-cnotes-edit" : ""}" data-cnotes="${key}" title="${editor ? "Click to add notes" : ""}">${text ? notesHtml(text, key, editor, null, { assign: true }) : (editor ? (placeholder === "+ member" ? "No members yet — use + member to add one" : placeholder) : "")}${addCard}</div>`;
   };
   const row = (it, n) => {
     const title = it.kind === "board" ? it.t.title : it.x.title;
+    const isNewMem = it.kind === "extra" && it.x.type === "newmembers"; // a "New members" item: one name card per person, notes + to-dos under each (10/25)
     const person = it.kind === "board" ? it.k.name : "";
     const notes = it.kind === "board" ? it.t.councilNotes : it.x.notes;
     const context = it.kind === "board" && it.t.notes ? `<div class="wc-notes">${esc(it.t.notes)}</div>` : "";
@@ -417,9 +418,9 @@ function render() {
       <div class="wc-row${it.discussed ? " wc-done" : ""}${editor && !it.discussed ? " wc-drag" : ""}${isFolded(date, key, it.discussed) ? " wc-folded" : ""}" data-key="${key}">
         <div class="wc-num${editor && !it.discussed ? " wc-grip" : ""}"${editor && !it.discussed ? ` draggable="true" title="Drag to reorder"` : ""}>${editor && !it.discussed ? `<span class="wc-grip-dots" aria-hidden="true">⋮⋮</span>` : ""}${n}.</div>
         <div class="wc-main">
-          <div class="wc-head"><button type="button" class="wc-fold" data-fold="${key}" title="${isFolded(date, key, it.discussed) ? "Show the details" : "Hide the details"}">${isFolded(date, key, it.discussed) ? "▸" : "▾"}</button><div class="wc-title">${person ? `<span class="wc-person-name">${esc(person)}</span> · ` : ""}${esc(title)}${it.discussed ? `<span class="wc-done-badge" title="Discussed${when ? " " + esc(fmtDay(when)) : ""}">✓ Discussed</span>` : ""}${owner}${assignee}${due}</div>${actions}</div>
+          <div class="wc-head"><button type="button" class="wc-fold" data-fold="${key}" title="${isFolded(date, key, it.discussed) ? "Show the details" : "Hide the details"}">${isFolded(date, key, it.discussed) ? "▸" : "▾"}</button><div class="wc-title">${person ? `<span class="wc-person-name">${esc(person)}</span> · ` : ""}${isNewMem ? `<span class="wc-type-badge" title="New members — a card per person">👥</span> ` : ""}${esc(title)}${it.discussed ? `<span class="wc-done-badge" title="Discussed${when ? " " + esc(fmtDay(when)) : ""}">✓ Discussed</span>` : ""}${owner}${assignee}${due}</div>${actions}</div>
           ${context}
-          ${(editor || notes) ? noteBlock(key, notes, "+ council notes") : ""}
+          ${(editor || notes) ? noteBlock(key, notes, isNewMem ? "+ member" : "+ council notes") : ""}
           ${files.length ? `<div class="wc-files">${files.map((f) => `<span class="wc-file" data-file="${esc(f.id)}" title="Open ${esc(f.name)}"><span class="wc-file-ic">${fileIcon(f)}</span><span class="wc-file-name">${esc(f.name)}</span><span class="wc-file-size">${fmtBytes(f.size)}</span>${editor ? `<button type="button" class="wc-file-x" data-rmfile="${esc(f.id)}" title="Remove this attachment">✕</button>` : ""}</span>`).join("")}</div>` : ""}
           <div class="wc-upload" hidden></div>
           ${it.discussed ? `<div class="row-sub">Discussed${when ? " " + fmtDay(when) : ""}${it.kind === "board" && it.t.councilDiscussedBy ? " · " + esc(it.t.councilDiscussedBy) : ""}</div>` : ""}
@@ -468,17 +469,8 @@ function render() {
       </div>
     </div>` : "";
 
-  // New members (Jordan 10/25): a bullet list for this meeting — councils/{date}.newMembers [{ id, name, note, by }]
-  const nm = cdoc.newMembers || [];
-  const newMembersCard = cfg.newMembers ? `
-    <div class="card wc-newmem-card" style="margin-top:.8rem">
-      <h3 style="margin:0 0 .4rem;display:flex;align-items:center;gap:.5rem">New members ${nm.length ? `<span class="pill pill-approved">${nm.length}</span>` : ""}<span class="row-sub" style="font-weight:400">· moved in or newly joined, to welcome and look after</span></h3>
-      ${nm.length ? `<ul class="wc-newmem">${nm.map((p) => `<li data-nm="${esc(p.id)}"><b>${esc(p.name)}</b>${p.note ? ` <span class="row-sub">— ${esc(p.note)}</span>` : ""}${editor ? `<button type="button" class="btn btn-sm btn-ghost wc-newmem-x" data-rmnm="${esc(p.id)}" title="Remove">✕</button>` : ""}</li>`).join("")}</ul>` : (editor ? "" : `<div class="row-sub">None noted.</div>`)}
-      ${editor ? `<div class="wc-newmem-add"><input id="wc-nm-name" placeholder="Name or family" autocomplete="off"><input id="wc-nm-note" placeholder="Note — e.g. moved in from Mesa, two kids in Primary (optional)" autocomplete="off"><button type="button" class="btn btn-sm btn-primary" id="wc-nm-add">+ Add</button></div>` : ""}
-    </div>` : "";
   body.innerHTML = `
     ${assignCard}
-    ${newMembersCard}
     <div class="card" style="margin-top:.8rem">
       <h3 style="margin:0 0 .2rem;display:flex;align-items:center;gap:.5rem">Agenda <span class="pill ${open.length ? "pill-approved" : "pill-role-member"}">${open.length}</span>
         ${done.length ? `<span class="row-sub" style="font-weight:400">· ${done.length} discussed</span>` : ""}
@@ -498,20 +490,6 @@ function render() {
     </div>`;
 
   if (!editor) return;
-
-  // new members: add / remove
-  const addNm = async () => {
-    const name = body.querySelector("#wc-nm-name").value.trim(), note = body.querySelector("#wc-nm-note").value.trim();
-    if (!name) return body.querySelector("#wc-nm-name").focus();
-    try { await saveCouncil(date, { newMembers: [...nm, { id: "n" + Math.random().toString(36).slice(2, 9), name, note, by: ctx.name || "", at: new Date().toISOString() }] }); toast("Added"); }
-    catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
-  };
-  body.querySelector("#wc-nm-add")?.addEventListener("click", addNm);
-  body.querySelectorAll("#wc-nm-name, #wc-nm-note").forEach((i) => i.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addNm(); } }));
-  body.querySelectorAll("[data-rmnm]").forEach((b) => b.addEventListener("click", async () => {
-    const p = nm.find((x) => x.id === b.dataset.rmnm); if (!p || !confirm(`Remove ${p.name} from new members?`)) return;
-    try { await saveCouncil(date, { newMembers: nm.filter((x) => x.id !== p.id) }); } catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
-  }));
 
   // drag an open agenda item onto another to move it there
   let dragKey = null;
@@ -700,6 +678,7 @@ function render() {
   body.querySelector("#wc-additem")?.addEventListener("click", () => {
     const el = openModal(`
       <h3>New agenda item</h3>
+      <div class="view-toggle wca-type" id="wca-type"><button type="button" class="chip active" data-type="">Agenda item</button><button type="button" class="chip" data-type="newmembers" title="A card per new member — notes and to-dos under each name">👥 New members</button></div>
       <label class="field">Title<input id="wca-title" placeholder="e.g. Temple cleaning assignment" autocomplete="off"></label>
       <label class="field" style="margin-top:.7rem">Body <span class="row-sub">(optional)</span>
         <div class="wc-tools">${toolbarHtml("Tab makes a sub-point · ⌘Enter saves")}</div>
@@ -707,12 +686,19 @@ function render() {
       </label>
       <div class="modal-actions"><button class="btn" id="wca-cancel" type="button">Cancel</button><button class="btn btn-primary" id="wca-save" type="button">Add item</button></div>`);
     const t = el.querySelector("#wca-title"), ta = el.querySelector("#wca-body");
+    let type = "";
+    el.querySelectorAll("#wca-type [data-type]").forEach((b) => b.addEventListener("click", () => {
+      type = b.dataset.type; el.querySelectorAll("#wca-type .chip").forEach((c) => c.classList.toggle("active", c === b));
+      if (type === "newmembers") { if (!t.value.trim()) t.value = "New members"; ta.placeholder = "## The Wilson family\n- moved in from Mesa, two kids in Primary\n[ ] welcome visit"; if (!ta.value.trim()) ta.value = "## "; ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+      else { if (t.value.trim() === "New members") t.value = ""; ta.placeholder = "Details, notes, bullet points…"; if (ta.value.trim() === "##") ta.value = ""; t.focus(); }
+    }));
     wireToolbar(el, ta);
     setTimeout(() => t.focus(), 30);
     const save = async () => {
       const title = t.value.trim(); if (!title) { t.focus(); return toast("Give it a title"); }
       const id = "a" + Math.random().toString(36).slice(2, 9);
-      const extra = [...(cdoc.extra || []), { id, title, notes: ta.value.trim(), discussed: false, createdAt: new Date().toISOString(), by: ctx.name || "", owner: ctx.name || "" }];
+      const body0 = ta.value.trim() === "##" ? "" : ta.value.trim();
+      const extra = [...(cdoc.extra || []), { id, title, notes: body0, discussed: false, createdAt: new Date().toISOString(), by: ctx.name || "", owner: ctx.name || "", ...(type ? { type } : {}) }];
       try { await saveCouncil(date, { extra }); closeModal(); toast("Added"); } catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
     };
     el.querySelector("#wca-cancel").addEventListener("click", closeModal);
@@ -987,7 +973,7 @@ function render() {
           const item = extra.find((x) => x.id === id); if (!item) return;
           if (act === "tocouncil") {
             const target = nextWardCouncil(), tdoc = councilDocs[target] || {};
-            const copy = { id: "a" + Math.random().toString(36).slice(2, 9), title: item.title, notes: item.notes || "", files: item.files || [], due: item.due || "", discussed: false, discussedAt: "", fromBishopric: { date, id }, createdAt: new Date().toISOString(), by: ctx.name || "", owner: item.owner || item.by || "" };
+            const copy = { id: "a" + Math.random().toString(36).slice(2, 9), title: item.title, notes: item.notes || "", files: item.files || [], due: item.due || "", ...(item.type ? { type: item.type } : {}), discussed: false, discussedAt: "", fromBishopric: { date, id }, createdAt: new Date().toISOString(), by: ctx.name || "", owner: item.owner || item.by || "" };
             const tref = doc(db, "councils", target);
             if (councilDocs[target]) await updateDoc(tref, { extra: [...(tdoc.extra || []), copy], updatedAt: serverTimestamp() });
             else await setDoc(tref, { date: target, extra: [copy], notes: "", createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
@@ -1031,7 +1017,7 @@ function render() {
 }
 
 const COUNCIL = makeAgenda({
-  key: "council", area: "council", coll: "councils", panel: "panel-council", calKey: "council", dates: true, board: true, showOnCouncil: false, newMembers: true,
+  key: "council", area: "council", coll: "councils", panel: "panel-council", calKey: "council", dates: true, board: true, showOnCouncil: false,
   title: "Ward Council", info: "An agenda for each meeting. Items flagged “Ward council” on the Member Board join the next agenda automatically.",
   isMember: (u) => !!u.councilMember,
 });
