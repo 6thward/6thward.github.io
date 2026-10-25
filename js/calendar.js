@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792935566";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792935566";
+import { db } from "./firebase-init.js?v=1792936743";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792936743";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792935566";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792935566";
-import { openCouncilDate } from "./council.js?v=1792935566";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792935566";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792936743";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792936743";
+import { openCouncilDate } from "./council.js?v=1792936743";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792936743";
 
 let events = [];
 let users = []; // app users, for the People picker on an event (2026-10-19)
@@ -871,7 +871,7 @@ function editStanding() {
     <h3>Standing meetings</h3>
     <p class="row-sub" style="margin-top:-.6rem">These go on the Bishop calendar every week and block tithing declaration sign-up times they overlap.</p>
     <div class="cal-standing">
-      <label class="cal-standing-on"><input type="checkbox" id="st-co-on" ${co.on ? "checked" : ""}> <b>Ward council</b> <span class="row-sub">— on each council Sunday chosen on the Ward Council page</span></label>
+      <label class="cal-standing-on"><input type="checkbox" id="st-co-on" ${co.on ? "checked" : ""}> <b>Ward council</b> <span class="row-sub">— on each council Sunday chosen on the Ward Council page${co.byYear && Object.keys(co.byYear).length ? `; this is the general time — ${esc(Object.keys(co.byYear).sort().join(", "))} ${Object.keys(co.byYear).length === 1 ? "has" : "have"} their own under 📅 Council dates` : ""}</span></label>
       <div class="cal-standing-times"><label>From<input type="time" id="st-co-start" step="300" value="${esc(co.start || "")}"></label><label>To<input type="time" id="st-co-end" step="300" value="${esc(co.end || "")}"></label></div>
       <label class="cal-standing-on"><input type="checkbox" id="st-bp-on" ${bp.on ? "checked" : ""}> <b>Bishopric meeting</b> <span class="row-sub">— every week</span></label>
       <div class="cal-standing-times"><label>Day<select id="st-bp-day">${WEEKDAYS.map((w, i) => `<option value="${i}"${Number(bp.weekday ?? 0) === i ? " selected" : ""}>${w}</option>`).join("")}</select></label><label>From<input type="time" id="st-bp-start" step="300" value="${esc(bp.start || "")}"></label><label>To<input type="time" id="st-bp-end" step="300" value="${esc(bp.end || "")}"></label></div>
@@ -881,7 +881,7 @@ function editStanding() {
   el.querySelector("#st-save").addEventListener("click", async () => {
     const v = (id) => el.querySelector(id).value;
     const next = {
-      council: { on: el.querySelector("#st-co-on").checked, start: v("#st-co-start"), end: v("#st-co-end") },
+      council: { on: el.querySelector("#st-co-on").checked, start: v("#st-co-start"), end: v("#st-co-end"), ...(co.byYear ? { byYear: co.byYear } : {}) },
       bishopric: { on: el.querySelector("#st-bp-on").checked, weekday: Number(v("#st-bp-day")), start: v("#st-bp-start"), end: v("#st-bp-end") },
       updatedAt: serverTimestamp(),
     };

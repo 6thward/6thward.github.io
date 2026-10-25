@@ -9,16 +9,16 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1792935566";
-import { ctx, can } from "./app.js?v=1792935566";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1792935566";
-import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1792935566";
+import { db } from "./firebase-init.js?v=1792936743";
+import { ctx, can } from "./app.js?v=1792936743";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1792936743";
+import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1792936743";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { watchBishopCal, bishopCalConfig } from "./bishop-cal.js?v=1792935566";
+import { watchBishopCal, bishopCalConfig, councilTimeFor } from "./bishop-cal.js?v=1792936743";
 const clock12 = (hhmm) => { const [h, m] = String(hhmm).split(":").map(Number); return `${h % 12 || 12}:${String(m || 0).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`; };
-import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1792935566";
+import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1792936743";
 
 // One agenda page per "board": Ward Council (councils/…) and, since 2026-10-25, the Bishopric meeting (bishopric/…).
 // The same code runs twice with a config; a Bishopric item can be sent to the next ward council agenda.
@@ -91,7 +91,7 @@ function init() {
   panel.querySelector("#wc-dates")?.addEventListener("click", () => editDates());
   panel.querySelector("#wc-upcoming")?.addEventListener("click", () => showUpcoming());
   watchBishopCal(() => { // the meeting time shows on the button; the Calendar's standing-meeting setting is the same record (2026-10-18)
-    const co = bishopCalConfig()[cfg.calKey] || {}, lbl = panel.querySelector("#wc-time-lbl");
+    const co = cfg.calKey === "council" ? councilTimeFor(date) : (bishopCalConfig()[cfg.calKey] || {}), lbl = panel.querySelector("#wc-time-lbl");
     if (lbl) lbl.textContent = co.on && co.start ? `${cfg.dates ? "· " : (["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"][Number(co.weekday) || 0] + " ")}${clock12(co.start)}${co.end ? " – " + clock12(co.end) : ""}` : (cfg.dates ? "" : "— not set");
     if (!cfg.dates && !positioned) { date = upcomingSunday(); render(); } // the bishopric's weekday may have just loaded
   });
@@ -131,7 +131,7 @@ function editDates(year) {
   const chosen = new Set(schedule.filter(inYear));
   const past = schedule.filter((d) => !inYear(d)); // dates in other years ride along untouched
   const thisYear = new Date().getFullYear();
-  const co = bishopCalConfig()[cfg.calKey] || {};
+  const base = bishopCalConfig()[cfg.calKey] || {}, co = { ...base, ...((base.byYear || {})[String(year)] || {}) }; // this year's time, else the general one
   const yearTabs = [thisYear, thisYear + 1, thisYear + 2].map((y) => `<button type="button" class="chip${y === year ? " active" : ""}" data-year="${y}">${y}${schedule.some((d) => d.startsWith(y + "-")) ? ` <span class="wcd-year-n">${schedule.filter((d) => d.startsWith(y + "-")).length}</span>` : ""}</button>`).join("");
   const nth = (d) => Math.ceil(new Date(d + "T12:00:00").getDate() / 7);
   const monthKey = (d) => d.slice(0, 7);
@@ -141,7 +141,7 @@ function editDates(year) {
     <div class="wcd-time">
       <label class="cal-standing-on"><input type="checkbox" id="wcd-on" ${co.on ? "checked" : ""}> <b>Meets</b></label>
       <div class="cal-standing-times"><label>From<input type="time" id="wcd-start" step="300" value="${esc(co.start || "07:30")}"></label><label>To<input type="time" id="wcd-end" step="300" value="${esc(co.end || "08:30")}"></label></div>
-      <span class="row-sub">on every council Sunday — goes on the Bishop calendar and keeps tithing declaration sign-ups off those minutes.</span>
+      <span class="row-sub">on every council Sunday in ${year} — goes on the Bishop calendar and keeps tithing declaration sign-ups off those minutes. Each year keeps its own time.</span>
     </div>
     <p class="row-sub" style="margin:0 0 .6rem">Tick the Sundays that have ward council. Agendas exist only for those weeks, and flagged Member Board items wait for the next one.${hasSchedule() ? "" : " Nothing is chosen yet, so every Sunday currently counts."}</p>
     <details class="wcd-quick"><summary class="btn btn-sm">Quick pick ▾</summary>
@@ -182,7 +182,10 @@ function editDates(year) {
     if (time.on && !time.start) return toast("Give the meeting a start time");
     try {
       await setDoc(doc(db, cfg.coll, "_dates"), { dates, updatedAt: serverTimestamp(), updatedBy: ctx.name || "" });
-      if (time.on !== !!co.on || time.start !== (co.start || "") || time.end !== (co.end || "")) await setDoc(doc(db, "settings", "bishopCal"), { [cfg.calKey]: time, updatedAt: serverTimestamp() }, { merge: true }).catch((e) => toast("Dates saved, but the time didn't: " + (e.code || e.message)));
+      if (time.on !== !!co.on || time.start !== (co.start || "") || time.end !== (co.end || "")) { // the year's own time (on/off is for every year); the first year set also becomes the general time
+        const patchT = { ...base, on: time.on, start: base.start || time.start, end: base.start ? (base.end || "") : time.end, byYear: { ...(base.byYear || {}), [String(year)]: { start: time.start, end: time.end } } };
+        await setDoc(doc(db, "settings", "bishopCal"), { [cfg.calKey]: patchT, updatedAt: serverTimestamp() }, { merge: true }).catch((e) => toast("Dates saved, but the time didn't: " + (e.code || e.message)));
+      }
       schedule = dates; date = nextCouncil();
       toast(dates.length ? "Council dates saved" : "Cleared — every Sunday counts again"); closeModal(); render();
     } catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
@@ -193,9 +196,8 @@ function editDates(year) {
 function showUpcoming() {
   const today = todayIso();
   const dates = (hasSchedule() ? schedule.filter((d) => d >= today) : Array.from({ length: 8 }, (_, i) => shiftWeek(upcomingSunday(), i))).slice(0, 12);
-  const co = bishopCalConfig()[cfg.calKey] || {};
-  const time = co.on && co.start ? `${clock12(co.start)}${co.end ? " – " + clock12(co.end) : ""}` : "";
-  const rowHtml = (d) => {
+  const timeOf = (d) => { const co = cfg.calKey === "council" ? councilTimeFor(d) : (bishopCalConfig()[cfg.calKey] || {}); return co.on && co.start ? `${clock12(co.start)}${co.end ? " – " + clock12(co.end) : ""}` : ""; };
+  const rowHtml = (d) => { const time = timeOf(d);
     const items = itemsFor(d), open = items.filter((i) => !i.discussed).length, fus = ((councils[d] || {}).followups || []).filter((f) => !f.done).length;
     const asg = (councils[d] || {}).assign || {};
     const who = ASSIGN.map(([k, l]) => (asg[k] ? `<span class="wc-up-asg" title="${esc(l)}">${esc(l.replace("Scripture & thought", "Thought").replace("Handbook training", "Training"))}: <b>${esc(asg[k])}</b></span>` : "")).filter(Boolean).join("");
@@ -398,6 +400,7 @@ function render() {
   const cdoc = councils[date] || {};
   const next = isNextAgenda(date);
   dateEl.textContent = fmtDay(date) + (hasSchedule() && !schedule.includes(date) ? " · not a council week" : "");
+  if (cfg.calKey === "council") { const co = councilTimeFor(date), lbl = panel.querySelector("#wc-time-lbl"); if (lbl) lbl.textContent = co.on && co.start ? `· ${clock12(co.start)}${co.end ? " – " + clock12(co.end) : ""}` : ""; }
 
   // notes render with bullets ("- ") and to-do boxes ("[ ] "); the raw text is kept for the editor (2026-10-04)
   const rawNotes = new Map();

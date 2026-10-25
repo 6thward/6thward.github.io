@@ -6,12 +6,12 @@
 //   meetings/{date}.hbSkip[]      ids marked "at church" that Sunday
 //   meetings/{date}.hbOn          true once attendance is being tracked
 // The 🏠 button on each Sunday's card still assigns who takes it.
-import { db } from "./firebase-init.js?v=1792935566";
-import { ctx, can } from "./app.js?v=1792935566";
+import { db } from "./firebase-init.js?v=1792936743";
+import { ctx, can } from "./app.js?v=1792936743";
 import {
   doc, getDoc, setDoc, updateDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1792935566";
+import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1792936743";
 
 let people = [];
 let date = "";          // selected Sunday, YYYY-MM-DD
