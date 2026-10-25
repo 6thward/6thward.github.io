@@ -2561,3 +2561,25 @@ tr.us-menu-open td { background: #f7f9fb; }
 .dv-st-btn { font: inherit; font-size: .8rem; font-weight: 700; line-height: 1; padding: .25rem .45rem; border: 1px solid var(--line); border-radius: 7px; background: #fff; cursor: pointer; color: var(--ink-soft); }
 .dv-st-btn.dv-st-yes.on { background: #e3f1e8; border-color: #2e7d4f; color: #2e7d4f; }
 .dv-st-btn.dv-st-no.on { background: #fbe7e3; border-color: #b3402f; color: #b3402f; }
+/* Tithing Declaration page, option C — Sunday dashboard (2026-10-24) */
+.td-stats { display: flex; gap: .6rem; flex-wrap: wrap; align-items: stretch; margin-top: .2rem; }
+.td-stat { display: flex; flex-direction: column; gap: .05rem; padding: .55rem .9rem; border: 1px solid var(--line); border-radius: 12px; background: #fff; min-width: 7.5rem; }
+.td-stat b { font-size: 1.45rem; line-height: 1.1; } .td-stat span { color: var(--ink-soft); font-size: .78rem; }
+.td-stat-actions { margin-left: auto; display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+.td-tabs { display: flex; gap: .3rem; flex-wrap: wrap; align-items: center; margin: .8rem 0 0; }
+.td-tabs .chip b { font-weight: 700; margin-left: .15rem; opacity: .8; }
+.td-h { margin: 0 0 .5rem; display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; font-size: 1.05rem; }
+.td-inv { display: grid; grid-template-columns: 1fr 9rem 13rem auto; gap: .6rem; align-items: center; padding: .35rem .5rem; border-top: 1px solid #eef1f4; font-size: .93rem; }
+.td-inv-head { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); border-top: 0; }
+.td-inv-signed { background: #f1f8f3; border-radius: 8px; }
+.td-inv-name { font-weight: 600; } .td-inv-phone { font-variant-numeric: tabular-nums; } .td-inv-acts { display: flex; gap: .3rem; justify-content: flex-end; }
+.td-inv-pills { display: inline-flex; gap: .3rem; }
+.td-inv-add { grid-template-columns: 1fr 10rem 0 auto; margin-top: .4rem; }
+.td-inv-add input { font: inherit; padding: .4rem .55rem; border: 1px solid var(--line); border-radius: 8px; }
+.td-share-fold > summary { cursor: pointer; font-weight: 700; font-size: 1.05rem; display: flex; align-items: center; gap: .6rem; list-style: none; }
+.td-share-fold > summary::before { content: "▸"; color: var(--ink-soft); font-size: .9rem; } .td-share-fold[open] > summary::before { content: "▾"; }
+.td-share-fold .td-share { margin-top: .8rem; }
+.td-remlist { display: flex; flex-direction: column; gap: .3rem; max-height: 50vh; overflow: auto; }
+.td-rem { display: grid; grid-template-columns: 5rem 1fr auto; gap: .6rem; align-items: center; padding: .35rem .5rem; border: 1px solid var(--line); border-radius: 9px; }
+@media (max-width: 760px) { .td-inv { grid-template-columns: 1fr auto; } .td-inv-head { display: none; } .td-inv-phone { grid-column: 1; } .td-inv-st { grid-column: 1; } .td-inv-acts { grid-column: 2; grid-row: 1 / span 3; } .td-inv-add { grid-template-columns: 1fr; } .td-inv-add > span { display: none; } }
+.td-inv-add textarea { font: inherit; padding: .4rem .55rem; border: 1px solid var(--line); border-radius: 8px; resize: none; line-height: 1.35; }

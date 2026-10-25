@@ -192,6 +192,10 @@ service cloud.firestore {
           && (resource.data.k == request.resource.data.k || resource.data.at < request.time - duration.value(3, 'm')));
         allow delete: if true;
       }
+      // the invite list (2026-10-24): names for the executive secretary to reach out to — private to whoever manages tithing
+      match /invites/{id} {
+        allow read, write: if tithingManages();
+      }
       match /signups/{slotId} {
         allow read, update, delete: if tithingManages();
         allow create: if tithingManages() || (tithingOpen(token)
