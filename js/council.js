@@ -9,16 +9,16 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1792933530";
-import { ctx, can } from "./app.js?v=1792933530";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1792933530";
-import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1792933530";
+import { db } from "./firebase-init.js?v=1792934649";
+import { ctx, can } from "./app.js?v=1792934649";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1792934649";
+import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1792934649";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { watchBishopCal, bishopCalConfig } from "./bishop-cal.js?v=1792933530";
+import { watchBishopCal, bishopCalConfig } from "./bishop-cal.js?v=1792934649";
 const clock12 = (hhmm) => { const [h, m] = String(hhmm).split(":").map(Number); return `${h % 12 || 12}:${String(m || 0).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`; };
-import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1792933530";
+import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1792934649";
 
 // One agenda page per "board": Ward Council (councils/…) and, since 2026-10-25, the Bishopric meeting (bishopric/…).
 // The same code runs twice with a config; a Bishopric item can be sent to the next ward council agenda.
@@ -468,8 +468,17 @@ function render() {
       </div>
     </div>` : "";
 
+  // New members (Jordan 10/25): a bullet list for this meeting — councils/{date}.newMembers [{ id, name, note, by }]
+  const nm = cdoc.newMembers || [];
+  const newMembersCard = cfg.newMembers ? `
+    <div class="card wc-newmem-card" style="margin-top:.8rem">
+      <h3 style="margin:0 0 .4rem;display:flex;align-items:center;gap:.5rem">New members ${nm.length ? `<span class="pill pill-approved">${nm.length}</span>` : ""}<span class="row-sub" style="font-weight:400">· moved in or newly joined, to welcome and look after</span></h3>
+      ${nm.length ? `<ul class="wc-newmem">${nm.map((p) => `<li data-nm="${esc(p.id)}"><b>${esc(p.name)}</b>${p.note ? ` <span class="row-sub">— ${esc(p.note)}</span>` : ""}${editor ? `<button type="button" class="btn btn-sm btn-ghost wc-newmem-x" data-rmnm="${esc(p.id)}" title="Remove">✕</button>` : ""}</li>`).join("")}</ul>` : (editor ? "" : `<div class="row-sub">None noted.</div>`)}
+      ${editor ? `<div class="wc-newmem-add"><input id="wc-nm-name" placeholder="Name or family" autocomplete="off"><input id="wc-nm-note" placeholder="Note — e.g. moved in from Mesa, two kids in Primary (optional)" autocomplete="off"><button type="button" class="btn btn-sm btn-primary" id="wc-nm-add">+ Add</button></div>` : ""}
+    </div>` : "";
   body.innerHTML = `
     ${assignCard}
+    ${newMembersCard}
     <div class="card" style="margin-top:.8rem">
       <h3 style="margin:0 0 .2rem;display:flex;align-items:center;gap:.5rem">Agenda <span class="pill ${open.length ? "pill-approved" : "pill-role-member"}">${open.length}</span>
         ${done.length ? `<span class="row-sub" style="font-weight:400">· ${done.length} discussed</span>` : ""}
@@ -489,6 +498,20 @@ function render() {
     </div>`;
 
   if (!editor) return;
+
+  // new members: add / remove
+  const addNm = async () => {
+    const name = body.querySelector("#wc-nm-name").value.trim(), note = body.querySelector("#wc-nm-note").value.trim();
+    if (!name) return body.querySelector("#wc-nm-name").focus();
+    try { await saveCouncil(date, { newMembers: [...nm, { id: "n" + Math.random().toString(36).slice(2, 9), name, note, by: ctx.name || "", at: new Date().toISOString() }] }); toast("Added"); }
+    catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
+  };
+  body.querySelector("#wc-nm-add")?.addEventListener("click", addNm);
+  body.querySelectorAll("#wc-nm-name, #wc-nm-note").forEach((i) => i.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addNm(); } }));
+  body.querySelectorAll("[data-rmnm]").forEach((b) => b.addEventListener("click", async () => {
+    const p = nm.find((x) => x.id === b.dataset.rmnm); if (!p || !confirm(`Remove ${p.name} from new members?`)) return;
+    try { await saveCouncil(date, { newMembers: nm.filter((x) => x.id !== p.id) }); } catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
+  }));
 
   // drag an open agenda item onto another to move it there
   let dragKey = null;
@@ -1008,7 +1031,7 @@ function render() {
 }
 
 const COUNCIL = makeAgenda({
-  key: "council", area: "council", coll: "councils", panel: "panel-council", calKey: "council", dates: true, board: true, showOnCouncil: false,
+  key: "council", area: "council", coll: "councils", panel: "panel-council", calKey: "council", dates: true, board: true, showOnCouncil: false, newMembers: true,
   title: "Ward Council", info: "An agenda for each meeting. Items flagged “Ward council” on the Member Board join the next agenda automatically.",
   isMember: (u) => !!u.councilMember,
 });
