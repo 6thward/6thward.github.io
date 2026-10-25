@@ -1,17 +1,17 @@
 // Tithing declaration sign-ups (2026-10-04) — the bishop's side, its own page
 // ("Tithing Declaration" tab, area key "tithing"): set when you're available, share the link / QR code, and see
 // who signed up. The public page is tithing.html (js/tithing-form.js).
-import { db } from "./firebase-init.js?v=1792902653";
-import { ctx, can } from "./app.js?v=1792902653";
+import { db } from "./firebase-init.js?v=1792902951";
+import { ctx, can } from "./app.js?v=1792902951";
 import {
   collection, doc, onSnapshot, setDoc, updateDoc, writeBatch, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { watchBishopCal, standingEvents } from "./bishop-cal.js?v=1792902653";
-import { openModal, closeModal, toast } from "./ui.js?v=1792902653";
+import { watchBishopCal, standingEvents } from "./bishop-cal.js?v=1792902951";
+import { openModal, closeModal, toast } from "./ui.js?v=1792902951";
 import {
   GROUPS, PLACES, SLOT_LENGTHS, esc, toMin, fmtClock, fmtLongDay, fmtShortDay, slotsOf, slotMap, isPriority, PRIORITY_TEXT,
   sortWindows, overlaps, newToken, parseSlotId, todayIso, addDays, hhmm, busyFromEvents, sameBusy, offList,
-} from "./tithing-shared.js?v=1792902653";
+} from "./tithing-shared.js?v=1792902951";
 
 let mount = null, season = null, signups = [], unsubSignups = null, started = false, dirty = false;
 let events = null; // the ward calendar (events with cal: "bishop" block sign-up times); null until it loads
@@ -154,7 +154,8 @@ function render() {
         <div class="td-share-actions">
           <button class="btn btn-sm" id="td-flyer" type="button">🖨 Print sign-up flyer (QR)</button>
           <button class="btn btn-sm" id="td-qr-save" type="button">⬇ Save QR image</button>
-          ${editor ? `<label class="td-open"><input type="checkbox" id="td-open" ${season.open ? "checked" : ""}> Sign-ups open</label>` : ""}
+          ${editor ? `<label class="td-open"><input type="checkbox" id="td-open" ${season.open ? "checked" : ""}> Sign-ups open</label>
+          <label class="td-open" title="Members only see the next few open times each day, so the earliest times fill first"><select id="td-ahead">${[[2, "Offer the next 2 open times a day"], [3, "Offer the next 3 open times a day"], [4, "Offer the next 4 open times a day"], [5, "Offer the next 5 open times a day"], [0, "Offer every open time"]].map(([v, l]) => `<option value="${v}"${Number(season.openAhead ?? 3) === v ? " selected" : ""}>${l}</option>`).join("")}</select></label>` : ""}
         </div>
         ${editor ? `<label class="td-note-lbl">Note shown at the top of the sign-up page <span class="row-sub">(optional)</span>
           <textarea id="td-note" rows="2" placeholder="e.g. Please bring your whole family. Text Brother Coburn at 435-555-0123 if none of these times work.">${esc(season.note || "")}</textarea></label>
@@ -350,6 +351,10 @@ function render() {
 
   mount.querySelector("#td-open").addEventListener("change", async (e) => {
     try { await updateDoc(seasonRef(), { open: e.target.checked }); toast(e.target.checked ? "Sign-ups are open" : "Sign-ups are closed"); }
+    catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
+  });
+  mount.querySelector("#td-ahead")?.addEventListener("change", async (e) => {
+    try { await updateDoc(seasonRef(), { openAhead: Number(e.target.value) }); toast("Saved"); }
     catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
   });
   mount.querySelector("#td-pritext")?.addEventListener("change", async (e) => {

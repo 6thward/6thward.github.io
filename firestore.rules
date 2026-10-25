@@ -176,6 +176,22 @@ service cloud.firestore {
           && existsAfter(/databases/$(database)/documents/tithing/$(token)/signups/$(slotId)));
         allow delete: if tithingManages();
       }
+      // a time being filled in right now (2026-10-24): anyone may hold an open time for 3 minutes; a stale hold may be taken over
+      match /holds/{slotId} {
+        allow read: if true;
+        allow create: if tithingManages() || (tithingOpen(token)
+          && slotId in tithingDoc(token).slots
+          && request.resource.data.keys().hasOnly(['at', 'k'])
+          && request.resource.data.at == request.time
+          && request.resource.data.k is string && request.resource.data.k.size() <= 40);
+        allow update: if tithingManages() || (tithingOpen(token)
+          && slotId in tithingDoc(token).slots
+          && request.resource.data.keys().hasOnly(['at', 'k'])
+          && request.resource.data.at == request.time
+          && request.resource.data.k is string && request.resource.data.k.size() <= 40
+          && (resource.data.k == request.resource.data.k || resource.data.at < request.time - duration.value(3, 'm')));
+        allow delete: if true;
+      }
       match /signups/{slotId} {
         allow read, update, delete: if tithingManages();
         allow create: if tithingManages() || (tithingOpen(token)

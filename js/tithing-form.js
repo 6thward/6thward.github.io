@@ -2,13 +2,13 @@
 // No sign-in. Anyone with the link sees the open times (never who took the
 // others), picks one, and leaves a name — plus a phone number if they'd like
 // a text reminder.
-import { db } from "./firebase-init.js?v=1792902653";
+import { db } from "./firebase-init.js?v=1792902951";
 import {
-  doc, getDoc, collection, onSnapshot, writeBatch, serverTimestamp,
+  doc, getDoc, collection, onSnapshot, writeBatch, serverTimestamp, setDoc, deleteDoc,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import {
   GROUPS, PLACES, esc, fmtClock, fmtLongDay, slotsOf, sortWindows, parseSlotId, todayIso, nowMin, offList, isPriority, PRIORITY_TEXT,
-} from "./tithing-shared.js?v=1792902653";
+} from "./tithing-shared.js?v=1792902951";
 
 export async function initTithingForm(mount, token) {
   const fail = (title, msg) => { mount.innerHTML = `<div class="td-card td-msg"><h2>${esc(title)}</h2><p>${esc(msg)}</p></div>`; };
@@ -28,6 +28,12 @@ export async function initTithingForm(mount, token) {
   const winById = Object.fromEntries((season.windows || []).map((w) => [w.id, w]));
   let taken = new Map(); // slotId -> minutes
   let justBooked = null;
+  // a time someone has tapped and is filling the form for is "held" for a few minutes so two people can't pick it at once (10/24)
+  const HOLD_MS = 3 * 60 * 1000, myKey = "k" + Math.random().toString(36).slice(2, 12);
+  let holds = new Map(); // slotId -> { at: ms, k }
+  const isHeld = (s) => { const h = holds.get(s.id); return !!h && h.k !== myKey && Date.now() - h.at < HOLD_MS; };
+  // only the next few open times each day are offered, so nobody picks 4 PM while 1:10 sits empty (Jordan 10/24)
+  const OPEN_AHEAD = Number(season.openAhead ?? 3);
 
   const isTaken = (s) => {
     if (taken.has(s.id)) return true;
@@ -52,8 +58,14 @@ export async function initTithingForm(mount, token) {
 
     const dayHtml = days.map((d) => {
       const wins = sortWindows(season.windows).filter((w) => w.date === d);
+      // the day's open times in order; only the first few are offered, the rest open up as those fill
+      // priority times are always offered; the "next few" rule applies to the regular times only (Jordan 10/24)
+      const openToday = upcoming.filter((s) => s.date === d && !isTaken(s)).sort((a, b) => a.min - b.min);
+      const regular = openToday.filter((s) => !s.priority);
+      const offered = new Set([...openToday.filter((s) => s.priority), ...(OPEN_AHEAD > 0 ? regular.slice(0, OPEN_AHEAD) : regular)].map((s) => s.id));
+      const hidden = OPEN_AHEAD > 0 ? Math.max(0, regular.length - OPEN_AHEAD) : 0;
       const blocks = wins.map((w) => {
-        const list = upcoming.filter((s) => s.win === w.id);
+        const list = upcoming.filter((s) => s.win === w.id && (isTaken(s) || offered.has(s.id)));
         if (!list.length) return "";
         // a priority block is an amber panel with its own heading (wireframe A, 2026-10-18); the wording is in the intro
         // "At the Bishop's office" is left unsaid — only a home visit says where
@@ -68,11 +80,12 @@ export async function initTithingForm(mount, token) {
             <div class="td-slots">
               ${list.map((s) => (isTaken(s)
                 ? `<span class="td-slot td-slot-taken" aria-disabled="true">${fmtClock(s.min)}</span>`
+                : isHeld(s) ? `<span class="td-slot td-slot-held" aria-disabled="true" title="Someone is signing up for this time right now">${fmtClock(s.min)}<small>being taken</small></span>`
                 : `<button type="button" class="td-slot" data-slot="${s.id}">${fmtClock(s.min)}</button>`)).join("")}
             </div>
           </div>`;
       }).join("");
-      return blocks ? `<section class="td-card td-day"><h2>${esc(fmtLongDay(d))}</h2>${blocks}</section>` : "";
+      return blocks ? `<section class="td-card td-day"><h2>${esc(fmtLongDay(d))}</h2>${blocks}${hidden ? `<p class="td-more">${hidden} more time${hidden === 1 ? "" : "s"} open${hidden === 1 ? "s" : ""} up as these fill.</p>` : ""}</section>` : "";
     }).join("");
 
     mount.innerHTML = `
@@ -89,8 +102,19 @@ export async function initTithingForm(mount, token) {
       <p class="td-foot">Only the bishop and the people who help him schedule can see who signed up.</p>
       <div class="td-sheet-bg" id="td-sheet-bg" hidden><div class="td-sheet" id="td-sheet" role="dialog" aria-modal="true"></div></div>`;
 
-    mount.querySelectorAll("[data-slot]").forEach((b) => b.addEventListener("click", () => openSheet(slots.find((s) => s.id === b.dataset.slot))));
+    mount.querySelectorAll("[data-slot]").forEach((b) => b.addEventListener("click", () => holdThenOpen(slots.find((s) => s.id === b.dataset.slot), b)));
   }
+
+  // tap a time → hold it (fails if someone else holds it) → open the form
+  async function holdThenOpen(s, btn) {
+    if (!s) return;
+    if (isHeld(s)) { render(); return; }
+    btn.disabled = true;
+    try { await setDoc(doc(db, "tithing", token, "holds", s.id), { at: serverTimestamp(), k: myKey }); holds.set(s.id, { at: Date.now(), k: myKey }); }
+    catch (e) { btn.disabled = false; holds.set(s.id, { at: Date.now(), k: "other" }); render(); return; } // someone else just took hold of it
+    openSheet(s);
+  }
+  const releaseHold = (s) => { holds.delete(s.id); deleteDoc(doc(db, "tithing", token, "holds", s.id)).catch(() => {}); };
 
   function openSheet(s) {
     if (!s) return;
@@ -107,7 +131,8 @@ export async function initTithingForm(mount, token) {
       <p class="td-err" id="td-err" hidden></p>
       <div class="td-actions"><button type="button" class="td-btn td-btn-ghost" id="td-cancel">Back</button><button type="button" class="td-btn td-btn-primary" id="td-go">Sign me up</button></div>`;
     bg.hidden = false;
-    const close = () => { bg.hidden = true; sheet.innerHTML = ""; render(); }; // re-draw: times may have gone while the form was open
+    let booked = false;
+    const close = () => { bg.hidden = true; sheet.innerHTML = ""; if (!booked) releaseHold(s); render(); }; // re-draw: times may have gone while the form was open
     const err = (m) => { const e = sheet.querySelector("#td-err"); e.textContent = m; e.hidden = false; };
     sheet.querySelector("#td-cancel").addEventListener("click", close);
     bg.addEventListener("click", (e) => { if (e.target === bg) close(); }, { once: true });
@@ -126,7 +151,9 @@ export async function initTithingForm(mount, token) {
         const batch = writeBatch(db);
         batch.set(doc(db, "tithing", token, "taken", s.id), { len: s.len, at: serverTimestamp() });
         batch.set(doc(db, "tithing", token, "signups", s.id), { name, phone, address, at: serverTimestamp() });
+        batch.delete(doc(db, "tithing", token, "holds", s.id)); // the hold has done its job
         await batch.commit();
+        booked = true; holds.delete(s.id);
         justBooked = { id: s.id, name };
         saveMine(justBooked);
         taken.set(s.id, s.len);
@@ -144,6 +171,12 @@ export async function initTithingForm(mount, token) {
   }
 
   render();
+  const sheetOpen = () => mount.querySelector("#td-sheet-bg") && !mount.querySelector("#td-sheet-bg").hidden;
+  onSnapshot(collection(db, "tithing", token, "holds"), (qs) => {
+    holds = new Map(qs.docs.map((d) => { const x = d.data(); return [d.id, { at: x.at?.toMillis ? x.at.toMillis() : Date.now(), k: x.k || "" }]; }));
+    if (!sheetOpen()) render();
+  }, () => {});
+  setInterval(() => { if (!sheetOpen() && [...holds.values()].some((h) => Date.now() - h.at >= HOLD_MS)) render(); }, 20000); // held times come back once a hold expires
   onSnapshot(collection(db, "tithing", token, "taken"), (qs) => {
     taken = new Map(qs.docs.map((d) => [d.id, d.data().len]));
     // don't yank the form out from under someone who is typing their name
