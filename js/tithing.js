@@ -1,17 +1,17 @@
 // Tithing declaration sign-ups (2026-10-04) — the bishop's side, its own page
 // ("Tithing Declaration" tab, area key "tithing"): set when you're available, share the link / QR code, and see
 // who signed up. The public page is tithing.html (js/tithing-form.js).
-import { db } from "./firebase-init.js?v=1792930817";
-import { ctx, can } from "./app.js?v=1792930817";
+import { db } from "./firebase-init.js?v=1792931010";
+import { ctx, can } from "./app.js?v=1792931010";
 import {
   collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { watchBishopCal, standingEvents } from "./bishop-cal.js?v=1792930817";
-import { openModal, closeModal, toast } from "./ui.js?v=1792930817";
+import { watchBishopCal, standingEvents } from "./bishop-cal.js?v=1792931010";
+import { openModal, closeModal, toast } from "./ui.js?v=1792931010";
 import {
   GROUPS, PLACES, SLOT_LENGTHS, esc, toMin, fmtClock, fmtLongDay, fmtShortDay, slotsOf, slotMap, isPriority, PRIORITY_TEXT,
   sortWindows, overlaps, newToken, parseSlotId, todayIso, addDays, hhmm, busyFromEvents, sameBusy, offList,
-} from "./tithing-shared.js?v=1792930817";
+} from "./tithing-shared.js?v=1792931010";
 
 let mount = null, season = null, signups = [], unsubSignups = null, started = false, dirty = false;
 let events = null; // the ward calendar (events with cal: "bishop" block sign-up times); null until it loads
@@ -288,16 +288,16 @@ function render() {
   mount.querySelector("#td-print-came")?.addEventListener("click", () => printList(people.filter((r) => r.status === "attended"), "Everyone who came"));
   // a paper sign-up sheet (10/25): pick the days, then print the open times with blanks to write in
   mount.querySelector("#td-sheet")?.addEventListener("click", () => {
-    const openByDay = (d) => slots.filter((s) => s.date === d && !s.blocked && !byId[s.id]);
+    const timesByDay = (d) => slots.filter((s) => s.date === d && (!s.blocked || byId[s.id])).map((s) => ({ ...s, name: byId[s.id]?.name || "" }));
     const el = openModal(`<h3>Print a sign-up sheet</h3>
-      <p class="row-sub" style="margin:0 0 .6rem">Which Sundays go on the sheet? Only open times print — taken times are left off.</p>
-      <div class="td-sheet-days">${futureD.map((d) => { const n = openByDay(d).length; return `<label class="td-sheet-day"><input type="checkbox" data-sheetday="${d}" ${n ? "checked" : "disabled"}> <b>${esc(fmtLongDay(d))}</b> <span class="row-sub">${n ? `${n} open time${n === 1 ? "" : "s"}` : "nothing open"}</span></label>`; }).join("")}</div>
+      <p class="row-sub" style="margin:0 0 .6rem">Which Sundays go on the sheet? Times already taken print with the name on them.</p>
+      <div class="td-sheet-days">${futureD.map((d) => { const list = timesByDay(d), n = list.filter((s) => !s.name).length; return `<label class="td-sheet-day"><input type="checkbox" data-sheetday="${d}" ${list.length ? "checked" : "disabled"}> <b>${esc(fmtLongDay(d))}</b> <span class="row-sub">${list.length ? `${n} open · ${list.length - n} taken` : "no times"}</span></label>`; }).join("")}</div>
       <div class="modal-actions"><button class="btn" id="tds-cancel" type="button">Cancel</button><button class="btn btn-primary" id="tds-go" type="button">🖨 Print</button></div>`);
     el.querySelector("#tds-cancel").addEventListener("click", closeModal);
     el.querySelector("#tds-go").addEventListener("click", () => {
       const days = [...el.querySelectorAll("[data-sheetday]:checked")].map((x) => x.dataset.sheetday);
       if (!days.length) return toast("Pick at least one Sunday");
-      closeModal(); printSignupSheet(days, openByDay);
+      closeModal(); printSignupSheet(days, timesByDay);
     });
   });
   mount.querySelector("#td-print-inv")?.addEventListener("click", () => printInvites(invRows));
@@ -529,10 +529,11 @@ function printList(people, title) {
 }
 
 // the paper sign-up sheet: open times only, a blank for the name and mobile, priority times marked (10/25)
-function printSignupSheet(days, openByDay) {
-  printWindow("Tithing Declaration sign-up sheet", `
+function printSignupSheet(days, timesByDay) {
+  const openByDay = timesByDay;
+  printWindow(`${season.ward || "6th Ward"} Tithing Declaration Sign-up`, `
     <div class="sheet">
-      <h1>Tithing Declaration <span>${esc(season.ward || "6th Ward")}</span></h1>
+      <h1>${esc(season.ward || "6th Ward")} Tithing Declaration Sign-up</h1>
       <p class="lead">Write your name next to a time, and a mobile number if you'd like a text reminder.</p>
       <p class="first"><b>Please fill the first available time slots first.</b></p>
       ${days.some((d) => openByDay(d).some((s) => s.priority)) ? `<p class="pri">🔒 <b>Priority</b> times: ${esc(season.priorityText || PRIORITY_TEXT)}</p>` : ""}
@@ -540,12 +541,13 @@ function printSignupSheet(days, openByDay) {
       ${days.map((d) => { const list = openByDay(d); return `
         <h2>${esc(fmtLongDay(d))}</h2>
         <table><tr><th class="t">Time</th><th class="n">Name</th><th class="p">Mobile (optional)</th></tr>
-        ${list.map((s) => `<tr><td class="t">${fmtClock(s.min)}${s.priority ? ` <span class="tag">🔒 Priority</span>` : ""}${s.place === "home" ? ` <span class="tag">home visit</span>` : ""}</td><td class="n"></td><td class="p"></td></tr>`).join("")}</table>`; }).join("")}
+        ${list.map((s) => `<tr${s.name ? ` class="taken"` : ""}><td class="t">${fmtClock(s.min)}${s.priority ? ` <span class="tag">🔒 Priority</span>` : ""}${s.place === "home" ? ` <span class="tag">home visit</span>` : ""}</td><td class="n">${esc(s.name)}</td><td class="p"></td></tr>`).join("")}</table>`; }).join("")}
       <p class="foot">Or sign up online: ${esc(linkUrl())}</p>
     </div>`, `
     @page { size: letter; margin: .55in; }
     .sheet { padding: .05in; }
-    .sheet h1 { font-size: 22pt; margin: 0; } .sheet h1 span { font-size: 11pt; font-weight: 400; color: #5b6675; margin-left: .5em; }
+    .sheet h1 { font-size: 22pt; margin: 0; }
+    tr.taken td { color: #5b6675; background: #f3f5f8; } tr.taken td.n { font-style: italic; }
     .lead { margin: .08in 0 0; } .first { margin: .06in 0 0; font-size: 12.5pt; }
     .pri { margin: .1in 0 0; padding: .08in .12in; background: #fdf1d6; border-radius: 6px; font-size: 10.5pt; }
     .note { margin: .1in 0 0; color: #5b6675; white-space: pre-wrap; }
