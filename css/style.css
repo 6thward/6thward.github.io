@@ -2524,3 +2524,18 @@ tr.us-menu-open td { background: #f7f9fb; }
 .ev-chip-x { border: 0; background: transparent; cursor: pointer; font-size: .7rem; line-height: 1; padding: .15rem .3rem; border-radius: 99px; color: inherit; opacity: .6; } .ev-chip-x:hover { opacity: 1; background: rgba(0,0,0,.08); }
 .ev-people-in { font: inherit; font-size: .9rem; padding: .35rem .5rem; border: 1px solid var(--line); border-radius: 8px; text-transform: none; letter-spacing: 0; font-weight: 400; }
 .dv-block-who { font-weight: 500; opacity: .8; margin-left: .3rem; font-size: .74rem; }
+/* Sundays view: four Sundays as columns, times as rows (2026-10-24) */
+.cal-grid.cal-grid-sundays { display: block; }
+.sv-wrap { display: grid; grid-template-columns: 3.2rem repeat(4, minmax(0, 1fr)); gap: 0 .4rem; align-items: start; }
+.sv-head { height: 2.2rem; display: flex; flex-direction: column; justify-content: flex-end; padding: 0 .2rem .25rem; font-size: .92rem; cursor: pointer; border-radius: 8px; }
+.sv-head:hover { background: var(--brand-soft); }
+.sv-today .sv-head b { color: var(--brand); }
+.sv-allday { display: flex; flex-wrap: wrap; gap: .2rem; margin-top: .15rem; } .sv-allday .cal-event { cursor: pointer; }
+.sv-body { position: relative; height: var(--sv-h); }
+.sv-gutter .sv-body { margin: 0; } .sv-gutter .dv-hour { border-top: 0; } .sv-gutter .dv-hour span { left: 0; text-align: right; width: 2.9rem; }
+.sv-col .sv-body { margin: 0; border: 1px solid var(--line); border-radius: 10px; background: #fff; overflow: hidden; cursor: pointer; }
+.sv-past .sv-body { opacity: .7; }
+.sv-col .dv-block { font-size: .72rem; padding: .15rem .35rem; } .sv-col .dv-block-title { font-size: .72rem; } .sv-col .dv-block-title span { font-size: .66rem; }
+.sv-col .dv-slot { font-size: .64rem; padding: .05rem .3rem; gap: .2rem; } .sv-col .dv-slot b { min-width: 2rem; } .sv-col .dv-slot i { display: none; }
+.sv-col .dv-block-tag { font-size: .58rem; max-width: 70%; } .sv-col .dv-block-tag.dv-block-note { top: 14px; }
+@media (max-width: 900px) { .sv-wrap { grid-template-columns: 2.6rem repeat(4, minmax(0, 1fr)); } .sv-col .dv-block-who, .sv-col .dv-block-tag { display: none; } }

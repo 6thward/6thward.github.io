@@ -2,21 +2,22 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792723662";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792723662";
+import { db } from "./firebase-init.js?v=1792901864";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792901864";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT } from "./tithing-shared.js?v=1792723662";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792723662";
-import { openCouncilDate } from "./council.js?v=1792723662";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792723662";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT } from "./tithing-shared.js?v=1792901864";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792901864";
+import { openCouncilDate } from "./council.js?v=1792901864";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792901864";
 
 let events = [];
 let users = []; // app users, for the People picker on an event (2026-10-19)
 let viewStart; // ISO date of the Sunday the grid starts on — the current week by default, so past weeks aren't shown (2026-10-18)
 let started = false;
 let calView = "all";          // all | ward | bishop
+let bsStart = null;           // Bishop's Schedule tab: the first of the four Sundays shown (Jordan 10/24)
 let season = null, signups = {}, unsubSignups = null; // tithing declaration (only loads for people who can see it)
 const calOf = (e) => (e.cal === "bishop" ? "bishop" : "ward");
 
@@ -137,6 +138,7 @@ function render() {
   if (openDay && document.getElementById("dv-grid")) drawDay(); // the open day view follows live changes (2026-10-18)
   const grid = document.getElementById("cal-grid");
   if (!grid) return;
+  drawSundays();
   const cells = gridWeeks() * 7;
   const gridDates = Array.from({ length: cells }, (_, i) => addDaysIso(viewStart, i));
   const lastDate = gridDates[cells - 1];
@@ -292,6 +294,25 @@ function dayBlocks(date) {
   }
   return out;
 }
+// one block on a timeline (day view, and the Sundays view) — `style` places it (2026-10-24)
+const layoutCols = (timed) => { timed.sort((a, b) => a.start - b.start); const cols = []; timed.forEach((b) => { let c = cols.findIndex((lastEnd) => lastEnd <= b.start); if (c < 0) { c = cols.length; cols.push(0); } cols[c] = b.end; b.col = c; }); return Math.max(1, cols.length); };
+function blockMarkup(b, style) {
+if (b.kind === "tithing") {
+    // every sign-up time is its own row: "11:05 (10 min) The Smiths" as people book, "open" until they do (Jordan 10/18)
+    const ticks = b.slots.map((s) => { const su = signups[s.id]; return `<div class="dv-slot${su ? " booked" : s.blocked ? " off" : ""}" style="top:${(s.min - b.start) * PX_MIN}px;height:${s.len * PX_MIN}px" title="${fmtClock(s.min)}${su ? " · " + esc(su.name) + (su.phone ? " · " + esc(su.phone) : "") : s.blocked ? " · blocked" : " · open"}"><b>${fmtClock(s.min).replace(/ [AP]M$/, "")}</b> <i>(${s.len} min)</i> <span>${su ? esc(su.name) : s.blocked ? "blocked" : "open"}</span></div>`; }).join("");
+    const booked = b.slots.filter((s) => signups[s.id]).length;
+    return `<div class="dv-block dv-tithing dv-slotted${dvFocus === "t:" + b.id ? " dv-focus" : ""}" data-block="t:${esc(b.id)}" style="${style}"><div class="dv-block-tag">Tithing declaration · ${booked}/${b.slots.filter((s) => !s.blocked || signups[s.id]).length} booked</div>${isPriority(b.win) ? `<div class="dv-block-tag dv-block-note">🔒 Priority</div>` : ""}<div class="dv-slots">${ticks}</div></div>`;
+  }
+  if (b.kind === "interviews") {
+    const len = Number(b.ev.len) || 15, names = b.ev.slots || {}; const ticks = [];
+    for (let m = b.start; m + len <= b.end; m += len) { const k = hhmmOf(m); ticks.push(`<div class="dv-slot${names[k] ? " booked" : ""}" data-islot="${k}" style="top:${(m - b.start) * PX_MIN}px;height:${len * PX_MIN}px" title="${fmtClock(m)}${names[k] ? " · " + esc(names[k]) : " · open — click to add a name"}"><b>${fmtClock(m).replace(/ [AP]M$/, "")}</b> <i>(${len} min)</i> <span>${names[k] ? esc(names[k]) : "open"}</span></div>`); }
+    return `<div class="dv-block dv-interviews dv-slotted${dvFocus === "e:" + b.id ? " dv-focus" : ""}${b.ev.color ? " dv-colored" : ""}" data-block="e:${esc(b.id)}" style="${style}${b.ev.color ? `;--evc:${b.ev.color}` : ""}"><div class="dv-block-tag">${esc(b.title)} · ${Object.keys(names).length}/${ticks.length} filled</div><div class="dv-slots">${ticks.join("")}</div></div>`;
+  }
+  const cls = b.kind === "standing" ? "dv-standing" : b.cal === "bishop" ? "dv-bishop" : "dv-ward";
+  const colored = b.ev?.color ? `;--evc:${b.ev.color}` : "";
+  const who = peopleNames(b.ev?.people);
+  return `<div class="dv-block ${cls}${colored ? " dv-colored" : ""}" data-block="${b.kind === "standing" ? "s:" : "e:"}${esc(b.id)}" style="${style}${colored}" title="${esc(b.title)}${who ? " · with " + esc(who) : ""}"><div class="dv-block-title">${esc(b.title)} <span>${fmtClock(b.start)}–${fmtClock(b.end)}</span>${who ? `<span class="dv-block-who">· ${esc(who)}</span>` : ""}</div></div>`;
+}
 function drawDay() {
   const grid = document.getElementById("dv-grid"), side = document.getElementById("dv-side");
   if (!grid || !openDay) return;
@@ -302,27 +323,8 @@ function drawDay() {
   const timed = blocks.filter((b) => b.start != null);
   const allDay = blocks.filter((b) => b.start == null);
   // overlapping blocks share the width side by side
-  timed.sort((a, b) => a.start - b.start);
-  const cols = []; timed.forEach((b) => { let c = cols.findIndex((lastEnd) => lastEnd <= b.start); if (c < 0) { c = cols.length; cols.push(0); } cols[c] = b.end; b.col = c; });
-  const nCols = Math.max(1, cols.length);
-  const blockHtml = (b) => {
-    const style = `top:${top(Math.max(b.start, DAY_START))}px;height:${h(Math.max(b.start, DAY_START), Math.min(b.end, DAY_END))}px;left:calc(${(b.col / nCols) * 100}% + 2px);width:calc(${100 / nCols}% - 4px)`;
-    if (b.kind === "tithing") {
-      // every sign-up time is its own row: "11:05 (10 min) The Smiths" as people book, "open" until they do (Jordan 10/18)
-      const ticks = b.slots.map((s) => { const su = signups[s.id]; return `<div class="dv-slot${su ? " booked" : s.blocked ? " off" : ""}" style="top:${(s.min - b.start) * PX_MIN}px;height:${s.len * PX_MIN}px" title="${fmtClock(s.min)}${su ? " · " + esc(su.name) + (su.phone ? " · " + esc(su.phone) : "") : s.blocked ? " · blocked" : " · open"}"><b>${fmtClock(s.min).replace(/ [AP]M$/, "")}</b> <i>(${s.len} min)</i> <span>${su ? esc(su.name) : s.blocked ? "blocked" : "open"}</span></div>`; }).join("");
-      const booked = b.slots.filter((s) => signups[s.id]).length;
-      return `<div class="dv-block dv-tithing dv-slotted${dvFocus === "t:" + b.id ? " dv-focus" : ""}" data-block="t:${esc(b.id)}" style="${style}"><div class="dv-block-tag">Tithing declaration · ${booked}/${b.slots.filter((s) => !s.blocked || signups[s.id]).length} booked</div>${isPriority(b.win) ? `<div class="dv-block-tag dv-block-note">🔒 Priority</div>` : ""}<div class="dv-slots">${ticks}</div></div>`;
-    }
-    if (b.kind === "interviews") {
-      const len = Number(b.ev.len) || 15, names = b.ev.slots || {}; const ticks = [];
-      for (let m = b.start; m + len <= b.end; m += len) { const k = hhmmOf(m); ticks.push(`<div class="dv-slot${names[k] ? " booked" : ""}" data-islot="${k}" style="top:${(m - b.start) * PX_MIN}px;height:${len * PX_MIN}px" title="${fmtClock(m)}${names[k] ? " · " + esc(names[k]) : " · open — click to add a name"}"><b>${fmtClock(m).replace(/ [AP]M$/, "")}</b> <i>(${len} min)</i> <span>${names[k] ? esc(names[k]) : "open"}</span></div>`); }
-      return `<div class="dv-block dv-interviews dv-slotted${dvFocus === "e:" + b.id ? " dv-focus" : ""}${b.ev.color ? " dv-colored" : ""}" data-block="e:${esc(b.id)}" style="${style}${b.ev.color ? `;--evc:${b.ev.color}` : ""}"><div class="dv-block-tag">${esc(b.title)} · ${Object.keys(names).length}/${ticks.length} filled</div><div class="dv-slots">${ticks.join("")}</div></div>`;
-    }
-    const cls = b.kind === "standing" ? "dv-standing" : b.cal === "bishop" ? "dv-bishop" : "dv-ward";
-    const colored = b.ev?.color ? `;--evc:${b.ev.color}` : "";
-    const who = peopleNames(b.ev?.people);
-    return `<div class="dv-block ${cls}${colored ? " dv-colored" : ""}" data-block="${b.kind === "standing" ? "s:" : "e:"}${esc(b.id)}" style="${style}${colored}" title="${esc(b.title)}${who ? " · with " + esc(who) : ""}"><div class="dv-block-title">${esc(b.title)} <span>${fmtClock(b.start)}–${fmtClock(b.end)}</span>${who ? `<span class="dv-block-who">· ${esc(who)}</span>` : ""}</div></div>`;
-  };
+  const nCols = layoutCols(timed);
+  const blockHtml = (b) => blockMarkup(b, `top:${top(Math.max(b.start, DAY_START))}px;height:${h(Math.max(b.start, DAY_START), Math.min(b.end, DAY_END))}px;left:calc(${(b.col / nCols) * 100}% + 2px);width:calc(${100 / nCols}% - 4px)`);
   const selHtml = dvSel ? `<div class="dv-sel" style="top:${top(dvSel.a)}px;height:${h(dvSel.a, dvSel.b)}px"><span>${fmtClock(dvSel.a)} – ${fmtClock(dvSel.b)}</span></div>` : "";
   grid.style.height = `${(DAY_END - DAY_START) * PX_MIN + 20}px`;
   grid.innerHTML = `${hours.join("")}<div class="dv-blocks">${timed.map(blockHtml).join("")}${selHtml}</div>`;
@@ -529,6 +531,65 @@ function wireSide(date, blocks, keep) {
     inp.addEventListener("blur", commit);
   });
   side.querySelector("#dv-f-edit")?.addEventListener("click", () => { const ev = events.find((x) => x.id === dvFocus.slice(2)); if (ev) editEvent(ev); });
+}
+// Bishop's Schedule tab (10/24): the next four Sundays as columns, times as rows; every block is drawn like the day view.
+// Click a block to open that Sunday with it selected; click empty space to open the Sunday ready to add.
+const SUNDAYS_SHOWN = 4;
+const nextSunday = () => { const t = todayISO(), s = weekStartOf(t); return s < t ? addDaysIso(s, 7) : s; };
+export function initBishopSchedule() {
+  const panel = document.getElementById("panel-bishopsched"); if (!panel || panel.dataset.ready) return;
+  panel.dataset.ready = "1"; bsStart = nextSunday();
+  panel.innerHTML = `
+    <div class="panel-head"><div><h2>Bishop's Schedule</h2><p class="panel-sub">The next four Sundays side by side. Click anything to change it; click an empty time to add.</p></div>
+      <div class="panel-actions">${can("calendar", "edit") ? `<button class="btn" id="bs-standing" type="button" title="Ward council and bishopric meeting times">⚙ Standing meetings</button>` : ""}</div></div>
+    <div class="card">
+      <div class="cal-head"><button class="btn btn-sm" id="bs-prev" title="Back 4 Sundays">‹</button><h3 id="bs-title"></h3><button class="btn btn-sm" id="bs-next" title="Ahead 4 Sundays">›</button><button class="btn btn-sm" id="bs-today" title="Back to the coming Sunday">Today</button></div>
+      <div class="cal-grid cal-grid-sundays" id="bs-grid"></div>
+    </div>`;
+  panel.querySelector("#bs-prev").addEventListener("click", () => { bsStart = addDaysIso(bsStart, -7 * SUNDAYS_SHOWN); drawSundays(); });
+  panel.querySelector("#bs-next").addEventListener("click", () => { bsStart = addDaysIso(bsStart, 7 * SUNDAYS_SHOWN); drawSundays(); });
+  panel.querySelector("#bs-today").addEventListener("click", () => { bsStart = nextSunday(); drawSundays(); });
+  panel.querySelector("#bs-standing")?.addEventListener("click", editStanding);
+  drawSundays();
+}
+function drawSundays() {
+  const grid = document.getElementById("bs-grid"); if (!grid || !bsStart) return;
+  const dates = Array.from({ length: SUNDAYS_SHOWN }, (_, i) => addDaysIso(bsStart, 7 * i));
+  document.getElementById("bs-title").textContent = `${fmtDate(dates[0])} – ${fmtDate(dates[dates.length - 1], { year: true })}`;
+  const days = dates.map((d) => { const blocks = dayBlocks(d); const timed = blocks.filter((b) => b.start != null); const nCols = layoutCols(timed); return { date: d, timed, allDay: blocks.filter((b) => b.start == null), nCols }; });
+  // the hours shown: whatever the four Sundays need, at least 7 AM – 1 PM, whole hours
+  let lo = 7 * 60, hi = 13 * 60;
+  days.forEach((d) => d.timed.forEach((b) => { lo = Math.min(lo, b.start); hi = Math.max(hi, b.end); }));
+  lo = Math.max(DAY_START, Math.floor(lo / 60) * 60); hi = Math.min(DAY_END, Math.ceil(hi / 60) * 60);
+  const top = (m) => (m - lo) * PX_MIN, h = (a, b) => Math.max(14, (b - a) * PX_MIN), height = (hi - lo) * PX_MIN;
+  const today = todayISO();
+  const hours = []; for (let m = lo; m <= hi; m += 60) hours.push(`<div class="dv-hour" style="top:${top(m)}px"><span>${fmtClock(m).replace(":00", "")}</span></div>`);
+  grid.innerHTML = `<div class="sv-wrap" style="--sv-h:${height}px">
+    <div class="sv-gutter"><div class="sv-head"></div><div class="sv-body">${hours.join("")}</div></div>
+    ${days.map((d) => `<div class="sv-col${d.date === today ? " sv-today" : ""}${d.date < today ? " sv-past" : ""}" data-sv-date="${d.date}">
+      <div class="sv-head" title="Open this Sunday"><b>${esc(fmtDate(d.date))}</b>${d.allDay.length ? `<div class="sv-allday">${d.allDay.map((b) => `<span class="cal-event${b.cal === "bishop" ? " ev-bishop" : ""}" data-sv-open="${b.kind === "standing" ? "s:" : "e:"}${esc(b.id)}">${esc(b.title)}</span>`).join("")}</div>` : ""}</div>
+      <div class="sv-body dv-grid" data-sv-body="${d.date}">${hours.map((x) => x.replace(/<span>.*?<\/span>/, "")).join("")}<div class="dv-blocks">${d.timed.map((b) => blockMarkup(b, `top:${top(Math.max(b.start, lo))}px;height:${h(Math.max(b.start, lo), Math.min(b.end, hi))}px;left:calc(${(b.col / d.nCols) * 100}% + 2px);width:calc(${100 / d.nCols}% - 4px)`)).join("")}</div></div>
+    </div>`).join("")}
+  </div>`;
+  // open a Sunday with the clicked block selected, or ready to add at the clicked time
+  const openAt = (date, focus) => { dayView(date); if (focus) { dvFocus = focus; drawDay(); } };
+  grid.querySelectorAll("[data-block]").forEach((n) => n.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const date = n.closest("[data-sv-date]").dataset.svDate, [t, id] = [n.dataset.block.slice(0, 1), n.dataset.block.slice(2)];
+    if (t === "s") return standingDialog(id);
+    if (t === "t") return openAt(date, "t:" + id);
+    const ev = events.find((x) => x.id === id);
+    if (ev && ev.kind === "interviews") return openAt(date, "e:" + id);
+    if (ev) return openAt(date, "edit:" + id);
+  }));
+  grid.querySelectorAll("[data-sv-open]").forEach((n) => n.addEventListener("click", (e) => { e.stopPropagation(); const [t, id] = [n.dataset.svOpen.slice(0, 1), n.dataset.svOpen.slice(2)]; if (t === "s") return standingDialog(id); const ev = events.find((x) => x.id === id); if (ev) { dayView(n.closest("[data-sv-date]").dataset.svDate); dvFocus = "edit:" + id; drawDay(); } }));
+  grid.querySelectorAll(".sv-head").forEach((n) => n.addEventListener("click", () => { const d = n.closest("[data-sv-date]")?.dataset.svDate; if (d) dayView(d); }));
+  grid.querySelectorAll("[data-sv-body]").forEach((n) => n.addEventListener("click", (e) => {
+    const date = n.dataset.svBody; if (!can("calendar", "edit")) return dayView(date);
+    const r = n.getBoundingClientRect(), m = clampDay(snap(lo + (e.clientY - r.top) / PX_MIN)); // open the Sunday with that hour picked, ready to add
+    dayView(date); dvSel = { a: m, b: Math.min(DAY_END, m + 60), kind: "", len: 15 }; drawDay();
+    document.getElementById("dv-grid")?.parentElement?.scrollTo({ top: Math.max(0, (m - DAY_START) * PX_MIN - 120) });
+  }));
 }
 // drag on the empty timeline → a selection; release → the designate form
 function wireDrag(grid) {
