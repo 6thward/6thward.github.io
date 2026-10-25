@@ -2583,3 +2583,5 @@ tr.us-menu-open td { background: #f7f9fb; }
 .td-rem { display: grid; grid-template-columns: 5rem 1fr auto; gap: .6rem; align-items: center; padding: .35rem .5rem; border: 1px solid var(--line); border-radius: 9px; }
 @media (max-width: 760px) { .td-inv { grid-template-columns: 1fr auto; } .td-inv-head { display: none; } .td-inv-phone { grid-column: 1; } .td-inv-st { grid-column: 1; } .td-inv-acts { grid-column: 2; grid-row: 1 / span 3; } .td-inv-add { grid-template-columns: 1fr; } .td-inv-add > span { display: none; } }
 .td-inv-add textarea { font: inherit; padding: .4rem .55rem; border: 1px solid var(--line); border-radius: 8px; resize: none; line-height: 1.35; }
+.ev-series-note { background: #f1f6fb; border-radius: 8px; padding: .35rem .6rem; }
+#ev-scopewrap { margin: .5rem 0; }

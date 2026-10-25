@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792904607";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792904607";
+import { db } from "./firebase-init.js?v=1792904887";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792904887";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792904607";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792904607";
-import { openCouncilDate } from "./council.js?v=1792904607";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792904607";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792904887";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792904887";
+import { openCouncilDate } from "./council.js?v=1792904887";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792904887";
 
 let events = [];
 let users = []; // app users, for the People picker on an event (2026-10-19)
@@ -750,9 +750,12 @@ function wireBlockDrag(grid, timed) {
       const side = document.getElementById("dv-side");
       if (dvFocus === "edit:" + b.id && side?.querySelector("#ev-start")) { side.querySelector("#ev-start").value = hhmmOf(ns); side.querySelector("#ev-end").value = hhmmOf(ne); }
       try {
-        await updateDoc(doc(db, "events", b.id), { startTime: hhmmOf(ns), endTime: hhmmOf(ne), updatedAt: serverTimestamp() });
-        toast(m === "move" ? `Moved to ${fmtClock(ns)} – ${fmtClock(ne)}` : `Now ends at ${fmtClock(ne)}`);
-        syncBusy(events.map((x) => x.id === b.id ? { ...x, startTime: hhmmOf(ns), endTime: hhmmOf(ne) } : x));
+        let targets = [ev];
+        if (ev.series && side) { targets = await askSeriesScope(side, ev, m === "move" ? "Move" : "Change the end time of"); if (!targets) { drawDay(); return; } }
+        const ids = new Set(targets.map((x) => x.id));
+        await Promise.all(targets.map((x) => updateDoc(doc(db, "events", x.id), { startTime: hhmmOf(ns), endTime: hhmmOf(ne), updatedAt: serverTimestamp() })));
+        toast((m === "move" ? `Moved to ${fmtClock(ns)} – ${fmtClock(ne)}` : `Now ends at ${fmtClock(ne)}`) + (targets.length > 1 ? ` · ${targets.length} meetings` : ""));
+        syncBusy(events.map((x) => ids.has(x.id) ? { ...x, startTime: hhmmOf(ns), endTime: hhmmOf(ne) } : x));
       } catch (err) { toast("Couldn't save: " + (err.code || err.message)); drawDay(); }
     };
     n.addEventListener("pointerup", done); n.addEventListener("pointercancel", done);
@@ -947,7 +950,7 @@ function eventFormHtml(e, defaultDate, canEdit, inline, preset) {
         <textarea id="ev-notes" ${canEdit ? "" : "disabled"}>${esc(e?.notes || "")}</textarea>
       </label>
       <div class="field full"><span>Colour <span class="row-sub">(optional)</span></span>${swatches("ev-color", e?.color)}</div>
-      ${e?.series ? `<label class="field full ev-series"><input type="checkbox" id="ev-series"> <span>Also change the other repeats of this meeting (title, times, location, colour)</span></label>` : canEdit ? `
+      ${e?.series ? `<div class="full row-sub ev-series-note">↻ This meeting repeats — Save will ask whether the change is for this one, this and later ones, or all.</div>` : canEdit ? `
       <label class="field">Repeat<select id="ev-rep">${repeatChoices(e?.date || defaultDate || todayISO()).map(([v, l]) => `<option value="${v}">${esc(v === "0" ? "Doesn't repeat" : l)}</option>`).join("")}</select></label>
       <label class="field" id="ev-until-wrap" hidden>Until<input type="date" id="ev-until" value="${esc(addDaysIso(e?.date || defaultDate || todayISO(), 56))}"></label>
       <div class="full" id="ev-pick-wrap" hidden>${pickDaysHtml(e?.date || defaultDate || todayISO(), "ev-pick")}</div>` : ""}
@@ -1068,11 +1071,11 @@ function wireEventForm(root, e, canEdit, done) {
       if (isNew) {
         await addDoc(collection(db, "events"), { ...data, createdBy: ctx.uid, createdAt: serverTimestamp() });
       } else {
+        let targets = [e];
+        if (e.series) { targets = await askSeriesScope(root, e, "Apply this change to"); if (!targets) return; }
         await updateDoc(doc(db, "events", e.id), data);
-        if (e.series && root.querySelector("#ev-series")?.checked) { // the other repeats take everything but the date
-          const { date: _d, ...shared } = data;
-          await Promise.all(events.filter((x) => x.series === e.series && x.id !== e.id).map((x) => updateDoc(doc(db, "events", x.id), shared)));
-        }
+        const { date: _d, ...shared } = data; // the other repeats take everything but the date
+        await Promise.all(targets.filter((x) => x.id !== e.id).map((x) => updateDoc(doc(db, "events", x.id), shared)));
       }
       for (const d of repeats) await addDoc(collection(db, "events"), { ...data, date: d, createdBy: ctx.uid, createdAt: serverTimestamp() });
       done(); toast(repeats.length ? `Saved — and added on ${repeats.length} more day${repeats.length === 1 ? "" : "s"}` : "Saved");
@@ -1081,6 +1084,26 @@ function wireEventForm(root, e, canEdit, done) {
     } catch (err) {
       toast("Couldn't save: " + (err.code || err.message));
     }
+  });
+}
+// A change to a repeating meeting asks which ones it's for (Jordan 10/24): just this one, this and the later ones, or all.
+// Drawn as a small box inside `host` (the editor, or the day view's side panel) — the day view is already a window.
+function askSeriesScope(host, e, what) {
+  return new Promise((resolve) => {
+    const mine = events.filter((x) => x.series === e.series), later = mine.filter((x) => x.date >= e.date);
+    host.querySelector("#ev-scopewrap")?.remove();
+    const box = document.createElement("div"); box.id = "ev-scopewrap"; box.className = "ev-delwrap";
+    box.innerHTML = `<b>This meeting repeats (${mine.length} dates). ${esc(what)}…</b>
+      <div class="ev-delopts">
+        <button type="button" class="btn btn-sm btn-primary" data-scope="one">Just this one (${esc(fmtDate(e.date))})</button>
+        <button type="button" class="btn btn-sm" data-scope="later">This and the later ones (${later.length})</button>
+        <button type="button" class="btn btn-sm" data-scope="all">All ${mine.length}</button>
+        <button type="button" class="btn btn-sm btn-ghost" data-scope="cancel">Cancel</button>
+      </div>`;
+    (host.querySelector(".modal-actions") || host).before?.(box) ?? host.prepend(box);
+    if (!box.isConnected) host.prepend(box);
+    box.scrollIntoView({ block: "nearest" });
+    box.querySelectorAll("[data-scope]").forEach((b) => b.addEventListener("click", () => { const w = b.dataset.scope; box.remove(); resolve(w === "cancel" ? null : w === "one" ? [e] : w === "later" ? later : mine); }));
   });
 }
 // from the day view, an existing event edits in the side panel beside the timeline; elsewhere it's a window
