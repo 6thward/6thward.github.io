@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792904576";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792904576";
+import { db } from "./firebase-init.js?v=1792904607";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792904607";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792904576";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792904576";
-import { openCouncilDate } from "./council.js?v=1792904576";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792904576";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792904607";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792904607";
+import { openCouncilDate } from "./council.js?v=1792904607";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792904607";
 
 let events = [];
 let users = []; // app users, for the People picker on an event (2026-10-19)
@@ -21,6 +21,9 @@ let calView = "all";          // all | ward | bishop
 const OWNERS = [["bishop", "Bishop"], ["c1", "1st Counselor"], ["c2", "2nd Counselor"]];
 const ownerOf = (e) => (e && OWNERS.some(([k]) => k === e.owner) ? e.owner : "bishop");
 const ownerLabel = (k) => OWNERS.find(([x]) => x === k)?.[1] || "Bishop";
+// a counselor is on a meeting when they're in its People list — matched by the user whose calling is "1st Counselor" / "2nd Counselor" (10/24)
+const counselorUsers = (who) => (who === "c1" || who === "c2" ? users.filter((u) => new RegExp(`^\\s*${who === "c1" ? "1st|first" : "2nd|second"}\\s+counsel`, "i").test(u.calling)) : []);
+const attends = (e, who) => { const cs = counselorUsers(who); return cs.length > 0 && (e.people || []).some((p) => cs.some((u) => (p.uid && p.uid === u.uid) || (p.name && p.name.toLowerCase() === u.name.toLowerCase()))); };
 const ownerSel = (id, cur, canEdit) => `<select id="${id}" ${canEdit ? "" : "disabled"}>${OWNERS.map(([k, l]) => `<option value="${k}"${(cur || "bishop") === k ? " selected" : ""}>${l}</option>`).join("")}</select>`;
 // the three schedule tabs: each shows its own four Sundays
 const SCHEDULES = [["bishopsched", "bishop", "Bishop's Schedule"], ["c1sched", "c1", "1st Counselor's Schedule"], ["c2sched", "c2", "2nd Counselor's Schedule"]];
@@ -71,7 +74,7 @@ export function initCalendar() {
   panel.querySelector("#btn-new-event").addEventListener("click", () => editEvent(null, todayISO()));
   panel.querySelector("#btn-standing")?.addEventListener("click", editStanding);
   onSnapshot(collection(db, "users"), (qs) => {
-    users = qs.docs.map((d) => ({ uid: d.id, name: d.data().name || "", phone: d.data().phone || "" })).filter((u) => u.name && !qs.docs.find((d) => d.id === u.uid).data().alias && !qs.docs.find((d) => d.id === u.uid).data().revoked && qs.docs.find((d) => d.id === u.uid).data().role !== "pending").sort((a, b) => a.name.localeCompare(b.name));
+    users = qs.docs.map((d) => ({ uid: d.id, name: d.data().name || "", phone: d.data().phone || "", calling: d.data().calling || "" })).filter((u) => u.name && !qs.docs.find((d) => d.id === u.uid).data().alias && !qs.docs.find((d) => d.id === u.uid).data().revoked && qs.docs.find((d) => d.id === u.uid).data().role !== "pending").sort((a, b) => a.name.localeCompare(b.name));
   }, () => {});
   watchBishopCal(() => { render(); if (season) syncBusy(events); });
   panel.querySelectorAll("#cal-filter [data-cal]").forEach((b) => b.addEventListener("click", () => {
@@ -292,7 +295,7 @@ function dayView(date) {
 // everything on this day as timeline blocks
 function dayBlocks(date, who) { // who: a schedule tab's owner — ward items + that person's own + standing; tithing only for the bishop
   const out = [];
-  events.filter((e) => e.date === date && showIt(e) && (!who || calOf(e) !== "bishop" || ownerOf(e) === who)).forEach((e) => out.push({ kind: e.kind === "interviews" ? "interviews" : "event", id: e.id, title: e.title, start: e.startTime ? toMinutes(e.startTime) : null, end: e.endTime ? toMinutes(e.endTime) : (e.startTime ? toMinutes(e.startTime) + 60 : null), cal: calOf(e), ev: e }));
+  events.filter((e) => e.date === date && showIt(e) && (!who || calOf(e) !== "bishop" || ownerOf(e) === who || attends(e, who))).forEach((e) => out.push({ kind: e.kind === "interviews" ? "interviews" : "event", id: e.id, title: e.title, start: e.startTime ? toMinutes(e.startTime) : null, end: e.endTime ? toMinutes(e.endTime) : (e.startTime ? toMinutes(e.startTime) + 60 : null), cal: calOf(e), ev: e }));
   standingEvents([date]).filter(showIt).forEach((e) => out.push({ kind: "standing", id: e.id, title: e.title, start: toMinutes(e.startTime), end: toMinutes(e.endTime), cal: "bishop", ev: { color: e.color || "" }, standing: e.standing }));
   if (season && calView !== "ward" && (!who || who === "bishop")) {
     const slots = slotsOf(season.windows, offList(season)).filter((s) => s.date === date);
