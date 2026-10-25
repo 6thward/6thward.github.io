@@ -2600,3 +2600,6 @@ tr.us-menu-open td { background: #f7f9fb; }
 .wc-up-head { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; } .wc-up-pills { margin-left: auto; display: inline-flex; gap: .3rem; }
 .wc-up-items { display: flex; flex-direction: column; gap: .05rem; margin: .3rem 0 0; font-size: .88rem; }
 .wc-up-who { margin-top: .3rem; font-size: .82rem; display: flex; flex-wrap: wrap; gap: .3rem .8rem; } .wc-up-asg { color: var(--ink-soft); } .wc-up-asg b { color: var(--ink); font-weight: 600; }
+/* agenda items: the headline folds the item (2026-10-25) */
+.wc-row .wc-head { cursor: pointer; } .wc-row .wc-head:hover .wc-title { color: var(--brand); }
+.wc-fold { font-size: .95rem; width: 1.4rem; height: 1.4rem; border-radius: 6px; } .wc-fold:hover { background: var(--brand-soft); }

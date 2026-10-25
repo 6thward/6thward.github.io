@@ -9,16 +9,16 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1792935474";
-import { ctx, can } from "./app.js?v=1792935474";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1792935474";
-import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1792935474";
+import { db } from "./firebase-init.js?v=1792935566";
+import { ctx, can } from "./app.js?v=1792935566";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1792935566";
+import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1792935566";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { watchBishopCal, bishopCalConfig } from "./bishop-cal.js?v=1792935474";
+import { watchBishopCal, bishopCalConfig } from "./bishop-cal.js?v=1792935566";
 const clock12 = (hhmm) => { const [h, m] = String(hhmm).split(":").map(Number); return `${h % 12 || 12}:${String(m || 0).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`; };
-import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1792935474";
+import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1792935566";
 
 // One agenda page per "board": Ward Council (councils/…) and, since 2026-10-25, the Bishopric meeting (bishopric/…).
 // The same code runs twice with a config; a Bishopric item can be sent to the next ward council agenda.
@@ -696,6 +696,12 @@ function render() {
     if (nowFolded) { collapsed.add(id); expandedDone.delete(id); } else { collapsed.delete(id); if (done) expandedDone.add(id); }
     saveFolded();
     row.classList.toggle("wc-folded", nowFolded); b.textContent = nowFolded ? "▸" : "▾"; b.title = nowFolded ? "Show the details" : "Hide the details";
+  }));
+  // the headline itself folds / unfolds too (Jordan 10/25) — chips, buttons and the notes stay clickable on their own
+  body.querySelectorAll(".wc-row .wc-head").forEach((h) => h.addEventListener("click", (e) => {
+    if (e.target.closest("button, a, input, [data-owner], [data-assignee], [data-due], .wc-actions, .wc-fold")) return;
+    if (window.getSelection && String(window.getSelection())) return; // selecting text isn't a click
+    h.querySelector("[data-fold]")?.click();
   }));
   body.querySelectorAll("[data-foldall]").forEach((b) => b.addEventListener("click", () => {
     const fold = b.dataset.foldall === "1";
