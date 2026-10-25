@@ -1,17 +1,17 @@
 // Tithing declaration sign-ups (2026-10-04) — the bishop's side, its own page
 // ("Tithing Declaration" tab, area key "tithing"): set when you're available, share the link / QR code, and see
 // who signed up. The public page is tithing.html (js/tithing-form.js).
-import { db } from "./firebase-init.js?v=1792931010";
-import { ctx, can } from "./app.js?v=1792931010";
+import { db } from "./firebase-init.js?v=1792931054";
+import { ctx, can } from "./app.js?v=1792931054";
 import {
   collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { watchBishopCal, standingEvents } from "./bishop-cal.js?v=1792931010";
-import { openModal, closeModal, toast } from "./ui.js?v=1792931010";
+import { watchBishopCal, standingEvents } from "./bishop-cal.js?v=1792931054";
+import { openModal, closeModal, toast } from "./ui.js?v=1792931054";
 import {
   GROUPS, PLACES, SLOT_LENGTHS, esc, toMin, fmtClock, fmtLongDay, fmtShortDay, slotsOf, slotMap, isPriority, PRIORITY_TEXT,
   sortWindows, overlaps, newToken, parseSlotId, todayIso, addDays, hhmm, busyFromEvents, sameBusy, offList,
-} from "./tithing-shared.js?v=1792931010";
+} from "./tithing-shared.js?v=1792931054";
 
 let mount = null, season = null, signups = [], unsubSignups = null, started = false, dirty = false;
 let events = null; // the ward calendar (events with cal: "bishop" block sign-up times); null until it loads
@@ -489,10 +489,10 @@ async function printFlyer(url) {
     </div>`, `
     @page { size: letter; margin: .6in; }
     .fly { text-align: center; padding: .4in .3in; }
-    .fly-ward { font-size: 15pt; letter-spacing: .12em; text-transform: uppercase; color: #5b6675; }
-    .fly h1 { font-size: 44pt; margin: .1in 0 0; letter-spacing: -.01em; }
-    .fly-lead { font-size: 20pt; margin: .1in 0 .3in; }
-    .fly img { width: 4.2in; height: 4.2in; }
+    .fly-ward { font-size: 34pt; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #1f2733; } /* big ward name, small QR (Jordan 10/25) */
+    .fly h1 { font-size: 40pt; margin: .05in 0 0; letter-spacing: -.01em; }
+    .fly-lead { font-size: 18pt; margin: .1in 0 .25in; }
+    .fly img { width: 2.2in; height: 2.2in; }
     .fly-how { font-size: 14pt; margin: .3in 0 0; }
     .fly-note { font-size: 13pt; margin: .2in auto 0; max-width: 6in; white-space: pre-wrap; }
     .fly-days { font-size: 12pt; margin: .25in auto 0; max-width: 6.4in; }
