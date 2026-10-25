@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792902022";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792902022";
+import { db } from "./firebase-init.js?v=1792902103";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792902103";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792902022";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792902022";
-import { openCouncilDate } from "./council.js?v=1792902022";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792902022";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792902103";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792902103";
+import { openCouncilDate } from "./council.js?v=1792902103";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792902103";
 
 let events = [];
 let users = []; // app users, for the People picker on an event (2026-10-19)
@@ -234,6 +234,7 @@ const KINDS = [
   ["sacrament", "Sacrament meeting", "", "#1f4e79"],
   ["council", "Ward council", "", "#7a4fb5"],
   ["bishopric", "Bishopric meeting", "", "#7a4fb5"],
+  ["youthcouncil", "Ward youth council", "", "#2e7d4f"],
   ["stake", "Stake training", "", "#b98a2f"],
   ["bishoptrain", "Bishop training", "", "#b98a2f"],
   ["ymlead", "Young Men leadership", "", "#2e7d4f"],
