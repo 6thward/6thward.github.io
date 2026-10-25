@@ -2554,3 +2554,10 @@ tr.us-menu-open td { background: #f7f9fb; }
 .sv-scroll .sv-head:hover { background: #dbe7f3; }
 .sv-scroll .sv-gutter .sv-head { background: var(--brand-soft); border-bottom-color: var(--brand); box-shadow: none; }
 .sv-wrap { gap: 0 .4rem; } .sv-scroll .sv-gutter .sv-head, .sv-scroll .sv-col .sv-head { box-sizing: border-box; }
+/* came / no-show on tithing times, in the day view and the schedules (2026-10-24) */
+.dv-slot.came span { color: var(--ok, #2e7d4f); font-weight: 700; opacity: 1; }
+.dv-slot.noshow span { text-decoration: line-through; opacity: .6; }
+.dv-tst { display: inline-flex; gap: .2rem; }
+.dv-st-btn { font: inherit; font-size: .8rem; font-weight: 700; line-height: 1; padding: .25rem .45rem; border: 1px solid var(--line); border-radius: 7px; background: #fff; cursor: pointer; color: var(--ink-soft); }
+.dv-st-btn.dv-st-yes.on { background: #e3f1e8; border-color: #2e7d4f; color: #2e7d4f; }
+.dv-st-btn.dv-st-no.on { background: #fbe7e3; border-color: #b3402f; color: #b3402f; }

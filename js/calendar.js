@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792903231";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792903231";
+import { db } from "./firebase-init.js?v=1792904286";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792904286";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792903231";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792903231";
-import { openCouncilDate } from "./council.js?v=1792903231";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792903231";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792904286";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792904286";
+import { openCouncilDate } from "./council.js?v=1792904286";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792904286";
 
 let events = [];
 let users = []; // app users, for the People picker on an event (2026-10-19)
@@ -308,7 +308,7 @@ const layoutCols = (timed) => { timed.sort((a, b) => a.start - b.start); const c
 function blockMarkup(b, style) {
 if (b.kind === "tithing") {
     // every sign-up time is its own row: "11:05 (10 min) The Smiths" as people book, "open" until they do (Jordan 10/18)
-    const ticks = b.slots.map((s) => { const su = signups[s.id]; return `<div class="dv-slot${su ? " booked" : s.blocked ? " off" : ""}" style="top:${(s.min - b.start) * PX_MIN}px;height:${s.len * PX_MIN}px" title="${fmtClock(s.min)}${su ? " · " + esc(su.name) + (su.phone ? " · " + esc(su.phone) : "") : s.blocked ? " · blocked" : " · open"}"><b>${fmtClock(s.min).replace(/ [AP]M$/, "")}</b> <i>(${s.len} min)</i> <span>${su ? esc(su.name) : s.blocked ? "blocked" : "open"}</span></div>`; }).join("");
+    const ticks = b.slots.map((s) => { const su = signups[s.id]; const st = su?.status === "attended" ? " came" : su?.status === "noshow" ? " noshow" : ""; return `<div class="dv-slot${su ? " booked" + st : s.blocked ? " off" : ""}" style="top:${(s.min - b.start) * PX_MIN}px;height:${s.len * PX_MIN}px" title="${fmtClock(s.min)}${su ? " · " + esc(su.name) + (su.phone ? " · " + esc(su.phone) : "") + (st === " came" ? " · came" : st === " noshow" ? " · no-show" : "") : s.blocked ? " · blocked" : " · open"}"><b>${fmtClock(s.min).replace(/ [AP]M$/, "")}</b> <i>(${s.len} min)</i> <span>${st === " came" ? "✓ " : st === " noshow" ? "✗ " : ""}${su ? esc(su.name) : s.blocked ? "blocked" : "open"}</span></div>`; }).join("");
     const booked = b.slots.filter((s) => signups[s.id]).length;
     return `<div class="dv-block dv-tithing dv-slotted${dvFocus === "t:" + b.id ? " dv-focus" : ""}" data-block="t:${esc(b.id)}" style="${style}"><div class="dv-block-tag">Tithing declaration · ${booked}/${b.slots.filter((s) => !s.blocked || signups[s.id]).length} booked</div>${isPriority(b.win) ? `<div class="dv-block-tag dv-block-note">🔒 Priority</div>` : ""}<div class="dv-slots">${ticks}</div></div>`;
   }
@@ -427,7 +427,7 @@ function focusHtml(date, blocks) {
         return `<div class="dv-irow dv-trow${su ? " booked" : s.blocked ? " off" : ""}"><b>${fmtClock(s.min)}</b>${
           busyT ? `<span class="row-sub" title="On the bishop's calendar">📅 ${esc(busyT)}</span>`
           : !su && s.blocked ? `<span class="row-sub">blocked out</span>${ed ? `<button type="button" class="btn btn-sm btn-ghost" data-tblock="${s.id}" data-on="0" title="Open this time back up">unblock</button>` : ""}`
-          : `<input data-tname="${s.id}" value="${esc(su?.name || "")}" placeholder="open" autocomplete="off" ${ed ? "" : "disabled"} title="${su?.phone ? esc(su.phone) : ""}">${ed && !su ? `<button type="button" class="btn btn-sm btn-ghost" data-tblock="${s.id}" data-on="1" title="Block out this time so nobody can sign up for it">⊘</button>` : su?.phone ? `<span class="row-sub dv-tphone">${esc(su.phone)}</span>` : ""}`}</div>`; }).join("")}</div>
+          : `<input data-tname="${s.id}" value="${esc(su?.name || "")}" placeholder="open" autocomplete="off" ${ed ? "" : "disabled"} title="${su?.phone ? esc(su.phone) : ""}">${ed && !su ? `<button type="button" class="btn btn-sm btn-ghost" data-tblock="${s.id}" data-on="1" title="Block out this time so nobody can sign up for it">⊘</button>` : su && ed ? `<span class="dv-tst" data-tst-for="${s.id}"><button type="button" class="dv-st-btn dv-st-yes${su.status === "attended" ? " on" : ""}" data-tstatus="attended" title="They came">✓</button><button type="button" class="dv-st-btn dv-st-no${su.status === "noshow" ? " on" : ""}" data-tstatus="noshow" title="They didn't come">✗</button></span>` : su?.phone ? `<span class="row-sub dv-tphone">${esc(su.phone)}</span>` : ""}`}</div>`; }).join("")}</div>
       <div class="dv-form-actions">${ed ? `<button type="button" class="btn btn-ghost btn-danger" id="dv-f-remove">Remove block</button>` : ""}<button type="button" class="btn" id="dv-back">Back</button>${ed ? `<button type="button" class="btn btn-primary" id="dv-f-save">Save</button>` : ""}</div>`;
   }
   const ev = b.ev, len = Number(ev.len) || 15, names = ev.slots || {}, ed = can("calendar", "edit") || ev.createdBy === ctx.uid;
@@ -510,6 +510,13 @@ function wireSide(date, blocks, keep) {
     inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); inp.blur(); } });
     inp.addEventListener("blur", commit);
   });
+  // came / didn't come — the same field the Tithing Declaration page marks, so both stay in step (Jordan 10/24)
+  side.querySelectorAll("[data-tstatus]").forEach((b) => b.addEventListener("click", async () => {
+    const id = b.closest("[data-tst-for]").dataset.tstFor, su = signups[id]; if (!su) return;
+    const status = su.status === b.dataset.tstatus ? "" : b.dataset.tstatus;
+    try { await updateDoc(doc(db, "tithing", season.token, "signups", id), { status, statusAt: serverTimestamp(), statusBy: ctx.name || "" }); toast(status === "attended" ? `${su.name} — came` : status === "noshow" ? `${su.name} — no-show` : "Cleared"); }
+    catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
+  }));
   side.querySelectorAll("[data-tblock]").forEach((b) => b.addEventListener("click", async () => {
     const id = b.dataset.tblock, on = b.dataset.on === "1";
     const blocked = on ? [...new Set([...(season.blocked || []), id])] : (season.blocked || []).filter((x) => x !== id);
