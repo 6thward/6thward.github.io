@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1792945466";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1792945466";
+import { db } from "./firebase-init.js?v=1792955393";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1792955393";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1792945466";
-import { HYMNS } from "./hymns.js?v=1792945466";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1792945466";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1792955393";
+import { HYMNS } from "./hymns.js?v=1792955393";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1792955393";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -341,6 +341,11 @@ function defaultTypeFor(dateISO) {
 let meetings = {};   // date -> doc data
 let started = false;
 let viewMode = localStorage.getItem("sw-sacview") || "cards";
+// announcements / ward business boxes on the Sunday card (2026-10-25, wireframe C): folded ones remembered on this device as "date:ann" / "date:wb"
+// this week and next week start open, later Sundays start folded (Jordan 10/25); a click either way is remembered on this device
+const boxState = new Map(Object.entries((() => { try { return JSON.parse(localStorage.getItem("sw-sac-boxes") || "{}"); } catch { return {}; } })()));
+const saveBoxState = () => { try { localStorage.setItem("sw-sac-boxes", JSON.stringify(Object.fromEntries([...boxState.entries()].slice(-300)))); } catch {} };
+const isBoxFolded = (date, key) => { const v = boxState.get(date + ":" + key); if (v !== undefined) return !!v; const d = new Date(date + "T12:00:00"), t = new Date(); t.setHours(12, 0, 0, 0); const days = (d - t) / 86400000; return days > 13; };
 let viewYear = new Date().getFullYear();
 let showPast = false; // table: include the current year's earlier Sundays
 
@@ -1127,7 +1132,27 @@ function statusChips(m, date) {
     if (!adultSpk.length && type !== "fast") restore.push(`<span class="st-restore" data-unhide="speakers" title="Add a Speakers box to this Sunday">+ Speakers</span>`); // e.g. a Primary Program that also has a speaker
     if (restore.length) chips.push(`<span class="st-restore-wrap">${restore.join("")}</span>`);
   }
-  return `<div class="st-row">${chips.join("")}</div>`;
+  // announcements + ward business as the first row (2026-10-25): Announcements on the left, Ward business as three tinted panels
+  // (Releases · Sustainings · Other). Each box folds to its heading; ✕ hides it for this Sunday, "+ …" brings it back.
+  const hid = (m && m.hide) || {};
+  const annText = (of("announcements")[0]?.text || "").trim();
+  const annLines = annText.split("\n").map((l) => l.trim()).filter(Boolean);
+  const wbItems = of("wardBusiness");
+  const rel = wbItems.flatMap((b) => b.releasings || []), sus = wbItems.flatMap((b) => b.sustainings || []), oth = wbItems.flatMap(otherLines);
+  const foldBtn = (key) => `<button type="button" class="st-box-fold" data-boxfold="${key}" title="${isBoxFolded(date, key) ? "Show" : "Fold up"}">${isBoxFolded(date, key) ? "▸" : "▾"}</button>`;
+  const person = (p) => `<li>${esc(p.name || "—")}${p.calling ? ` <span>— ${esc(p.calling)}</span>` : ""}</li>`;
+  const annBox = hid.ann ? "" : `<div class="st-box st-box-ann${isBoxFolded(date, "ann") ? " folded" : ""}${can ? " st-click" : ""}"${can ? ` data-qe='{"t":"announce"}' title="Click to edit the announcements"` : ""}>
+      <div class="st-box-head">${foldBtn("ann")}<span class="st-box-title">🔈 Announcements</span>${annLines.length ? `<span class="st-box-n">${annLines.length}</span>` : ""}${xBtn("ann", "Announcements")}</div>
+      <div class="st-box-body">${annLines.length ? `<ul>${annLines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>` : `<div class="st-box-empty">No announcements yet</div>`}${can ? `<span class="st-box-add">+ announcement</span>` : ""}</div>
+    </div>`;
+  const wbCol = (cls, label, list, addLabel) => `<div class="wb-col ${cls}"><h5>${label}${list.length ? ` <span class="n">${list.length}</span>` : ""}</h5>${list.length ? `<ul>${list.join("")}</ul>` : ""}${can ? `<span class="st-box-add">${addLabel}</span>` : (list.length ? "" : `<div class="st-box-empty">—</div>`)}</div>`;
+  const wbBox = hid.wb ? "" : `<div class="st-box st-box-wb${isBoxFolded(date, "wb") ? " folded" : ""}${can ? " st-click" : ""}"${can ? ` data-wbicon="${date}" title="Click to edit ward business"` : ""}>
+      <div class="st-box-head">${foldBtn("wb")}<span class="st-box-title">📋 Ward business</span>${rel.length + sus.length + oth.length ? `<span class="st-box-sum">${[rel.length ? `${rel.length} release${rel.length === 1 ? "" : "s"}` : "", sus.length ? `${sus.length} sustaining${sus.length === 1 ? "" : "s"}` : "", oth.length ? `${oth.length} other` : ""].filter(Boolean).join(" · ")}</span>` : ""}${xBtn("wb", "Ward business")}</div>
+      <div class="st-box-body"><div class="wb-cols">${wbCol("rel", "Releases", rel.map(person), "+ release")}${wbCol("sus", "Sustainings", sus.map(person), "+ sustaining")}${wbCol("oth", "Other", oth.map((o) => `<li>${esc(o)}</li>`), "+ item")}</div></div>
+    </div>`;
+  const topRestore = can ? [hid.ann ? `<span class="st-restore" data-unhide="ann" title="Bring the Announcements box back for this Sunday">+ Announcements</span>` : "", hid.wb ? `<span class="st-restore" data-unhide="wb" title="Bring the Ward business box back for this Sunday">+ Ward business</span>` : ""].filter(Boolean) : [];
+  const top = annBox || wbBox ? `<div class="st-top${!annBox || !wbBox ? " st-top-one" : ""}">${annBox}${wbBox}${topRestore.length ? `<span class="st-restore-wrap st-top-restore">${topRestore.join("")}</span>` : ""}</div>` : (topRestore.length ? `<div class="st-top-restore-row">${topRestore.join("")}</div>` : "");
+  return `${top}<div class="st-row">${chips.join("")}</div>`;
 }
 
 // ---- Render ----
@@ -1275,6 +1300,14 @@ function renderCards(wrap) {
       if (canEdit) quickEdit(el.dataset.wbicon, { t: "wb" });
       else wbModal(el.dataset.wbicon);
     }));
+  // fold / unfold the announcements and ward business boxes (2026-10-25)
+  wrap.querySelectorAll("[data-boxfold]").forEach((b) => b.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const box = b.closest(".st-box"), id = box.closest("[data-date]").dataset.date + ":" + b.dataset.boxfold;
+    const fold = !box.classList.contains("folded");
+    boxState.set(id, fold); saveBoxState();
+    box.classList.toggle("folded", fold); b.textContent = fold ? "▸" : "▾"; b.title = fold ? "Show" : "Fold up";
+  }));
   // remove / restore the Music Number or Youth Speakers box for one Sunday (2026-09-20)
   wrap.querySelectorAll("[data-hide]").forEach((x) =>
     x.addEventListener("click", (e) => {
@@ -1282,6 +1315,7 @@ function renderCards(wrap) {
       const key = x.dataset.hide;
       const date = x.closest("[data-date]").dataset.date;
       const its = itemsFor(meetings[date], date);
+      if (key === "ann" || key === "wb") { patchMeeting(date, (mm) => { mm.hide = { ...(mm.hide || {}), [key]: true }; }); return; } // just tucked away — nothing is cleared
       const has = key === "music" ? its.some((i) => SLOT_KINDS.includes(i.kind) && (i.num || i.title || i.who || i.hymn))
         : its.some((i) => (i.kind === "primarySpeaker" || i.kind === "youthSpeaker") && i.name);
       if (has && !confirm(`Remove the ${key === "music" ? "Other Music" : "Youth Speakers"} box for this Sunday? What's in it will be cleared.`)) return;

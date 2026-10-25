@@ -2608,3 +2608,22 @@ tr.us-menu-open td { background: #f7f9fb; }
 .dv-block:hover .dv-block-x, .dv-block.dv-focus .dv-block-x { opacity: 1; } .dv-block-x:hover { background: #fbe7e3; color: #b3402f; }
 .dv-block.dv-slotted .dv-block-x { top: 1px; right: 2px; } .dv-block.dv-slotted .dv-block-tag { right: 1.6rem; }
 .sv-col .dv-block-x { width: 1.05rem; height: 1.05rem; line-height: 1.05rem; font-size: .62rem; }
+/* Sunday card: Announcements + Ward business as the first row (2026-10-25, wireframe C, tinted panels) */
+.st-top { display: grid; grid-template-columns: 1fr 2fr; gap: .3rem; margin-top: .55rem; } .st-top.st-top-one { grid-template-columns: 1fr; }
+.st-box { position: relative; background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: .4rem .6rem .5rem; text-align: left; }
+.st-box-ann { border-left: 4px solid #2e7d4f; } .st-box-wb { border-left: 4px solid #5b3fa8; }
+.st-box-head { display: flex; align-items: center; gap: .4rem; }
+.st-box-title { font-weight: 700; font-size: .82rem; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); }
+.st-box-n { background: #e3f1e8; color: #2e7d4f; border-radius: 99px; padding: 0 .45rem; font-size: .72rem; font-weight: 700; }
+.st-box-sum { font-size: .78rem; color: var(--ink-soft); }
+.st-box-fold { font: inherit; font-size: .8rem; line-height: 1; width: 1.25rem; height: 1.25rem; border: 0; background: none; color: var(--ink-soft); cursor: pointer; border-radius: 6px; padding: 0; } .st-box-fold:hover { background: #eef1f4; color: var(--brand); }
+.st-box .st-x { position: static; transform: none; margin-left: auto; opacity: .35; cursor: pointer; padding: .1rem .3rem; border-radius: 6px; font-size: .75rem; } .st-box .st-x:hover { opacity: 1; background: rgba(0,0,0,.08); }
+.st-box-body { margin-top: .3rem; } .st-box.folded .st-box-body { display: none; }
+.st-box-body ul { margin: 0; padding-left: 1.1rem; font-size: .88rem; } .st-box-body li { margin: .12rem 0; } .st-box-body li span { color: var(--ink-soft); }
+.st-box-empty { font-size: .85rem; color: #9aa3ad; font-style: italic; }
+.st-box-add { display: inline-block; margin-top: .3rem; color: var(--brand); font-weight: 600; font-size: .8rem; }
+.wb-cols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .4rem; }
+.wb-col { border-radius: 9px; padding: .4rem .55rem .45rem; min-height: 3rem; } .wb-col.rel { background: #f3f1f6; } .wb-col.sus { background: #eef3f0; } .wb-col.oth { background: #f1f3f6; }
+.wb-col h5 { margin: 0 0 .2rem; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); display: flex; align-items: center; gap: .3rem; } .wb-col h5 .n { background: #fff; border-radius: 99px; padding: 0 .4rem; font-size: .68rem; color: var(--ink); }
+.wb-col ul { padding-left: 1rem; }
+@media (max-width: 900px) { .st-top { grid-template-columns: 1fr; } .wb-cols { grid-template-columns: 1fr; } }
