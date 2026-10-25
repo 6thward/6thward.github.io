@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1792933470";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1792933470";
+import { db } from "./firebase-init.js?v=1792933530";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1792933530";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1792933470";
-import { HYMNS } from "./hymns.js?v=1792933470";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1792933470";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1792933530";
+import { HYMNS } from "./hymns.js?v=1792933530";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1792933530";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -516,7 +516,7 @@ function agendaText(m, date) {
     if (k === "babyBlessing") { if (it.name) L.push(`Baby Blessing: ${it.name}${it.by ? " by " + it.by : ""}`); return; }
     if (k === "wardBusiness") {
       const parts = [...(it.sustainings || []).map((x) => `sustain ${x.name}${x.calling ? " — " + x.calling : ""}`), ...(it.releasings || []).map((x) => `release ${x.name}${x.calling ? " — " + x.calling : ""}`)];
-      if (it.other) parts.push(it.other);
+      parts.push(...otherLines(it));
       if (parts.length) L.push("Ward Business:", ...parts.map((x) => "  • " + x));
       return;
     }
@@ -807,6 +807,8 @@ function sundaysOfYear(year, fromISO) {
 
 // small Ward Business pill for the table's Conducting cell: grey when empty,
 // colored + summarized when there's content; click opens the quick editor.
+// "Other business" is one item per line (Jordan 10/25); older text with "- " bullets reads the same way
+const otherLines = (it) => String(it?.other || "").split("\n").map((l) => l.replace(/^\s*[-•]\s*/, "").trim()).filter(Boolean);
 function wbPillHtml(m, date, canEdit) {
   const items = itemsFor(m, date).filter((i) => i.kind === "wardBusiness");
   const susCount = items.reduce((a, b) => a + (b.sustainings?.length || 0), 0);
@@ -1975,9 +1977,9 @@ function quickEdit(date, q) {
       <div id="qe-wb-sus">${rowsHtml(wbState.sustainings, "sus")}</div>
       <div class="row-sub" style="margin:.8rem 0 .2rem">Releasings <button class="btn btn-sm" id="qe-wb-addrel" type="button">+ Add</button></div>
       <div id="qe-wb-rel">${rowsHtml(wbState.releasings, "rel")}</div>
-      <label class="field" style="margin-top:.8rem">Other business
-        <textarea id="qe-wb-other" rows="2">${esc(wbState.other)}</textarea>
-      </label>`;
+      <div class="row-sub" style="margin:.8rem 0 .2rem">Other business <button class="btn btn-sm" id="qe-wb-addoth" type="button">+ Add</button></div>
+      <div id="qe-wb-oth">${otherLines(wbState).map((o) => `
+        <div class="speaker-row"><span class="ann-dot">•</span><input class="wb-other" autocomplete="off" placeholder="e.g. Ward temple day, Wednesday Nov 4 at 6 pm" value="${esc(o)}"><button class="btn btn-sm" data-wbdel="oth" type="button">✕</button></div>`).join("")}</div>`;
     onSave = (el) => {
       const readList = (prefix) => [...el.querySelectorAll(`.wb-name[data-list="${prefix}"]`)].map((inp) => {
         const r = inp.dataset.row;
@@ -1986,7 +1988,7 @@ function quickEdit(date, q) {
       }).filter((s) => s.name || s.calling);
       const sustainings = readList("sus");
       const releasings = readList("rel");
-      const other = el.querySelector("#qe-wb-other").value.trim();
+      const other = [...el.querySelectorAll(".wb-other")].map((i) => i.value.trim()).filter(Boolean).join("\n");
       return (m) => {
         let t = m.items.find((i) => i.kind === "wardBusiness");
         if (!t) { t = blankItem("wardBusiness"); insertCanonical(m.items, t); }
@@ -2070,6 +2072,10 @@ function quickEdit(date, q) {
           <input class="wb-calling" data-list="${prefix}" data-row="${r}" placeholder="Calling">
           <button class="btn btn-sm" data-wbdel="${prefix}" data-row="${r}" type="button">✕</button>
         </div>`);
+    }
+    if (e.target.id === "qe-wb-addoth") {
+      el.querySelector("#qe-wb-oth").insertAdjacentHTML("beforeend", `<div class="speaker-row"><span class="ann-dot">•</span><input class="wb-other" autocomplete="off" placeholder="e.g. Ward temple day, Wednesday Nov 4 at 6 pm"><button class="btn btn-sm" data-wbdel="oth" type="button">✕</button></div>`);
+      el.querySelector("#qe-wb-oth .speaker-row:last-child .wb-other")?.focus();
     }
     if (e.target.dataset.wbdel) e.target.closest(".speaker-row").remove();
     // announcements rows
@@ -2211,7 +2217,7 @@ function wbModal(date) {
   const wb = (m.items || []).filter((i) => i.kind === "wardBusiness");
   const sus = wb.flatMap((b) => b.sustainings || []);
   const rel = wb.flatMap((b) => b.releasings || []);
-  const other = wb.map((b) => (b.other || "").trim()).filter(Boolean);
+  const other = wb.flatMap(otherLines);
   const line = (p) => `<div>${esc(p.name)}${p.calling ? ` — <span class="row-sub">${esc(p.calling)}</span>` : ""}</div>`;
   const el = openModal(`
     <h3>Ward Business <span class="row-sub">· ${fmtDay(date, { year: true })}</span></h3>
@@ -2555,7 +2561,7 @@ function renderAgendaView(m, canEdit = false) {
       const parts = [];
       (it.sustainings || []).forEach((s) => parts.push(`Sustain: ${esc(s.name)}${s.calling ? " — " + esc(s.calling) : ""}`));
       (it.releasings || []).forEach((r) => parts.push(`Release: ${esc(r.name)}${r.calling ? " — " + esc(r.calling) : ""}`));
-      if (it.other) parts.push(esc(it.other));
+      otherLines(it).forEach((o) => parts.push(esc(o)));
       if (parts.length) extraBelow = `<div class="ag-detail-box ag-detail-full">${parts.map((p) => `• ${p}`).join("<br>")}</div>`;
     } else if (it.kind === "announcements") {
       const lines = (it.text || "").split("\n").map((s) => s.trim()).filter(Boolean);
