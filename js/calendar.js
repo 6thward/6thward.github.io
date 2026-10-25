@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792904887";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792904887";
+import { db } from "./firebase-init.js?v=1792905091";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792905091";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792904887";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792904887";
-import { openCouncilDate } from "./council.js?v=1792904887";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792904887";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792905091";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792905091";
+import { openCouncilDate } from "./council.js?v=1792905091";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792905091";
 
 let events = [];
 let users = []; // app users, for the People picker on an event (2026-10-19)
@@ -74,7 +74,7 @@ export function initCalendar() {
   panel.querySelector("#btn-new-event").addEventListener("click", () => editEvent(null, todayISO()));
   panel.querySelector("#btn-standing")?.addEventListener("click", editStanding);
   onSnapshot(collection(db, "users"), (qs) => {
-    users = qs.docs.map((d) => ({ uid: d.id, name: d.data().name || "", phone: d.data().phone || "", calling: d.data().calling || "" })).filter((u) => u.name && !qs.docs.find((d) => d.id === u.uid).data().alias && !qs.docs.find((d) => d.id === u.uid).data().revoked && qs.docs.find((d) => d.id === u.uid).data().role !== "pending").sort((a, b) => a.name.localeCompare(b.name));
+    users = qs.docs.map((d) => ({ uid: d.id, name: d.data().name || "", phone: d.data().phone || "", calling: d.data().calling || "", role: d.data().role || "", councilMember: !!d.data().councilMember })).filter((u) => u.name && !qs.docs.find((d) => d.id === u.uid).data().alias && !qs.docs.find((d) => d.id === u.uid).data().revoked && qs.docs.find((d) => d.id === u.uid).data().role !== "pending").sort((a, b) => a.name.localeCompare(b.name));
   }, () => {});
   watchBishopCal(() => { render(); if (season) syncBusy(events); });
   panel.querySelectorAll("#cal-filter [data-cal]").forEach((b) => b.addEventListener("click", () => {
@@ -887,10 +887,19 @@ function editStanding() {
 
 // People on an event (2026-10-19): pick an app user from the list or type any name; Enter / comma adds, ✕ removes
 const peopleNames = (list) => (list || []).map((p) => p.name).filter(Boolean).join(", ");
+// quick groups (10/24): who's in each comes from Users — the bishop's role, the exact callings, the Ward council tick
+const isBishopric = (u) => u.role === "bishop" || /^(1st|2nd|first|second)\s+counselor$/i.test(u.calling.trim());
+const isClerkOrSec = (u) => /clerk/i.test(u.calling) || /^(assistant\s+)?(executive\s+)?secretary$/i.test(u.calling.trim());
+const PEOPLE_GROUPS = [
+  ["bishopric", "Bishopric", (u) => isBishopric(u)],
+  ["council", "Ward council", (u) => u.councilMember],
+  ["bishopric-clerks", "Bishopric, clerks & secretaries", (u) => isBishopric(u) || isClerkOrSec(u)],
+];
 function peopleHtml(id, list, canEdit) {
   return `<div class="ev-people" id="${id}">
     <div class="ev-chips">${(list || []).map((p) => `<span class="ev-chip${p.uid ? " ev-chip-user" : ""}" data-uid="${esc(p.uid || "")}" data-name="${esc(p.name)}">${esc(p.name)}${canEdit ? `<button type="button" class="ev-chip-x" title="Remove">✕</button>` : ""}</span>`).join("")}</div>
-    ${canEdit ? `<input class="ev-people-in" list="ev-people-dl" placeholder="Add a person — pick a user or type a name, Enter adds" autocomplete="off">
+    ${canEdit ? `<div class="ev-people-groups">${PEOPLE_GROUPS.map(([k, l, f]) => { const n = users.filter(f).length; return `<button type="button" class="btn btn-sm" data-pgroup="${k}" ${n ? "" : "disabled"} title="${n ? `Adds ${n}: ${esc(users.filter(f).map((u) => u.name).join(", "))}` : "Nobody in Users matches yet"}">+ ${l}</button>`; }).join("")}</div>
+    <input class="ev-people-in" list="ev-people-dl" placeholder="Add a person — pick a user or type a name, Enter adds" autocomplete="off">
     <datalist id="ev-people-dl">${users.map((u) => `<option value="${esc(u.name)}"></option>`).join("")}</datalist>` : ""}
   </div>`;
 }
@@ -906,6 +915,7 @@ function wirePeople(box) {
     chips.appendChild(chip);
   };
   chips.addEventListener("click", (e) => { const x = e.target.closest(".ev-chip-x"); if (x) x.closest(".ev-chip").remove(); });
+  box.querySelectorAll("[data-pgroup]").forEach((b) => b.addEventListener("click", () => { const g = PEOPLE_GROUPS.find(([k]) => k === b.dataset.pgroup); users.filter(g[2]).forEach((u) => add(u.name)); }));
   if (!inp) return;
   inp.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); add(inp.value); inp.value = ""; } });
   inp.addEventListener("change", () => { if (users.some((u) => u.name === inp.value.trim())) { add(inp.value); inp.value = ""; } }); // picked from the list
