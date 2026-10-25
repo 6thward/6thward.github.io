@@ -2644,3 +2644,12 @@ tr.us-menu-open td { background: #f7f9fb; }
 .st-pulpit .st-top { margin-top: 0; }
 .conf-card .wk-strip { opacity: .75; }
 @media (max-width: 700px) { .wk-big { font-size: 1.5rem; } .wk-strip { gap: .45rem; padding: .35rem .7rem; } .wk-inner { padding: .5rem .7rem .8rem; } }
+/* the whole pulpit panel folds (2026-10-25) */
+.st-pulpit-lbl { cursor: pointer; display: flex; align-items: center; gap: .35rem; user-select: none; } .st-pulpit-lbl:hover { color: var(--brand); }
+.st-pulpit-caret { font-size: .8rem; color: var(--ink-soft); } .st-pulpit-sum { font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--ink-soft); }
+.st-pulpit.folded { padding-bottom: .5rem; } .st-pulpit.folded .st-pulpit-lbl { margin: 0; } .st-pulpit.folded .st-top { display: none; }
+.st-box.st-click:hover .st-box-body li, .st-box.st-click:hover .st-box-title { text-decoration: none; } /* no underline sweep on hover */
+.st-box-body li b { font-weight: 700; } .st-box-body li span { color: var(--ink-soft); font-weight: 400; }
+.st-pulpit-btn { width: 1.6rem; height: 1.6rem; border-radius: 6px; border: 1.5px solid #1f2733; background: #fff; color: var(--ink); font-size: .95rem; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+.st-pulpit-lbl:hover .st-pulpit-btn { background: var(--brand); color: #fff; border-color: var(--brand); }
+.st-pulpit-lbl { font-size: .74rem; }

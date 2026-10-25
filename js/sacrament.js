@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1792968684";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1792968684";
+import { db } from "./firebase-init.js?v=1792969488";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1792969488";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1792968684";
-import { HYMNS } from "./hymns.js?v=1792968684";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1792968684";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1792969488";
+import { HYMNS } from "./hymns.js?v=1792969488";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1792969488";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -345,6 +345,7 @@ let viewMode = localStorage.getItem("sw-sacview") || "cards";
 // this week and next week start open, later Sundays start folded (Jordan 10/25); a click either way is remembered on this device
 const boxState = new Map(Object.entries((() => { try { return JSON.parse(localStorage.getItem("sw-sac-boxes") || "{}"); } catch { return {}; } })()));
 const saveBoxState = () => { try { localStorage.setItem("sw-sac-boxes", JSON.stringify(Object.fromEntries([...boxState.entries()].slice(-300)))); } catch {} };
+const pulpitVisible = () => ctx.role === "bishop" || ctx.role === "bishopric" || /^(1st|2nd|first|second)\s+counselor$/i.test(String(ctx.profile?.calling || "").trim());
 const isBoxFolded = (date, key) => { const v = boxState.get(date + ":" + key); if (v !== undefined) return !!v; const d = new Date(date + "T12:00:00"), t = new Date(); t.setHours(12, 0, 0, 0); const days = (d - t) / 86400000; return days > 13; };
 let viewYear = new Date().getFullYear();
 let showPast = false; // table: include the current year's earlier Sundays
@@ -1139,19 +1140,23 @@ function statusChips(m, date) {
   const annLines = annText.split("\n").map((l) => l.trim()).filter(Boolean);
   const wbItems = of("wardBusiness");
   const rel = wbItems.flatMap((b) => b.releasings || []), sus = wbItems.flatMap((b) => b.sustainings || []), oth = wbItems.flatMap(otherLines);
-  const foldBtn = (key) => `<button type="button" class="st-box-fold" data-boxfold="${key}" title="${isBoxFolded(date, key) ? "Show" : "Fold up"}">${isBoxFolded(date, key) ? "▸" : "▾"}</button>`;
-  const person = (p) => `<li>${esc(p.name || "—")}${p.calling ? ` <span>— ${esc(p.calling)}</span>` : ""}</li>`;
-  const annBox = hid.ann ? "" : `<div class="st-box st-box-ann${isBoxFolded(date, "ann") ? " folded" : ""}${can ? " st-click" : ""}"${can ? ` data-qe='{"t":"announce"}' title="Click to edit the announcements"` : ""}>
-      <div class="st-box-head">${foldBtn("ann")}<span class="st-box-title">🔈 Announcements</span>${annLines.length ? `<span class="st-box-n">${annLines.length}</span>` : ""}${xBtn("ann", "Announcements")}</div>
-      <div class="st-box-body">${annLines.length ? `<ul>${annLines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>` : `<div class="st-box-empty">No announcements yet</div>`}${can ? `<span class="st-box-add">+ announcement</span>` : ""}</div>
+  const person = (p) => `<li><b>${esc(p.name || "—")}</b>${p.calling ? ` <span>— ${esc(p.calling)}</span>` : ""}</li>`;
+  // "Ward temple day - Wednesday Nov 4 at 6 pm" → bold headline, then the details plain (Jordan 10/25); the first dash, colon or comma splits it
+  const headline = (t) => { const m = /^(.{2,60}?)\s*(?:—|–|-|:|,)\s+(.+)$/s.exec(String(t || "").trim()); return m ? `<b>${esc(m[1])}</b> <span>${esc(m[2])}</span>` : `<b>${esc(t)}</b>`; };
+  const annBox = hid.ann ? "" : `<div class="st-box st-box-ann${can ? " st-click" : ""}"${can ? ` data-qe='{"t":"announce"}' title="Click to edit the announcements"` : ""}>
+      <div class="st-box-head"><span class="st-box-title">🔈 Announcements</span>${annLines.length ? `<span class="st-box-n">${annLines.length}</span>` : ""}${xBtn("ann", "Announcements")}</div>
+      <div class="st-box-body">${annLines.length ? `<ul>${annLines.map((l) => `<li>${headline(l)}</li>`).join("")}</ul>` : `<div class="st-box-empty">No announcements yet</div>`}${can ? `<span class="st-box-add">+ announcement</span>` : ""}</div>
     </div>`;
   const wbCol = (cls, label, list, addLabel) => `<div class="wb-col ${cls}"><h5>${label}${list.length ? ` <span class="n">${list.length}</span>` : ""}</h5>${list.length ? `<ul>${list.join("")}</ul>` : ""}${can ? `<span class="st-box-add">${addLabel}</span>` : (list.length ? "" : `<div class="st-box-empty">—</div>`)}</div>`;
-  const wbBox = hid.wb ? "" : `<div class="st-box st-box-wb${isBoxFolded(date, "wb") ? " folded" : ""}${can ? " st-click" : ""}"${can ? ` data-wbicon="${date}" title="Click to edit ward business"` : ""}>
-      <div class="st-box-head">${foldBtn("wb")}<span class="st-box-title">📋 Ward business</span>${rel.length + sus.length + oth.length ? `<span class="st-box-sum">${[rel.length ? `${rel.length} release${rel.length === 1 ? "" : "s"}` : "", sus.length ? `${sus.length} sustaining${sus.length === 1 ? "" : "s"}` : "", oth.length ? `${oth.length} other` : ""].filter(Boolean).join(" · ")}</span>` : ""}${xBtn("wb", "Ward business")}</div>
-      <div class="st-box-body"><div class="wb-cols">${wbCol("rel", "Releases", rel.map(person), "+ release")}${wbCol("sus", "Sustainings", sus.map(person), "+ sustaining")}${wbCol("oth", "Other", oth.map((o) => `<li>${esc(o)}</li>`), "+ item")}</div></div>
+  const wbBox = hid.wb || !pulpitVisible() ? "" : `<div class="st-box st-box-wb${can ? " st-click" : ""}"${can ? ` data-wbicon="${date}" title="Click to edit ward business"` : ""}>
+      <div class="st-box-head"><span class="st-box-title">📋 Ward business</span>${rel.length + sus.length + oth.length ? `<span class="st-box-sum">${[rel.length ? `${rel.length} release${rel.length === 1 ? "" : "s"}` : "", sus.length ? `${sus.length} sustaining${sus.length === 1 ? "" : "s"}` : "", oth.length ? `${oth.length} other` : ""].filter(Boolean).join(" · ")}</span>` : ""}${xBtn("wb", "Ward business")}</div>
+      <div class="st-box-body"><div class="wb-cols">${wbCol("rel", "Releases", rel.map(person), "+ release")}${wbCol("sus", "Sustainings", sus.map(person), "+ sustaining")}${wbCol("oth", "Other", oth.map((o) => `<li>${headline(o)}</li>`), "+ item")}</div></div>
     </div>`;
-  const topRestore = can ? [hid.ann ? `<span class="st-restore" data-unhide="ann" title="Bring the Announcements box back for this Sunday">+ Announcements</span>` : "", hid.wb ? `<span class="st-restore" data-unhide="wb" title="Bring the Ward business box back for this Sunday">+ Ward business</span>` : ""].filter(Boolean) : [];
-  const top = annBox || wbBox ? `<div class="st-pulpit"><div class="st-pulpit-lbl">From the pulpit</div><div class="st-top${!annBox || !wbBox ? " st-top-one" : ""}">${annBox}${wbBox}${topRestore.length ? `<span class="st-restore-wrap st-top-restore">${topRestore.join("")}</span>` : ""}</div></div>` : (topRestore.length ? `<div class="st-top-restore-row">${topRestore.join("")}</div>` : "");
+  const topRestore = can ? [hid.ann ? `<span class="st-restore" data-unhide="ann" title="Bring the Announcements box back for this Sunday">+ Announcements</span>` : "", hid.wb && pulpitVisible() ? `<span class="st-restore" data-unhide="wb" title="Bring the Ward business box back for this Sunday">+ Ward business</span>` : ""].filter(Boolean) : [];
+  // the whole panel folds to its label line too, remembered on this device; it's only drawn for the bishopric (Jordan 10/25)
+  const pFolded = isBoxFolded(date, "pulpit");
+  const pSum = [annLines.length ? `${annLines.length} announcement${annLines.length === 1 ? "" : "s"}` : "", rel.length ? `${rel.length} release${rel.length === 1 ? "" : "s"}` : "", sus.length ? `${sus.length} sustaining${sus.length === 1 ? "" : "s"}` : "", oth.length ? `${oth.length} other` : ""].filter(Boolean).join(" · ");
+  const top = annBox || wbBox ? `<div class="st-pulpit${pFolded ? " folded" : ""}"><div class="st-pulpit-lbl" data-pulpitfold="1" title="${pFolded ? "Show" : "Fold up"}"><button type="button" class="st-pulpit-btn">${pFolded ? "▸" : "▾"}</button>From the pulpit${pFolded && pSum ? ` <span class="st-pulpit-sum">· ${esc(pSum)}</span>` : ""}</div><div class="st-top${!annBox || !wbBox ? " st-top-one" : ""}">${annBox}${wbBox}${topRestore.length ? `<span class="st-restore-wrap st-top-restore">${topRestore.join("")}</span>` : ""}</div></div>` : (topRestore.length ? `<div class="st-top-restore-row">${topRestore.join("")}</div>` : "");
   return `${top}<div class="st-row">${chips.join("")}</div>`;
 }
 
@@ -1313,13 +1318,11 @@ function renderCards(wrap) {
       if (canEdit) quickEdit(el.dataset.wbicon, { t: "wb" });
       else wbModal(el.dataset.wbicon);
     }));
-  // fold / unfold the announcements and ward business boxes (2026-10-25)
-  wrap.querySelectorAll("[data-boxfold]").forEach((b) => b.addEventListener("click", (e) => {
+  // fold / unfold the whole "From the pulpit" panel
+  wrap.querySelectorAll("[data-pulpitfold]").forEach((h) => h.addEventListener("click", (e) => {
     e.stopPropagation();
-    const box = b.closest(".st-box"), id = box.closest("[data-date]").dataset.date + ":" + b.dataset.boxfold;
-    const fold = !box.classList.contains("folded");
-    boxState.set(id, fold); saveBoxState();
-    box.classList.toggle("folded", fold); b.textContent = fold ? "▸" : "▾"; b.title = fold ? "Show" : "Fold up";
+    const date = h.closest("[data-date]").dataset.date, fold = !h.closest(".st-pulpit").classList.contains("folded");
+    boxState.set(date + ":pulpit", fold); saveBoxState(); render();
   }));
   // remove / restore the Music Number or Youth Speakers box for one Sunday (2026-09-20)
   wrap.querySelectorAll("[data-hide]").forEach((x) =>
