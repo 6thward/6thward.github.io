@@ -2546,8 +2546,8 @@ tr.us-menu-open td { background: #f7f9fb; }
 .sv-nth { font-size: .72rem; font-weight: 600; color: var(--ink-soft); margin-left: .25rem; } /* "1st Sunday" beside the date (2026-10-24) */
 .sv-date { display: flex; align-items: baseline; gap: .35rem; white-space: nowrap; }
 /* Blocked out time on the bishop's schedule (2026-10-24): hatched grey, nothing to see here */
-.dv-block.dv-blocked, .dv-block.dv-blocked.dv-colored { background: repeating-linear-gradient(135deg, #fff5f4 0 7px, #f3c7c2 7px 14px); border-color: #d9958c; color: #8a2f22; }
-.cal-event.ev-blocked, .cal-event.ev-blocked.ev-colored { background: repeating-linear-gradient(135deg, #fff5f4 0 4px, #f3c7c2 4px 8px); color: #8a2f22; border-left-color: #b3402f; }
+.dv-block.dv-blocked, .dv-block.dv-blocked.dv-colored { background: repeating-linear-gradient(135deg, #fcf7f6 0 7px, #f1e1de 7px 14px); border-color: #dcc6c2; color: #8a5a54; } /* subtler stripes (Jordan 10/25) */
+.cal-event.ev-blocked, .cal-event.ev-blocked.ev-colored { background: repeating-linear-gradient(135deg, #fcf7f6 0 4px, #f1e1de 4px 8px); color: #8a5a54; border-left-color: #c9a39d; }
 /* pinned date row on the schedule tabs: a tinted band, so it reads apart from the hours while scrolling (2026-10-24) */
 .sv-scroll .sv-head { background: var(--brand-soft); border-bottom: 2px solid var(--brand); box-shadow: 0 3px 6px rgba(31, 78, 121, .12); border-radius: 0; padding: .35rem .45rem .35rem; height: auto; min-height: 2.2rem; margin: 0 0 .25rem; }
 .sv-scroll .sv-head b { color: var(--brand); }
