@@ -1,17 +1,17 @@
 // Tithing declaration sign-ups (2026-10-04) — the bishop's side, its own page
 // ("Tithing Declaration" tab, area key "tithing"): set when you're available, share the link / QR code, and see
 // who signed up. The public page is tithing.html (js/tithing-form.js).
-import { db } from "./firebase-init.js?v=1792982981";
-import { ctx, can } from "./app.js?v=1792982981";
+import { db } from "./firebase-init.js?v=1792983059";
+import { ctx, can } from "./app.js?v=1792983059";
 import {
   collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { watchBishopCal, standingEvents } from "./bishop-cal.js?v=1792982981";
-import { openModal, closeModal, toast } from "./ui.js?v=1792982981";
+import { watchBishopCal, standingEvents } from "./bishop-cal.js?v=1792983059";
+import { openModal, closeModal, toast } from "./ui.js?v=1792983059";
 import {
   GROUPS, PLACES, SLOT_LENGTHS, esc, toMin, fmtClock, fmtLongDay, fmtShortDay, slotsOf, slotMap, isPriority, PRIORITY_TEXT,
   sortWindows, overlaps, newToken, parseSlotId, todayIso, addDays, hhmm, busyFromEvents, sameBusy, offList,
-} from "./tithing-shared.js?v=1792982981";
+} from "./tithing-shared.js?v=1792983059";
 
 let mount = null, season = null, signups = [], unsubSignups = null, started = false, dirty = false;
 let events = null; // the ward calendar (events with cal: "bishop" block sign-up times); null until it loads

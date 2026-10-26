@@ -2698,3 +2698,4 @@ tr.us-menu-open td { background: #f7f9fb; }
 .sv-col .dv-tithing .dv-block-tag { max-width: none; }
 /* a booked time goes light green; open times stay the tithing yellow — these are the tithing colours (Jordan 10/25) */
 .dv-slot.booked { background: #e4f3e8; }
+.dv-tithing .dv-block-tag { opacity: 1; background: #f8e3a1; color: #6e5100; border: 1px solid #dcbd5b; border-radius: 99px; padding: .05rem .55rem; top: 3px; } /* a little pill (Jordan 10/25) */
