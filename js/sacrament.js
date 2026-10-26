@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1792975818";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1792975818";
+import { db } from "./firebase-init.js?v=1792976014";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1792976014";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1792975818";
-import { HYMNS } from "./hymns.js?v=1792975818";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1792975818";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1792976014";
+import { HYMNS } from "./hymns.js?v=1792976014";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1792976014";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -1202,60 +1202,18 @@ function renderCards(wrap) {
     const nth = nthSunday(date);
     const babies = planned ? (m.items || []).filter((i) => i.kind === "babyBlessing") : [];
     const announceText = planned ? (m.items || []).find((i) => i.kind === "announcements")?.text || "" : "";
-    const megaphone = canEdit && !isConf ? `
-      <button class="megaphone-btn${announceText ? " has-announce" : ""}" data-qe='{"t":"announce"}' title="${announceText ? esc(announceText.split("\n").filter(Boolean).map((l) => "• " + l).join("\n").slice(0, 160)) : "Add announcements"}">
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M11 5 6 9H3v6h3l5 4V5z"/>
-          <path d="M15.5 8.5a4 4 0 0 1 0 7"/>
-          <path d="M18.5 6a7.5 7.5 0 0 1 0 12"/>
-        </svg>
-      </button>` : "";
-    // Ward Business: small clipboard icon beside the megaphone — grey when
-    // empty, green when there's business. Bishopric edits; members view.
-    const wbItems = planned ? (m.items || []).filter((i) => i.kind === "wardBusiness") : [];
-    const wbSus = wbItems.reduce((a, b) => a + (b.sustainings?.length || 0), 0);
-    const wbRel = wbItems.reduce((a, b) => a + (b.releasings?.length || 0), 0);
-    const wbHas = wbSus || wbRel || wbItems.some((b) => (b.other || "").trim());
-    const wbParts = [];
-    if (wbSus) wbParts.push(`${wbSus} sustain`);
-    if (wbRel) wbParts.push(`${wbRel} release`);
-    if (wbItems.some((b) => (b.other || "").trim())) wbParts.push("other");
-    const wbIcon = !isConf && (canEdit || wbHas) ? `
-      <button class="megaphone-btn${wbHas ? " has-wb" : ""}" data-wbicon="${date}" title="${wbHas ? "Ward Business: " + esc(wbParts.join(" · ")) : "Add ward business"}">
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="8" y="2" width="8" height="4" rx="1"/>
-          <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
-          <path d="M9 12h6M9 16h6"/>
-        </svg>
-      </button>` : "";
-    // Homebound sacrament: house icon — grey until anyone's assigned, amber
-    // when partial, green when everyone who needs it this week is covered
-    // (members unchecked as "at church this week" don't count)
-    const hbCur = planned ? m.hbAssign || {} : {};
-    const hbSkip = planned ? m.hbSkip || [] : [];
-    // per-week switch: grey when off, highlighted when enabled (green once
-    // everyone who needs a visit is covered). Older weeks with saved
-    // assignments but no flag count as enabled.
-    const hbOn = planned && (m.hbOn ?? Object.keys(hbCur).length > 0);
-    const hbNeeded = homebound.filter((p) => !hbSkip.includes(p.id));
-    const hbAssigned = hbNeeded.filter((p) => hbCur[p.id]).length;
-    const hbDone = hbNeeded.length === 0 || hbAssigned === hbNeeded.length;
-    const hbIcon = homebound.length && !isConf ? `
-      <button class="megaphone-btn${hbOn ? (hbDone ? " has-wb" : " has-announce") : ""}" data-hbicon="${date}" title="${hbOn ? `Homebound sacrament: ${hbAssigned} of ${hbNeeded.length} assigned${hbSkip.length ? ` · ${hbSkip.length} at church` : ""}` : "Homebound sacrament: off this week — click to set up"}">
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="m3 9.5 9-7 9 7V20a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 20z"/>
-          <path d="M9 21.5v-8h6v8"/>
-        </svg>
-      </button>` : "";
+    // the announcement / ward business / homebound icons used to sit here; the pulpit panel replaced the first two and Jordan dropped the third (10/25)
     // conducting is assigned or not — no confirmation step
     // plain text, no pill color — assigned reads quietly on the date line
     const condChip = isConf ? "" : `
       <span class="cond-inline${m?.conducting ? "" : " cond-empty"}${canEdit ? " st-click" : ""}"${canEdit ? ` data-qe='{"t":"c"}' title="Click to assign"` : ""}>Conducting: ${m?.conducting ? esc(m.conducting) : "—"}</span>`;
     // the week strip (2026-10-25, wireframe H5): "Oct 25 · Sunday · 4th Sunday", this week in blue, the others grey
     const dObj = new Date(date + "T12:00:00");
+    const typePill = `<span class="wk-type type-${esc(type)}${isConf ? " wk-type-conf" : ""}${canEdit ? " st-click" : ""}"${canEdit ? ` data-type="${date}" title="Click to change the meeting type"` : ""}>${esc(typeLabel(m, date))}</span>`;
     const strip = `<div class="wk-strip${isThisWeek ? " wk-now" : ""}">
         <span class="wk-big">${esc(dObj.toLocaleDateString("en-US", { month: "short", day: "numeric" }))}</span>
         <span class="wk-day">${esc(dObj.toLocaleDateString("en-US", { weekday: "long" }))}</span>
+        ${typePill}
         <span class="wk-nth${nth === 5 ? " wk-nth-5" : ""}">${["", "1st", "2nd", "3rd", "4th", "5th"][nth] || ""} Sunday</span>
         ${isThisWeek ? `<span class="wk-badge">This week</span>` : ""}
       </div>`;
@@ -1265,12 +1223,11 @@ function renderCards(wrap) {
       <div class="wk-inner">
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:.75rem;flex-wrap:wrap">
         <div>
-          <h3 style="margin:0">
-            ${megaphone}${wbIcon}${hbIcon}${type !== "sacrament" || canEdit ? `<span class="pill head-pill type-pill type-${esc(type)} ${isConf ? "pill-conf" : type === "fast" ? "pill-fast" : type === "sacrament" ? "pill-type-plain" : "pill-approved"}${canEdit ? " st-click" : ""}"${canEdit ? ` data-type="${date}" title="Click to change the meeting type"` : ""}>${esc(typeLabel(m, date))}</span>` : ""}${m?.theme
+          <div class="wk-head-line">
+            ${m?.theme
               ? `<span class="theme-tag${canEdit ? " st-click" : ""}"${canEdit ? ` data-qe='{"t":"theme"}' title="Click to edit the theme"` : ""}>${themeHtml(m.theme)}</span>`
-              : (canEdit && !isConf ? `<span class="theme-tag theme-add" data-qe='{"t":"theme"}' title="Add a theme for this Sunday">+ theme</span>` : "")}${type === "highcouncil" ? `<a class="pill head-pill hc-pill" href="${HC_URL}" target="_blank" rel="noopener" title="High council speaking assignments — stgeorgeeast.org">🔗 who's speaking</a>` : ""}${babies.map((b, bi) => `<span class="pill-baby-bold head-pill${canEdit ? " st-click" : ""}" ${canEdit ? `data-baby="${bi}" title="Click to edit"` : ""}>Blessing${b.name ? ": " + esc(b.name) : ""}${b.by ? ` <span class="pill-baby-by">by ${esc(b.by)}</span>` : ""}</span>`).join("")}
-          </h3>
-          <div class="row-sub" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">${condChip}${isConf ? "<span>no sacrament meeting</span>" : ""}</div>
+              : (canEdit && !isConf ? `<span class="theme-tag theme-add" data-qe='{"t":"theme"}' title="Add a theme for this Sunday">+ theme</span>` : "")}${type === "highcouncil" ? `<a class="pill head-pill hc-pill" href="${HC_URL}" target="_blank" rel="noopener" title="High council speaking assignments — stgeorgeeast.org">🔗 who's speaking</a>` : ""}${babies.map((b, bi) => `<span class="pill-baby-bold head-pill${canEdit ? " st-click" : ""}" ${canEdit ? `data-baby="${bi}" title="Click to edit"` : ""}>Blessing${b.name ? ": " + esc(b.name) : ""}${b.by ? ` <span class="pill-baby-by">by ${esc(b.by)}</span>` : ""}</span>`).join("")}${condChip}${isConf ? `<span class="row-sub" style="margin:0">no sacrament meeting</span>` : ""}
+          </div>
         </div>
         <div style="display:flex;gap:.4rem">
           ${planned || isConf ? `<button class="btn btn-sm" data-view="${date}">View</button>` : ""}

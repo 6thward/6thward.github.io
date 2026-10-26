@@ -2653,3 +2653,17 @@ tr.us-menu-open td { background: #f7f9fb; }
 .st-pulpit-btn { width: 1.6rem; height: 1.6rem; border-radius: 6px; border: 1px solid #b8bfc9; background: #fff; color: var(--ink); font-size: .95rem; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
 .st-pulpit-lbl:hover .st-pulpit-btn { background: var(--brand); color: #fff; border-color: var(--brand); }
 .st-pulpit-lbl { font-size: .74rem; }
+/* meeting type sits in the week strip now: square, light tints that read on the blue (Jordan 10/25) */
+.wk-type { border-radius: 4px; padding: .22rem .6rem; font-size: .8rem; font-weight: 700; letter-spacing: .01em; background: #fff; color: var(--ink); border: 1px solid rgba(255,255,255,.6); line-height: 1.1; }
+.wk-type.type-fast { background: #ece6f7; color: var(--violet); }
+.wk-type.type-highcouncil { background: #dff3f1; color: #0f5c57; }
+.wk-type.type-primary { background: #dce9fb; color: #1f5fbf; }
+.wk-type.type-christmas { background: #fbe3df; color: #b3402f; }
+.wk-type.type-easter { background: #ecdff7; color: #7a3fb0; }
+.wk-type.type-other { background: #e3e8ef; color: #46586e; }
+.wk-type.wk-type-conf { background: #e6e9ee; color: #1f2733; }
+.wk-strip:not(.wk-now) .wk-type { border-color: var(--line); }
+.wk-type.st-click { cursor: pointer; } .wk-type.st-click:hover { filter: brightness(.95); }
+.wk-head-line { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; font-size: 1.05rem; font-weight: 700; margin: 0; }
+.wk-head-line .cond-inline { font-size: .9rem; font-weight: 400; }
+.wk-inner { padding: .45rem 1rem 1rem; }
