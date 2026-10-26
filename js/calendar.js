@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792980169";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792980169";
+import { db } from "./firebase-init.js?v=1792981375";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792981375";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792980169";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792980169";
-import { openCouncilDate } from "./council.js?v=1792980169";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792980169";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792981375";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792981375";
+import { openCouncilDate } from "./council.js?v=1792981375";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792981375";
 
 let events = [];
 let users = []; // app users, for the People picker on an event (2026-10-19)
@@ -507,6 +507,10 @@ function wireSide(date, blocks, keep) {
     const seasonDefault = season.priorityText || PRIORITY_TEXT;
     if (priority && txt && makeDefault && txt !== seasonDefault) { try { await updateDoc(doc(db, "tithing", season.token), { priorityText: txt }); season = { ...season, priorityText: txt }; } catch (e) { return toast("Couldn't save the wording: " + (e.code || e.message)); } }
     else if (priority && txt && txt !== seasonDefault) edited.priorityText = txt;
+    // nothing about the block itself changed (he just typed names in): save quietly, no "which Sundays" question (Jordan 10/25)
+    const rule0 = side.querySelector("#dv-f-rep")?.value || "0";
+    const blockChanged = nStart !== w0.start || nEnd !== w0.end || edited.len !== Number(w0.len || 15) || edited.place !== (w0.place || "office") || !!edited.priority !== isPriority(w0) || (edited.priorityText || "") !== (w0.priorityText || "") || rule0 !== "0";
+    if (!blockChanged) { toast("Saved"); return; }
     // which blocks take the change: just this one, or its repeats too (Jordan 10/25)
     let targets = [w0];
     if (tithingSiblings(w0).length) { targets = await askTithingScope(side, w0, "Apply this change to"); if (!targets) return; }
