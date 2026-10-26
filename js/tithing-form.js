@@ -2,13 +2,13 @@
 // No sign-in. Anyone with the link sees the open times (never who took the
 // others), picks one, and leaves a name — plus a phone number if they'd like
 // a text reminder.
-import { db } from "./firebase-init.js?v=1792982774";
+import { db } from "./firebase-init.js?v=1792982863";
 import {
   doc, getDoc, collection, onSnapshot, writeBatch, serverTimestamp, setDoc, deleteDoc,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import {
   GROUPS, PLACES, esc, fmtClock, fmtLongDay, slotsOf, sortWindows, parseSlotId, todayIso, nowMin, offList, isPriority, PRIORITY_TEXT, toMin,
-} from "./tithing-shared.js?v=1792982774";
+} from "./tithing-shared.js?v=1792982863";
 
 export async function initTithingForm(mount, token) {
   const fail = (title, msg) => { mount.innerHTML = `<div class="td-card td-msg"><h2>${esc(title)}</h2><p>${esc(msg)}</p></div>`; };
@@ -103,17 +103,22 @@ export async function initTithingForm(mount, token) {
       return blocks ? `<section class="td-card td-day"><h2>${esc(fmtLongDay(d))}</h2>${blocks}${hidden ? `<p class="td-more">${hidden} more time${hidden === 1 ? "" : "s"} open${hidden === 1 ? "s" : ""} up as these fill.</p>` : ""}</section>` : "";
     }).join("");
 
+    // once they're signed up the page is just the confirmation — big date and time, nothing else to pick (Jordan 10/25)
+    const mineCard = mineSlot ? `<div class="td-card td-mine"><div class="td-tick">✓</div><div class="td-mine-body"><b>You're signed up${mine.name ? ", " + esc(mine.name) : ""}.</b>
+          <div class="td-mine-when"><span class="td-mine-day">${esc(fmtLongDay(mineSlot.date))}</span><span class="td-mine-time">${esc(fmtClock(mineSlot.min))}</span></div>
+          ${mineSlot.place === "home" ? `<div class="td-mine-where">🏠 ${esc(whereLine(mineSlot))}</div>` : ""}
+          <div class="td-sub">Need to change it? Contact the bishop or the executive secretary.</div></div></div>` : "";
     mount.innerHTML = `
       <div class="td-card td-intro">
         <h1>Tithing Declaration</h1>
         <p class="td-ward">${esc(season.ward || "6th Ward")}</p>
-        ${season.note ? `<p class="td-note">${esc(season.note)}</p>` : ""}
+        ${mineSlot ? "" : `${season.note ? `<p class="td-note">${esc(season.note)}</p>` : ""}
         <p>Pick a time that works for you and your family, then add your name. That's it.</p>
-        ${anyPriority ? `<p class="td-legend">${esc(season.priorityText || PRIORITY_TEXT)}</p>` : ""}
+        ${anyPriority ? `<p class="td-legend">${esc(season.priorityText || PRIORITY_TEXT)}</p>` : ""}`}
       </div>
-      ${mineSlot ? `<div class="td-card td-mine"><div class="td-tick">✓</div><div><b>You're signed up${mine.name ? ", " + esc(mine.name) : ""}.</b><div>${esc(describe(mineSlot))}</div><div class="td-sub">${mineSlot.place === "home" ? esc(whereLine(mineSlot)) + ". " : ""}Need to change it? Contact the bishop or the executive secretary.</div></div></div>` : ""}
-      ${dayHtml || `<div class="td-card td-msg"><h2>No open times right now</h2><p>Please check back, or contact the bishop or the executive secretary.</p></div>`}
-      ${dayHtml && !openCount ? `<div class="td-card td-msg"><p>Every time is taken at the moment. Please contact the bishop or the executive secretary.</p></div>` : ""}
+      ${mineCard}
+      ${mineSlot ? "" : dayHtml || `<div class="td-card td-msg"><h2>No open times right now</h2><p>Please check back, or contact the bishop or the executive secretary.</p></div>`}
+      ${!mineSlot && dayHtml && !openCount ? `<div class="td-card td-msg"><p>Every time is taken at the moment. Please contact the bishop or the executive secretary.</p></div>` : ""}
       <p class="td-foot">Only the bishop and the people who help him schedule can see who signed up.</p>
       <div class="td-sheet-bg" id="td-sheet-bg" hidden><div class="td-sheet" id="td-sheet" role="dialog" aria-modal="true"></div></div>`;
 
