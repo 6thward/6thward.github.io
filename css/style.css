@@ -2629,7 +2629,7 @@ tr.us-menu-open td { background: #f7f9fb; }
 @media (max-width: 900px) { .st-top { grid-template-columns: 1fr; } .wb-cols { grid-template-columns: 1fr; } }
 /* Sunday card week strip (2026-10-25, wireframe H5) + the "From the pulpit" panel (option A) */
 #sunday-list .card.wk-card { padding: 0; overflow: hidden; }
-#sunday-list .card.wk-card.wk-card-now { border-color: #1f4e79; }
+#sunday-list .card.wk-card.wk-card-now { border-color: #1f4e79; border-width: 2px; } /* 2 pt frame on this week (Jordan 10/25) */
 .wk-inner { padding: .6rem 1rem 1rem; }
 .wk-strip { display: flex; align-items: center; gap: .7rem; padding: .45rem 1rem; background: #e9ecf0; color: var(--ink); border-bottom: 1px solid var(--line); }
 .wk-strip.wk-now { background: #1f4e79; color: #fff; border-bottom: 0; }
