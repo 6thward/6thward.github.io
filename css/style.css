@@ -2667,3 +2667,15 @@ tr.us-menu-open td { background: #f7f9fb; }
 .wk-head-line { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; font-size: 1.05rem; font-weight: 700; margin: 0; }
 .wk-head-line .cond-inline { font-size: .9rem; font-weight: 400; }
 .wk-inner { padding: .45rem 1rem 1rem; }
+/* every week card gets a visible 1 pt grey frame; this week keeps its 2 pt blue one (Jordan 10/25) */
+#sunday-list .card.wk-card { border: 1px solid #6b7584; }
+#sunday-list .card.wk-card.wk-card-now { border: 2px solid #1f4e79; }
+/* on the grey strips the coloured types go solid so they stand out (Jordan 10/25) */
+.wk-strip:not(.wk-now) .wk-type.type-fast { background: var(--violet); color: #fff; border-color: transparent; }
+.wk-strip:not(.wk-now) .wk-type.type-primary { background: #1f5fbf; color: #fff; border-color: transparent; }
+.wk-strip:not(.wk-now) .wk-type.type-highcouncil { background: #0f5c57; color: #fff; border-color: transparent; }
+.wk-strip:not(.wk-now) .wk-type.type-christmas { background: #b3402f; color: #fff; border-color: transparent; }
+.wk-strip:not(.wk-now) .wk-type.type-easter { background: #7a3fb0; color: #fff; border-color: transparent; }
+.wk-strip:not(.wk-now) .wk-type.type-other { background: #46586e; color: #fff; border-color: transparent; }
+.wk-strip:not(.wk-now) .wk-type.wk-type-conf { background: #1f2733; color: #fff; border-color: transparent; }
+.wk-strip:not(.wk-now) .wk-type.type-sacrament { border-color: #6b7584; }
