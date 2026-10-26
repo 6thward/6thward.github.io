@@ -2,13 +2,13 @@
 // No sign-in. Anyone with the link sees the open times (never who took the
 // others), picks one, and leaves a name — plus a phone number if they'd like
 // a text reminder.
-import { db } from "./firebase-init.js?v=1792984253";
+import { db } from "./firebase-init.js?v=1792984594";
 import {
   doc, getDoc, collection, onSnapshot, writeBatch, serverTimestamp, setDoc, deleteDoc,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import {
   GROUPS, PLACES, esc, fmtClock, fmtLongDay, slotsOf, sortWindows, parseSlotId, todayIso, nowMin, offList, isPriority, PRIORITY_TEXT, toMin,
-} from "./tithing-shared.js?v=1792984253";
+} from "./tithing-shared.js?v=1792984594";
 
 export async function initTithingForm(mount, token) {
   const fail = (title, msg) => { mount.innerHTML = `<div class="td-card td-msg"><h2>${esc(title)}</h2><p>${esc(msg)}</p></div>`; };
@@ -123,6 +123,7 @@ export async function initTithingForm(mount, token) {
     const mineCard = mineSlot ? `<div class="td-card td-mine"><div class="td-tick">✓</div><div class="td-mine-body"><b>You're signed up${mine.name ? ", " + esc(mine.name) : ""}.</b>
           <div class="td-mine-when"><span class="td-mine-day">${esc(fmtLongDay(mineSlot.date))}</span><span class="td-mine-time">${esc(fmtClock(mineSlot.min))}</span></div>
           ${mineSlot.place === "home" ? `<div class="td-mine-where">🏠 ${esc(whereLine(mineSlot))}</div>` : ""}
+          <div class="td-mine-note">Please bring your whole family.</div>
           <div class="td-cal"><span>Add this to your calendar:</span><a class="td-btn td-btn-cal" href="${calBits(mineSlot).g}" target="_blank" rel="noopener">Google Calendar</a><a class="td-btn td-btn-cal" href="${calBits(mineSlot).ics}" download="tithing-declaration.ics">Apple / Outlook</a></div>
           <div class="td-sub">${contactLine}</div>
           <div class="td-mine-links"><button type="button" class="td-link" data-mine-change>Change time</button><span>·</span><button type="button" class="td-link" data-mine-cancel>Cancel sign-up</button></div>
