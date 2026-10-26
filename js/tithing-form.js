@@ -2,13 +2,13 @@
 // No sign-in. Anyone with the link sees the open times (never who took the
 // others), picks one, and leaves a name — plus a phone number if they'd like
 // a text reminder.
-import { db } from "./firebase-init.js?v=1792984594";
+import { db } from "./firebase-init.js?v=1792986657";
 import {
   doc, getDoc, collection, onSnapshot, writeBatch, serverTimestamp, setDoc, deleteDoc,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import {
   GROUPS, PLACES, esc, fmtClock, fmtLongDay, slotsOf, sortWindows, parseSlotId, todayIso, nowMin, offList, isPriority, PRIORITY_TEXT, toMin,
-} from "./tithing-shared.js?v=1792984594";
+} from "./tithing-shared.js?v=1792986657";
 
 export async function initTithingForm(mount, token) {
   const fail = (title, msg) => { mount.innerHTML = `<div class="td-card td-msg"><h2>${esc(title)}</h2><p>${esc(msg)}</p></div>`; };
@@ -34,6 +34,8 @@ export async function initTithingForm(mount, token) {
   const HOLD_MS = 3 * 60 * 1000;
   let prefill = null; // name / phone carried over when someone changes their time (10/25)
   const secName = String(season.execSec || "").trim();
+  // what the priority panel says on the sign-up page, so "priority" doesn't scare people off (Jordan 10/25)
+  const PRIORITY_PANEL_TEXT = "Time slots for families with children at home and members with mobility or health issues who would be blessed by having a time right after church.";
   const contactLine = `Contact ${secName ? `${esc(secName)}, the executive secretary,` : "the executive secretary"} for changes or info.`;
   // "Add to your calendar" (Jordan 10/25): a Google Calendar link, and an .ics file for Apple / Outlook; times are local wall-clock
   const calBits = (s) => {
@@ -91,7 +93,8 @@ export async function initTithingForm(mount, token) {
         const list = all.filter((s) => isTaken(s) || offered.has(s.id));
         return `
           <div class="td-win td-win-res">
-            <div class="td-res-h">🔒 Priority time slots</div>${w.priorityText && w.priorityText !== (season.priorityText || PRIORITY_TEXT) ? `<p class="td-res-txt">${esc(w.priorityText)}</p>` : ""}
+            <div class="td-res-h">🔒 Priority time slots</div>
+            <p class="td-res-txt">${esc(w.priorityText && w.priorityText !== (season.priorityText || PRIORITY_TEXT) ? w.priorityText : PRIORITY_PANEL_TEXT)}</p>
             <div class="td-win-head">
               <span class="td-span">${fmtClock(toMin(w.start))} – ${fmtClock(toMin(w.end))}</span>
               ${w.place === "home" ? `<span class="td-place">🏠 ${esc(PLACES.home.pub)}</span>` : ""}
