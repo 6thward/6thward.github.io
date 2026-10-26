@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792979913";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792979913";
+import { db } from "./firebase-init.js?v=1792979980";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792979980";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792979913";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792979913";
-import { openCouncilDate } from "./council.js?v=1792979913";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792979913";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792979980";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792979980";
+import { openCouncilDate } from "./council.js?v=1792979980";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792979980";
 
 let events = [];
 let users = []; // app users, for the People picker on an event (2026-10-19)
@@ -307,7 +307,20 @@ function dayBlocks(date, who) { // who: a schedule tab's owner — ward items + 
   return out;
 }
 // one block on a timeline (day view, and the Sundays view) — `style` places it (2026-10-24)
-const layoutCols = (timed) => { timed.sort((a, b) => a.start - b.start); const cols = []; timed.forEach((b) => { let c = cols.findIndex((lastEnd) => lastEnd <= b.start); if (c < 0) { c = cols.length; cols.push(0); } cols[c] = b.end; b.col = c; }); return Math.max(1, cols.length); };
+// columns only where things actually overlap: a block that has the time to itself runs the full width (Jordan 10/25)
+const layoutCols = (timed) => {
+  timed.sort((a, b) => a.start - b.start || b.end - a.end);
+  let group = [], groupEnd = -1; const groups = [];
+  timed.forEach((b) => { if (group.length && b.start >= groupEnd) { groups.push(group); group = []; groupEnd = -1; } group.push(b); groupEnd = Math.max(groupEnd, b.end); });
+  if (group.length) groups.push(group);
+  let most = 1;
+  groups.forEach((g) => { // inside one overlapping cluster: first free column wins
+    const cols = [];
+    g.forEach((b) => { let c = cols.findIndex((lastEnd) => lastEnd <= b.start); if (c < 0) { c = cols.length; cols.push(0); } cols[c] = b.end; b.col = c; });
+    g.forEach((b) => { b.ncols = cols.length; }); most = Math.max(most, cols.length);
+  });
+  return most;
+};
 // ✕ on a block (Jordan 10/25): a quick way to delete a meeting or a tithing block right from the timeline
 const blockX = (b) => (b.kind === "standing" ? "" : `<button type="button" class="dv-block-x" data-xblock="${b.kind === "tithing" ? "t" : "e"}:${esc(b.id)}" title="${b.kind === "tithing" ? "Remove this tithing declaration block" : "Delete this meeting"}">✕</button>`);
 function blockMarkup(b, style) {
@@ -338,7 +351,7 @@ function drawDay() {
   const allDay = blocks.filter((b) => b.start == null);
   // overlapping blocks share the width side by side
   const nCols = layoutCols(timed);
-  const blockHtml = (b) => blockMarkup(b, `top:${top(Math.max(b.start, DAY_START))}px;height:${h(Math.max(b.start, DAY_START), Math.min(b.end, DAY_END))}px;left:calc(${(b.col / nCols) * 100}% + 2px);width:calc(${100 / nCols}% - 4px)`);
+  const blockHtml = (b) => blockMarkup(b, `top:${top(Math.max(b.start, DAY_START))}px;height:${h(Math.max(b.start, DAY_START), Math.min(b.end, DAY_END))}px;left:calc(${(b.col / b.ncols) * 100}% + 2px);width:calc(${100 / b.ncols}% - 4px)`);
   const selHtml = dvSel ? `<div class="dv-sel" style="top:${top(dvSel.a)}px;height:${h(dvSel.a, dvSel.b)}px"><span>${fmtClock(dvSel.a)} – ${fmtClock(dvSel.b)}</span></div>` : "";
   grid.style.height = `${(DAY_END - DAY_START) * PX_MIN + 20}px`;
   grid.innerHTML = `${hours.join("")}<div class="dv-blocks">${timed.map(blockHtml).join("")}${selHtml}</div>`;
@@ -662,7 +675,7 @@ function drawSchedule(pid, who) {
     <div class="sv-gutter"><div class="sv-head"></div><div class="sv-body">${hours.join("")}</div></div>
     ${days.map((d) => { const wk = !sundays.includes(d.date); return `<div class="sv-col${d.date === today ? " sv-today" : ""}${d.date < today ? " sv-past" : ""}${wk ? " sv-weekday" : ""}" data-sv-date="${d.date}">
       <div class="sv-head" title="Open this day"><div class="sv-date"><b>${esc(fmtDate(d.date))}</b>${wk ? `<span class="sv-nth sv-wk">weekday</span>${added.includes(d.date) && can("calendar", "edit") && !d.timed.length && !d.allDay.length ? `<span class="sv-day-x" data-sv-dropday="${d.date}" title="Take this day off the schedule">✕</span>` : ""}` : `<span class="sv-nth">${ORD[nthOf(d.date)]} Sunday</span>`}</div>${d.allDay.length ? `<div class="sv-allday">${d.allDay.map((b) => `<span class="cal-event${b.cal === "bishop" ? " ev-bishop" : ""}" data-sv-open="${b.kind === "standing" ? "s:" : "e:"}${esc(b.id)}">${esc(b.title)}</span>`).join("")}</div>` : ""}</div>
-      <div class="sv-body dv-grid" data-sv-body="${d.date}">${hours.map((x) => x.replace(/<span>.*?<\/span>/, "")).join("")}<div class="dv-blocks">${d.timed.map((b) => blockMarkup(b, `top:${top(Math.max(b.start, lo))}px;height:${h(Math.max(b.start, lo), Math.min(b.end, hi))}px;left:calc(${(b.col / d.nCols) * 100}% + 2px);width:calc(${100 / d.nCols}% - 4px)`)).join("")}</div></div>
+      <div class="sv-body dv-grid" data-sv-body="${d.date}">${hours.map((x) => x.replace(/<span>.*?<\/span>/, "")).join("")}<div class="dv-blocks">${d.timed.map((b) => blockMarkup(b, `top:${top(Math.max(b.start, lo))}px;height:${h(Math.max(b.start, lo), Math.min(b.end, hi))}px;left:calc(${(b.col / b.ncols) * 100}% + 2px);width:calc(${100 / b.ncols}% - 4px)`)).join("")}</div></div>
     </div>`; }).join("")}
   </div></div>`;
   grid.querySelectorAll("[data-sv-dropday]").forEach((x) => x.addEventListener("click", (e) => { e.stopPropagation(); removeExtraDay(who, x.dataset.svDropday); }));
