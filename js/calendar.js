@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792979710";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792979710";
+import { db } from "./firebase-init.js?v=1792979913";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792979913";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792979710";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792979710";
-import { openCouncilDate } from "./council.js?v=1792979710";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792979710";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792979913";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792979913";
+import { openCouncilDate } from "./council.js?v=1792979913";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792979913";
 
 let events = [];
 let users = []; // app users, for the People picker on an event (2026-10-19)
@@ -601,7 +601,7 @@ function initSchedule(pid, who, title) {
   panel.dataset.ready = "1"; bsStart[pid] = nextSunday();
   panel.innerHTML = `
     <div class="panel-head"><div><h2>${esc(title)}</h2><p class="panel-sub">The next four Sundays side by side${who === "bishop" ? "" : " — ward meetings, standing meetings, and anything put on the " + esc(ownerLabel(who)) + "'s schedule"}. Click anything to change it; click an empty time to add.</p></div>
-      <div class="panel-actions">${can("calendar", "edit") ? `<button class="btn" data-standing type="button" title="Ward council and bishopric meeting times">⚙ Standing meetings</button>` : ""}</div></div>
+      <div class="panel-actions">${can("calendar", "edit") ? `<span class="sv-addday-wrap"><button class="btn" data-addday type="button" title="Show a weekday beside the Sundays — to open up times, or put meetings on it">+ Add a day</button><span class="sv-addday-pop" hidden><input type="date" data-addday-date> <button class="btn btn-sm btn-primary" data-addday-go type="button">Show it</button></span></span><button class="btn" data-standing type="button" title="Ward council and bishopric meeting times">⚙ Standing meetings</button>` : ""}</div></div>
     <div class="card">
       <div class="cal-head"><button class="btn btn-sm" data-prev title="Back 4 Sundays">‹</button><h3 data-title></h3><button class="btn btn-sm" data-next title="Ahead 4 Sundays">›</button><button class="btn btn-sm" data-today title="Back to the coming Sunday">Today</button></div>
       <div class="cal-grid cal-grid-sundays" data-grid></div>
@@ -610,13 +610,47 @@ function initSchedule(pid, who, title) {
   panel.querySelector("[data-next]").addEventListener("click", () => { bsStart[pid] = addDaysIso(bsStart[pid], 7 * SUNDAYS_SHOWN); drawSundays(); });
   panel.querySelector("[data-today]").addEventListener("click", () => { bsStart[pid] = nextSunday(); drawSundays(); });
   panel.querySelector("[data-standing]")?.addEventListener("click", editStanding);
+  // a weekday beside the Sundays (Jordan 10/25): pick a date, it joins this schedule's columns
+  const pop = panel.querySelector(".sv-addday-pop");
+  panel.querySelector("[data-addday]")?.addEventListener("click", () => { pop.hidden = !pop.hidden; if (!pop.hidden) { const inp = pop.querySelector("[data-addday-date]"); inp.value = inp.value || addDaysIso(bsStart[pid], 3); inp.focus(); } });
+  panel.querySelector("[data-addday-go]")?.addEventListener("click", async () => {
+    const d = pop.querySelector("[data-addday-date]").value; if (!d) return;
+    pop.hidden = true;
+    if (new Date(d + "T12:00:00").getDay() === 0) { bsStart[pid] = d; drawSundays(); return; } // a Sunday: just jump the view there
+    await addExtraDay(who, d);
+    const first = nextSundayFrom(d); const start = addDaysIso(first, -7 * (SUNDAYS_SHOWN - 1)); if (d < bsStart[pid] || d > addDaysIso(bsStart[pid], 7 * SUNDAYS_SHOWN - 1)) bsStart[pid] = addDaysIso(first, -7); if (bsStart[pid] < start) bsStart[pid] = start;
+    drawSundays();
+  });
   drawSundays();
+}
+// extra weekdays each schedule shows, kept in settings/bishopCal.extraDays[who] (10/25)
+const extraDaysOf = (who) => ((bishopCalConfig().extraDays || {})[who] || []);
+async function addExtraDay(who, d) {
+  const list = [...new Set([...extraDaysOf(who), d])].sort();
+  try { await setDoc(doc(db, "settings", "bishopCal"), { extraDays: { ...(bishopCalConfig().extraDays || {}), [who]: list } }, { merge: true }); toast(`${fmtDate(d)} added to the schedule`); }
+  catch (e) { toast("Couldn't add the day: " + (e.code || e.message)); }
+}
+async function removeExtraDay(who, d) {
+  const list = extraDaysOf(who).filter((x) => x !== d);
+  try { await setDoc(doc(db, "settings", "bishopCal"), { extraDays: { ...(bishopCalConfig().extraDays || {}), [who]: list } }, { merge: true }); toast(`${fmtDate(d)} taken off the schedule`); }
+  catch (e) { toast("Couldn't remove the day: " + (e.code || e.message)); }
+}
+const nextSundayFrom = (iso) => { const d = new Date(iso + "T12:00:00"); const n = (7 - d.getDay()) % 7; return addDaysIso(iso, n); };
+// which days a schedule shows: its four Sundays, plus any weekday in that span that was added by hand or has something on it for this person
+function scheduleDates(pid, who) {
+  const sundays = Array.from({ length: SUNDAYS_SHOWN }, (_, i) => addDaysIso(bsStart[pid], 7 * i));
+  const lo = bsStart[pid], hi = addDaysIso(bsStart[pid], 7 * SUNDAYS_SHOWN - 1);
+  const inSpan = (d) => d >= lo && d <= hi && !sundays.includes(d);
+  const added = extraDaysOf(who).filter(inSpan);
+  const busy = events.filter((e) => inSpan(e.date) && showIt(e) && calOf(e) === "bishop" && (ownerOf(e) === who || attends(e, who))).map((e) => e.date); // a bishopric meeting on a Wednesday puts that Wednesday on the counselors' schedules too
+  const tith = who === "bishop" && season ? (season.windows || []).map((w) => w.date).filter(inSpan) : [];
+  return { dates: [...new Set([...sundays, ...added, ...busy, ...tith])].sort(), sundays, added };
 }
 function drawSundays() { SCHEDULES.forEach(([pid, who]) => drawSchedule(pid, who)); }
 function drawSchedule(pid, who) {
   const panel = document.getElementById("panel-" + pid), grid = panel?.querySelector("[data-grid]"); if (!grid || !bsStart[pid]) return;
-  const dates = Array.from({ length: SUNDAYS_SHOWN }, (_, i) => addDaysIso(bsStart[pid], 7 * i));
-  panel.querySelector("[data-title]").textContent = `${fmtDate(dates[0])} – ${fmtDate(dates[dates.length - 1], { year: true })}`;
+  const { dates, sundays, added } = scheduleDates(pid, who);
+  panel.querySelector("[data-title]").textContent = `${fmtDate(sundays[0])} – ${fmtDate(sundays[sundays.length - 1], { year: true })}`;
   const days = dates.map((d) => { const blocks = dayBlocks(d, who); const timed = blocks.filter((b) => b.start != null); const nCols = layoutCols(timed); return { date: d, timed, allDay: blocks.filter((b) => b.start == null), nCols }; });
   // the whole day, 6 AM – 10 PM, in a scrolling panel (Jordan 10/24: "scroll and see the later hours")
   const lo = DAY_START, hi = DAY_END;
@@ -624,13 +658,14 @@ function drawSchedule(pid, who) {
   const top = (m) => (m - lo) * PX_MIN, h = (a, b) => Math.max(14, (b - a) * PX_MIN), height = (hi - lo) * PX_MIN;
   const today = todayISO();
   const hours = []; for (let m = lo; m <= hi; m += 60) hours.push(`<div class="dv-hour" style="top:${top(m)}px"><span>${fmtClock(m).replace(":00", "")}</span></div>`);
-  grid.innerHTML = `<div class="sv-scroll"><div class="sv-wrap" style="--sv-h:${height}px">
+  grid.innerHTML = `<div class="sv-scroll"><div class="sv-wrap" style="--sv-h:${height}px;--sv-n:${days.length}">
     <div class="sv-gutter"><div class="sv-head"></div><div class="sv-body">${hours.join("")}</div></div>
-    ${days.map((d) => `<div class="sv-col${d.date === today ? " sv-today" : ""}${d.date < today ? " sv-past" : ""}" data-sv-date="${d.date}">
-      <div class="sv-head" title="Open this Sunday"><div class="sv-date"><b>${esc(fmtDate(d.date))}</b><span class="sv-nth">${ORD[nthOf(d.date)]} Sunday</span></div>${d.allDay.length ? `<div class="sv-allday">${d.allDay.map((b) => `<span class="cal-event${b.cal === "bishop" ? " ev-bishop" : ""}" data-sv-open="${b.kind === "standing" ? "s:" : "e:"}${esc(b.id)}">${esc(b.title)}</span>`).join("")}</div>` : ""}</div>
+    ${days.map((d) => { const wk = !sundays.includes(d.date); return `<div class="sv-col${d.date === today ? " sv-today" : ""}${d.date < today ? " sv-past" : ""}${wk ? " sv-weekday" : ""}" data-sv-date="${d.date}">
+      <div class="sv-head" title="Open this day"><div class="sv-date"><b>${esc(fmtDate(d.date))}</b>${wk ? `<span class="sv-nth sv-wk">weekday</span>${added.includes(d.date) && can("calendar", "edit") && !d.timed.length && !d.allDay.length ? `<span class="sv-day-x" data-sv-dropday="${d.date}" title="Take this day off the schedule">✕</span>` : ""}` : `<span class="sv-nth">${ORD[nthOf(d.date)]} Sunday</span>`}</div>${d.allDay.length ? `<div class="sv-allday">${d.allDay.map((b) => `<span class="cal-event${b.cal === "bishop" ? " ev-bishop" : ""}" data-sv-open="${b.kind === "standing" ? "s:" : "e:"}${esc(b.id)}">${esc(b.title)}</span>`).join("")}</div>` : ""}</div>
       <div class="sv-body dv-grid" data-sv-body="${d.date}">${hours.map((x) => x.replace(/<span>.*?<\/span>/, "")).join("")}<div class="dv-blocks">${d.timed.map((b) => blockMarkup(b, `top:${top(Math.max(b.start, lo))}px;height:${h(Math.max(b.start, lo), Math.min(b.end, hi))}px;left:calc(${(b.col / d.nCols) * 100}% + 2px);width:calc(${100 / d.nCols}% - 4px)`)).join("")}</div></div>
-    </div>`).join("")}
+    </div>`; }).join("")}
   </div></div>`;
+  grid.querySelectorAll("[data-sv-dropday]").forEach((x) => x.addEventListener("click", (e) => { e.stopPropagation(); removeExtraDay(who, x.dataset.svDropday); }));
   const sc = grid.querySelector(".sv-scroll"); sc.scrollTop = keepScroll ?? (6.5 * 60 - lo) * PX_MIN; // first draw opens at 6:30 AM; redraws keep the place
   // open a Sunday with the clicked block selected, or ready to add at the clicked time
   const openAt = (date, focus) => { dayView(date); if (focus) { dvFocus = focus; drawDay(); } };

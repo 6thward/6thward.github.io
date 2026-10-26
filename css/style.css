@@ -2526,7 +2526,7 @@ tr.us-menu-open td { background: #f7f9fb; }
 .dv-block-who { font-weight: 500; opacity: .8; margin-left: .3rem; font-size: .74rem; }
 /* Sundays view: four Sundays as columns, times as rows (2026-10-24) */
 .cal-grid.cal-grid-sundays { display: block; }
-.sv-wrap { display: grid; grid-template-columns: 3.2rem repeat(4, minmax(0, 1fr)); gap: 0 .4rem; align-items: start; }
+.sv-wrap { display: grid; grid-template-columns: 3.2rem repeat(var(--sv-n, 4), minmax(0, 1fr)); gap: 0 .4rem; align-items: start; }
 .sv-head { height: 2.2rem; display: flex; flex-direction: column; justify-content: flex-end; padding: 0 .2rem .25rem; font-size: .92rem; cursor: pointer; border-radius: 8px; }
 .sv-head:hover { background: var(--brand-soft); }
 .sv-today .sv-head b { color: var(--brand); }
@@ -2682,3 +2682,12 @@ tr.us-menu-open td { background: #f7f9fb; }
 /* Sundays view drag: the block slides over the target column, which lights up (Jordan 10/25) */
 .sv-col .dv-block.dv-dragging { z-index: 30; box-shadow: 0 6px 18px rgba(0,0,0,.18); opacity: .95; }
 .sv-col .sv-body.sv-drop { background: #eef4fb; border-color: var(--brand); }
+/* weekday columns beside the Sundays (Jordan 10/25) */
+.sv-addday-wrap { position: relative; display: inline-flex; align-items: center; gap: .4rem; }
+.sv-addday-pop { position: absolute; top: calc(100% + .3rem); right: 0; z-index: 20; display: flex; gap: .35rem; align-items: center; background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: .45rem .55rem; box-shadow: 0 6px 18px rgba(0,0,0,.12); white-space: nowrap; }
+.sv-addday-pop[hidden] { display: none; }
+.sv-addday-pop input[type=date] { font: inherit; padding: .25rem .4rem; border: 1px solid var(--line); border-radius: 7px; }
+.sv-col.sv-weekday .sv-head { background: #fbf6ea; border-radius: 8px; }
+.sv-col.sv-weekday .sv-head:hover { background: #f5ecd2; }
+.sv-nth.sv-wk { background: #f0e4c2; color: #6a5520; border-radius: 99px; padding: .05rem .45rem; font-size: .66rem; text-transform: uppercase; letter-spacing: .05em; }
+.sv-day-x { margin-left: auto; font-size: .7rem; opacity: .4; cursor: pointer; padding: 0 .3rem; border-radius: 6px; } .sv-day-x:hover { opacity: 1; background: rgba(0,0,0,.08); }
