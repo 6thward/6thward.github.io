@@ -19,7 +19,7 @@
   .td-legend { font-size: .92rem; color: var(--soft); }
   .td-day h2 { margin: 0 0 .6rem; font-size: 1.2rem; }
   /* each day is one grouped card with a blue header bar (Jordan 10/25) */
-  .td-day { padding: 0; overflow: hidden; border-color: #c9d6e4; }
+  .td-day { padding: 0; overflow: hidden; border: 1px solid #1f4e79; } /* 1 pt blue frame round the whole day (Jordan 10/25) */
   .td-day h2 { margin: 0; padding: .7rem 1.1rem; background: #1f4e79; color: #fff; font-size: 1.15rem; letter-spacing: .01em; }
   .td-day > .td-win, .td-day > .td-more { margin-left: 1.1rem; margin-right: 1.1rem; }
   .td-day > .td-win:first-of-type { margin-top: .8rem; }
@@ -98,7 +98,7 @@
 <body>
 <div id="td"><div class="td-loading">Opening the sign-up…</div></div>
 <script type="module">
-  import { initTithingForm } from "./js/tithing-form.js?v=1792984222";
+  import { initTithingForm } from "./js/tithing-form.js?v=1792984253";
   initTithingForm(document.getElementById("td"), new URLSearchParams(location.search).get("k") || "");
 </script>
 </body>
