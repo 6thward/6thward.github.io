@@ -2,13 +2,13 @@
 // No sign-in. Anyone with the link sees the open times (never who took the
 // others), picks one, and leaves a name — plus a phone number if they'd like
 // a text reminder.
-import { db } from "./firebase-init.js?v=1792983988";
+import { db } from "./firebase-init.js?v=1792984079";
 import {
   doc, getDoc, collection, onSnapshot, writeBatch, serverTimestamp, setDoc, deleteDoc,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import {
   GROUPS, PLACES, esc, fmtClock, fmtLongDay, slotsOf, sortWindows, parseSlotId, todayIso, nowMin, offList, isPriority, PRIORITY_TEXT, toMin,
-} from "./tithing-shared.js?v=1792983988";
+} from "./tithing-shared.js?v=1792984079";
 
 export async function initTithingForm(mount, token) {
   const fail = (title, msg) => { mount.innerHTML = `<div class="td-card td-msg"><h2>${esc(title)}</h2><p>${esc(msg)}</p></div>`; };
@@ -35,6 +35,17 @@ export async function initTithingForm(mount, token) {
   let prefill = null; // name / phone carried over when someone changes their time (10/25)
   const secName = String(season.execSec || "").trim();
   const contactLine = `Contact ${secName ? `${esc(secName)}, the executive secretary,` : "the executive secretary"} for changes or info.`;
+  // "Add to your calendar" (Jordan 10/25): a Google Calendar link, and an .ics file for Apple / Outlook; times are local wall-clock
+  const calBits = (s) => {
+    const ymd = s.date.replace(/-/g, ""), hm = (m) => String(Math.floor(m / 60)).padStart(2, "0") + String(m % 60).padStart(2, "0") + "00";
+    const start = `${ymd}T${hm(s.min)}`, end = `${ymd}T${hm(s.min + s.len)}`;
+    const title = `Tithing Declaration — ${season.ward || "6th Ward"}`;
+    const where = s.place === "home" ? whereLine(s) : "Bishop's office";
+    const details = `Your tithing declaration visit with the bishop.${secName ? ` Questions: ${secName}, executive secretary.` : ""}`;
+    const g = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${start}/${end}&ctz=America/Denver&location=${encodeURIComponent(where)}&details=${encodeURIComponent(details)}`;
+    const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//6th Ward//Tithing Declaration//EN", "BEGIN:VEVENT", `UID:${s.id}@6thward`, `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, "").slice(0, 15)}Z`, `DTSTART:${start}`, `DTEND:${end}`, `SUMMARY:${title}`, `LOCATION:${where}`, `DESCRIPTION:${details}`, "END:VEVENT", "END:VCALENDAR"].join("\r\n");
+    return { g, ics: "data:text/calendar;charset=utf-8," + encodeURIComponent(ics) };
+  };
   let holds = new Map(); // slotId -> { at: ms, k }
   const isHeld = (s) => { const h = holds.get(s.id); return !!h && h.k !== myKey && Date.now() - h.at < HOLD_MS; };
   // only the next few open times each day are offered, so nobody picks 4 PM while 1:10 sits empty (Jordan 10/24)
@@ -112,6 +123,7 @@ export async function initTithingForm(mount, token) {
     const mineCard = mineSlot ? `<div class="td-card td-mine"><div class="td-tick">✓</div><div class="td-mine-body"><b>You're signed up${mine.name ? ", " + esc(mine.name) : ""}.</b>
           <div class="td-mine-when"><span class="td-mine-day">${esc(fmtLongDay(mineSlot.date))}</span><span class="td-mine-time">${esc(fmtClock(mineSlot.min))}</span></div>
           ${mineSlot.place === "home" ? `<div class="td-mine-where">🏠 ${esc(whereLine(mineSlot))}</div>` : ""}
+          <div class="td-cal"><span>Add this to your calendar:</span><a class="td-btn td-btn-cal" href="${calBits(mineSlot).g}" target="_blank" rel="noopener">Google Calendar</a><a class="td-btn td-btn-cal" href="${calBits(mineSlot).ics}" download="tithing-declaration.ics">Apple / Outlook</a></div>
           <div class="td-sub">${contactLine}</div>
           <div class="td-mine-links"><button type="button" class="td-link" data-mine-change>Change time</button><span>·</span><button type="button" class="td-link" data-mine-cancel>Cancel sign-up</button></div>
           <p class="td-err" id="td-mine-err" hidden></p></div></div>` : "";
