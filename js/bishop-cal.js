@@ -3,7 +3,7 @@
 //   settings/bishopCal { council: { on, start, end, byYear: { "2026": { start, end } } }, bishopric: { on, weekday, start, end } }
 //   council.byYear (2026-10-25): a year's own meeting time; a year without one uses start/end
 // They show on the Calendar like any bishop's event and block tithing-declaration times.
-import { db } from "./firebase-init.js?v=1792978316";
+import { db } from "./firebase-init.js?v=1792978942";
 import { doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 let cfg = null, councilDates = [], listeners = [], started = false;

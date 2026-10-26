@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792978316";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792978316";
+import { db } from "./firebase-init.js?v=1792978942";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792978942";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792978316";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792978316";
-import { openCouncilDate } from "./council.js?v=1792978316";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792978316";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792978942";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792978942";
+import { openCouncilDate } from "./council.js?v=1792978942";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792978942";
 
 let events = [];
 let users = []; // app users, for the People picker on an event (2026-10-19)
@@ -414,7 +414,8 @@ function focusHtml(date, blocks) {
     const ed = can("tithing", "edit");
     return `<h4 class="dv-side-h">Tithing declaration</h4>
       <div class="row-sub">${fmtClock(b.start)}–${fmtClock(b.end)}${w.place === "home" ? " · 🏠 home visits" : ""}${isPriority(w) ? " · 🔒 priority" : ""}</div>
-      ${ed ? `<div class="dv-opts dv-opts-row"><label>Each visit<select id="dv-f-len">${TITHING_LENS.map((n) => `<option value="${n}"${Number(w.len) === n ? " selected" : ""}>${n} min</option>`).join("")}</select></label>
+      ${ed ? `<div class="dv-opts dv-opts-row"><label>Starts<input type="time" id="dv-f-start" value="${esc(w.start)}" step="300"></label><label>Ends<input type="time" id="dv-f-end" value="${esc(w.end)}" step="300"></label></div>
+        <div class="dv-opts dv-opts-row"><label>Each visit<select id="dv-f-len">${TITHING_LENS.map((n) => `<option value="${n}"${Number(w.len) === n ? " selected" : ""}>${n} min</option>`).join("")}</select></label>
         <label>Where<select id="dv-f-place"><option value="office"${w.place !== "home" ? " selected" : ""}>Bishop's office</option><option value="home"${w.place === "home" ? " selected" : ""}>Home visits</option></select></label></div>
         <div class="dv-opts"><label class="dv-check"><input type="checkbox" id="dv-f-pri" ${isPriority(w) ? "checked" : ""}> Priority <small>(marked on the sign-up page)</small></label>
           <div class="dv-pri-wrap" id="dv-f-priwrap"${isPriority(w) ? "" : " hidden"}>
@@ -426,7 +427,7 @@ function focusHtml(date, blocks) {
             </div>
           </div></div>
         <div class="dv-opts dv-opts-row dv-f-repeat"><label>Repeat this block<select id="dv-f-rep">${repeatChoices(date).map(([v, l]) => `<option value="${v}">${esc(v === "0" ? "Doesn't repeat" : l)}</option>`).join("")}</select></label><label id="dv-f-until-wrap" hidden>Until<input type="date" id="dv-f-until" value="${esc(addDaysIso(date, 56))}"></label></div>
-        ${pickDaysHtml(date, "dv-f-pick")}` : ""}
+        ${pickDaysHtml(date, "dv-f-pick")}${tithingSiblings(w).length ? `<div class="row-sub ev-series-note">↻ This block repeats on ${tithingSiblings(w).length} other Sunday${tithingSiblings(w).length === 1 ? "" : "s"} — Save, Remove and ⊘ will ask whether the change is for this one, this and later ones, or all.</div>` : ""}` : ""}
       <h4 class="dv-side-h">Times <span class="pill pill-role-member">${booked.length} of ${b.slots.filter((s) => !s.blocked || signups[s.id]).length} booked</span></h4>
       ${ed ? `<div class="row-sub" style="margin:-.2rem 0 .3rem">Type a name on a time to sign someone up yourself (Enter saves); clear it to open the time again. ⊘ blocks a time out so nobody can take it.</div>` : ""}
       <div class="dv-irows">${b.slots.map((s) => { const su = signups[s.id]; const busyT = !su && s.blocked && season.busy?.[s.id];
@@ -485,20 +486,46 @@ function wireSide(date, blocks, keep) {
     const id = dvFocus.slice(2), priority = !!side.querySelector("#dv-f-pri")?.checked;
     const w0 = (season.windows || []).find((x) => x.id === id); if (!w0) return;
     const { note: _n, group: _g, ...rest } = w0; // the old reserved-for note / group are folded into the checkbox
-    const edited = { ...rest, group: "", len: Number(side.querySelector("#dv-f-len").value), place: side.querySelector("#dv-f-place").value, ...(priority ? { priority: true } : {}) };
+    const nStart = side.querySelector("#dv-f-start")?.value || w0.start, nEnd = side.querySelector("#dv-f-end")?.value || w0.end;
+    if (!(toMinutes(nEnd) > toMinutes(nStart))) return toast("The end has to be after the start");
+    const edited = { ...rest, group: "", start: nStart, end: nEnd, len: Number(side.querySelector("#dv-f-len").value), place: side.querySelector("#dv-f-place").value, ...(priority ? { priority: true } : {}) };
     // priority wording: the default from settings, or this block's own; "all future weeks" makes it the new default
     delete edited.priorityText;
     const txt = (side.querySelector("#dv-f-pritext")?.value || "").trim(), makeDefault = !!side.querySelector("#dv-f-pridef")?.checked;
     const seasonDefault = season.priorityText || PRIORITY_TEXT;
     if (priority && txt && makeDefault && txt !== seasonDefault) { try { await updateDoc(doc(db, "tithing", season.token), { priorityText: txt }); season = { ...season, priorityText: txt }; } catch (e) { return toast("Couldn't save the wording: " + (e.code || e.message)); } }
     else if (priority && txt && txt !== seasonDefault) edited.priorityText = txt;
-    const cur = (season.windows || []).map((w) => (w.id === id ? edited : w));
+    // which blocks take the change: just this one, or its repeats too (Jordan 10/25)
+    let targets = [w0];
+    if (tithingSiblings(w0).length) { targets = await askTithingScope(side, w0, "Apply this change to"); if (!targets) return; }
+    const timeChanged = nStart !== w0.start || nEnd !== w0.end, delta = toMinutes(nStart) - toMinutes(w0.start);
+    const skipped = [];
+    const apply = (w) => { // the same edits on a sibling, keeping its own date; its times shift by the same amount
+      const { note: _n2, group: _g2, priorityText: _p2, ...r } = w;
+      const o = { ...r, group: "", len: edited.len, place: edited.place };
+      if (edited.priority) o.priority = true; else delete o.priority;
+      if (edited.priorityText) o.priorityText = edited.priorityText;
+      if (timeChanged) { o.start = hhmmOf(toMinutes(w.start) + delta); o.end = w.id === w0.id ? nEnd : hhmmOf(Math.max(toMinutes(o.start) + edited.len, toMinutes(w.end) + (toMinutes(nEnd) - toMinutes(w0.end)))); }
+      return o;
+    };
+    const nextById = {};
+    for (const w of targets) {
+      const o = apply(w);
+      if (timeChanged && !(await shiftTithingSignups(w, o, skipped))) continue; // someone's signed up outside the new times — that Sunday keeps its old block
+      nextById[w.id] = o;
+    }
+    if (!nextById[w0.id]) return toast(`Someone is signed up outside the new times on ${fmtDate(w0.date)} — move or cancel them first`);
+    if (targets.length > 1) { const sid = w0.series || "ts" + Math.random().toString(36).slice(2, 9); Object.values(nextById).forEach((o) => { o.series = sid; }); } // edited together → they stay a set
+    const cur = (season.windows || []).map((w) => nextById[w.id] || w);
     const rule = side.querySelector("#dv-f-rep")?.value || "0", until = side.querySelector("#dv-f-until")?.value || "";
     const dates = rule === "0" ? [] : repeatDates(edited.date, rule, until, pickedDays(side.querySelector("#dv-f-pick"))).slice(1)
       .filter((d) => !cur.some((x) => x.date === d && toMinutes(x.start) < toMinutes(edited.end) && toMinutes(edited.start) < toMinutes(x.end)));
-    const adds = dates.map((d) => ({ ...edited, id: "w" + Math.random().toString(36).slice(2, 9), date: d }));
+    if (dates.length && !nextById[w0.id].series) nextById[w0.id].series = "ts" + Math.random().toString(36).slice(2, 9); // the new repeats know they belong together (10/25)
+    const adds = dates.map((d) => ({ ...nextById[w0.id], id: "w" + Math.random().toString(36).slice(2, 9), date: d }));
     const b = side.querySelector("#dv-f-save"); b.disabled = true; b.textContent = "Saving…";
-    try { await saveTithingWindows([...cur, ...adds], adds.length ? `Saved — and added on ${adds.length} more day${adds.length === 1 ? "" : "s"}` : "Saved"); }
+    const n = Object.keys(nextById).length;
+    const msg = (adds.length ? `Saved — and added on ${adds.length} more day${adds.length === 1 ? "" : "s"}` : n > 1 ? `Saved on ${n} Sundays` : "Saved") + (skipped.length ? ` · skipped ${skipped.join(", ")} (sign-ups outside the new times)` : "");
+    try { await saveTithingWindows([...cur, ...adds], msg); }
     catch (e) { toast("Couldn't save: " + (e.code || e.message)); b.disabled = false; b.textContent = "Save"; }
   });
   // sign someone up (or clear them) straight from the block — for members who don't use the link (Jordan 10/18)
@@ -525,20 +552,30 @@ function wireSide(date, blocks, keep) {
   }));
   side.querySelectorAll("[data-tblock]").forEach((b) => b.addEventListener("click", async () => {
     const id = b.dataset.tblock, on = b.dataset.on === "1";
-    const blocked = on ? [...new Set([...(season.blocked || []), id])] : (season.blocked || []).filter((x) => x !== id);
+    const w0 = (season.windows || []).find((x) => x.id === dvFocus.slice(2));
+    let ids = [id];
+    if (w0 && tithingSiblings(w0).length) { // the same time of day on the repeating blocks too, if he wants (Jordan 10/25)
+      const targets = await askTithingScope(side, w0, on ? `Block out ${fmtClock(parseSlotId(id).min)} on` : `Open ${fmtClock(parseSlotId(id).min)} back up on`); if (!targets) return;
+      const min = parseSlotId(id).min; ids = targets.filter((w) => toMinutes(w.start) <= min && min < toMinutes(w.end)).map((w) => slotId(w.date, min)).filter((sid) => !signups[sid]);
+    }
+    const blocked = on ? [...new Set([...(season.blocked || []), ...ids])] : (season.blocked || []).filter((x) => !ids.includes(x));
     try {
       await updateDoc(doc(db, "tithing", season.token), { blocked, slots: slotMap(season.windows, [...blocked, ...Object.keys(season.busy || {})]), updatedAt: serverTimestamp() });
-      season = { ...season, blocked }; toast(on ? "Blocked out" : "Open again"); drawDay();
+      season = { ...season, blocked }; toast((on ? "Blocked out" : "Open again") + (ids.length > 1 ? ` on ${ids.length} Sundays` : "")); drawDay();
     } catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
   }));
   // repeat an existing tithing block onto later dates (2026-10-18)
   wireRepeatSel(side.querySelector("#dv-f-rep"), side.querySelector("#dv-f-until-wrap"), side.querySelector("#dv-f-pick")); wirePickDays(side.querySelector("#dv-f-pick"));
   side.querySelector("#dv-f-remove")?.addEventListener("click", async () => {
-    const id = dvFocus.slice(2), b = blocks.find((x) => x.kind === "tithing" && x.id === id);
+    const id = dvFocus.slice(2), b = blocks.find((x) => x.kind === "tithing" && x.id === id), w0 = b?.win;
     if (b && b.slots.some((s) => signups[s.id])) return toast("People are signed up in this block — move or cancel them on the Tithing Declaration page first");
-    if (!confirm("Remove this tithing declaration block?")) return;
+    let targets = [w0];
+    if (w0 && tithingSiblings(w0).length) { targets = await askTithingScope(side, w0, "Remove"); if (!targets) return; }
+    else if (!confirm("Remove this tithing declaration block?")) return;
+    const booked = new Set(Object.keys(signups)), keep = targets.filter((w) => w.id !== w0.id && slotsOf([w], []).some((s) => booked.has(s.id))); // later Sundays with sign-ups stay
+    const drop = new Set(targets.filter((w) => !keep.includes(w)).map((w) => w.id));
     dvFocus = null;
-    await saveTithingWindows((season.windows || []).filter((w) => w.id !== id), "Block removed");
+    await saveTithingWindows((season.windows || []).filter((w) => !drop.has(w.id)), (drop.size > 1 ? `${drop.size} blocks removed` : "Block removed") + (keep.length ? ` · kept ${keep.map((w) => fmtDate(w.date)).join(", ")} (people are signed up)` : ""));
   });
   // interview slot names
   side.querySelectorAll("[data-iname]").forEach((inp) => {
@@ -762,7 +799,7 @@ function wireBlockDrag(grid, timed) {
       const m = mode; mode = null;
       if (!moved) return; // a plain click — the click handler opens it
       e.stopPropagation(); dragJustHappened = true; setTimeout(() => { dragJustHappened = false; }, 300);
-      if (isTithing) return moveTithingBlock(b, ns, ne);
+      if (isTithing) return moveTithingBlock(b, ns, ne, m);
       const side = document.getElementById("dv-side");
       if (dvFocus === "edit:" + b.id && side?.querySelector("#ev-start")) { side.querySelector("#ev-start").value = hhmmOf(ns); side.querySelector("#ev-end").value = hhmmOf(ne); }
       try {
@@ -778,19 +815,64 @@ function wireBlockDrag(grid, timed) {
   });
 }
 // a tithing block dragged to a new time: the window moves, and every sign-up in it moves to the same place in the new block (10/24)
-async function moveTithingBlock(b, ns, ne) {
-  const w = b.win, delta = ns - b.start;
+async function moveTithingBlock(b, ns, ne, mode = "move") {
+  const w = b.win, delta = ns - b.start, dEnd = ne - b.end;
   const booked = b.slots.filter((x) => signups[x.id]);
   if (booked.length && delta && !confirm(`${booked.length} ${booked.length === 1 ? "person is" : "people are"} signed up in this block. Move ${booked.length === 1 ? "their time" : "their times"} by ${Math.abs(delta)} minutes ${delta > 0 ? "later" : "earlier"} too?`)) { drawDay(); return; }
+  // a repeating block asks whether the later Sundays shift the same way (Jordan 10/25)
+  let targets = [w];
+  const side = document.getElementById("dv-side");
+  if (tithingSiblings(w).length && side) { targets = await askTithingScope(side, w, mode === "move" ? "Move" : "Change the end time of"); if (!targets) { drawDay(); return; } }
   try {
-    if (booked.length && delta) {
-      const batch = writeBatch(db), at = (c, id) => doc(db, "tithing", season.token, c, id);
-      booked.forEach((x) => { const nid = slotId(w.date, x.min + delta); batch.set(at("signups", nid), signups[x.id]); batch.set(at("taken", nid), { len: x.len, at: serverTimestamp() }); batch.delete(at("signups", x.id)); batch.delete(at("taken", x.id)); });
-      await batch.commit();
+    const skipped = [], nextById = {};
+    for (const x of targets) {
+      const o = { ...x, start: hhmmOf(toMinutes(x.start) + delta), end: hhmmOf(Math.max(toMinutes(x.start) + delta + (Number(x.len) || 15), toMinutes(x.end) + dEnd)) };
+      if (!(await shiftTithingSignups(x, o, skipped))) continue;
+      nextById[x.id] = o;
     }
-    const windows = (season.windows || []).map((x) => (x.id === w.id ? { ...x, start: hhmmOf(ns), end: hhmmOf(ne) } : x));
-    await saveTithingWindows(windows, `Moved to ${fmtClock(ns)} – ${fmtClock(ne)}${booked.length && delta ? " — sign-ups moved too; let them know" : ""}`);
+    if (!nextById[w.id]) { drawDay(); return; }
+    const windows = (season.windows || []).map((x) => nextById[x.id] || x);
+    const n = Object.keys(nextById).length;
+    await saveTithingWindows(windows, `${mode === "move" ? `Moved to ${fmtClock(ns)} – ${fmtClock(ne)}` : `Now ends at ${fmtClock(ne)}`}${n > 1 ? ` · ${n} Sundays` : ""}${booked.length && delta ? " — sign-ups moved too; let them know" : ""}${skipped.length ? ` · skipped ${skipped.join(", ")}` : ""}`);
   } catch (err) { toast("Couldn't move: " + (err.code || err.message)); drawDay(); }
+}
+// the other Sundays a tithing block repeats on: the same series, or (older blocks) the same start, end and visit length
+function tithingSiblings(w) {
+  const all = (season?.windows || []).filter((x) => x.id !== w.id);
+  if (w.series) return all.filter((x) => x.series === w.series);
+  return all.filter((x) => !x.series && x.start === w.start && x.end === w.end && Number(x.len || 15) === Number(w.len || 15) && (x.place || "office") === (w.place || "office"));
+}
+// move one window's sign-ups along with it: shifts them by the start change; refuses (and records the date) if someone would fall outside the new times
+async function shiftTithingSignups(w, o, skipped) {
+  const delta = toMinutes(o.start) - toMinutes(w.start);
+  const booked = slotsOf([w], []).filter((s) => signups[s.id]);
+  if (!booked.length) return true;
+  const outside = booked.some((s) => s.min + delta < toMinutes(o.start) || s.min + delta + s.len > toMinutes(o.end));
+  if (outside) { skipped.push(fmtDate(w.date)); return false; }
+  if (!delta) return true;
+  const batch = writeBatch(db), at = (c, id) => doc(db, "tithing", season.token, c, id);
+  booked.forEach((x) => { const nid = slotId(w.date, x.min + delta); batch.set(at("signups", nid), signups[x.id]); batch.set(at("taken", nid), { len: x.len, at: serverTimestamp() }); batch.delete(at("signups", x.id)); batch.delete(at("taken", x.id)); });
+  await batch.commit();
+  return true;
+}
+// "just this one / this and later / all" for a repeating tithing block — same look as the meeting version
+function askTithingScope(host, w, what) {
+  return new Promise((resolve) => {
+    const mine = [w, ...tithingSiblings(w)].sort((a, b) => a.date.localeCompare(b.date)), later = mine.filter((x) => x.date >= w.date);
+    host.querySelector("#ev-scopewrap")?.remove();
+    const box = document.createElement("div"); box.id = "ev-scopewrap"; box.className = "ev-delwrap";
+    box.innerHTML = `<b>This block repeats (${mine.length} Sundays). ${esc(what)}…</b>
+      <div class="ev-delopts">
+        <button type="button" class="btn btn-sm btn-primary" data-scope="one">Just this one (${esc(fmtDate(w.date))})</button>
+        <button type="button" class="btn btn-sm" data-scope="later">This and the later ones (${later.length})</button>
+        <button type="button" class="btn btn-sm" data-scope="all">All ${mine.length}</button>
+        <button type="button" class="btn btn-sm btn-ghost" data-scope="cancel">Cancel</button>
+      </div>`;
+    const anchor = host.querySelector(".dv-form-actions") || host.querySelector(".modal-actions");
+    if (anchor) anchor.before(box); else host.prepend(box);
+    box.scrollIntoView({ block: "nearest" });
+    box.querySelectorAll("[data-scope]").forEach((b) => b.addEventListener("click", () => { const v = b.dataset.scope; box.remove(); resolve(v === "cancel" ? null : v === "one" ? [w] : v === "later" ? later : mine); }));
+  });
 }
 async function saveDesignation(date, kind, side) {
   const saveBtn = side.querySelector("#dv-save");
