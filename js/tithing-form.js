@@ -2,13 +2,13 @@
 // No sign-in. Anyone with the link sees the open times (never who took the
 // others), picks one, and leaves a name — plus a phone number if they'd like
 // a text reminder.
-import { db } from "./firebase-init.js?v=1792983214";
+import { db } from "./firebase-init.js?v=1792983988";
 import {
   doc, getDoc, collection, onSnapshot, writeBatch, serverTimestamp, setDoc, deleteDoc,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import {
   GROUPS, PLACES, esc, fmtClock, fmtLongDay, slotsOf, sortWindows, parseSlotId, todayIso, nowMin, offList, isPriority, PRIORITY_TEXT, toMin,
-} from "./tithing-shared.js?v=1792983214";
+} from "./tithing-shared.js?v=1792983988";
 
 export async function initTithingForm(mount, token) {
   const fail = (title, msg) => { mount.innerHTML = `<div class="td-card td-msg"><h2>${esc(title)}</h2><p>${esc(msg)}</p></div>`; };
@@ -29,7 +29,12 @@ export async function initTithingForm(mount, token) {
   let taken = new Map(); // slotId -> minutes
   let justBooked = null;
   // a time someone has tapped and is filling the form for is "held" for a few minutes so two people can't pick it at once (10/24)
-  const HOLD_MS = 3 * 60 * 1000, myKey = "k" + Math.random().toString(36).slice(2, 12);
+  const keyKey = "td-key-" + token;
+  const myKey = (() => { try { const k = localStorage.getItem(keyKey); if (k) return k; } catch {} const k = "k" + Math.random().toString(36).slice(2, 12); try { localStorage.setItem(keyKey, k); } catch {} return k; })();
+  const HOLD_MS = 3 * 60 * 1000;
+  let prefill = null; // name / phone carried over when someone changes their time (10/25)
+  const secName = String(season.execSec || "").trim();
+  const contactLine = `Contact ${secName ? `${esc(secName)}, the executive secretary,` : "the executive secretary"} for changes or info.`;
   let holds = new Map(); // slotId -> { at: ms, k }
   const isHeld = (s) => { const h = holds.get(s.id); return !!h && h.k !== myKey && Date.now() - h.at < HOLD_MS; };
   // only the next few open times each day are offered, so nobody picks 4 PM while 1:10 sits empty (Jordan 10/24)
@@ -107,7 +112,9 @@ export async function initTithingForm(mount, token) {
     const mineCard = mineSlot ? `<div class="td-card td-mine"><div class="td-tick">✓</div><div class="td-mine-body"><b>You're signed up${mine.name ? ", " + esc(mine.name) : ""}.</b>
           <div class="td-mine-when"><span class="td-mine-day">${esc(fmtLongDay(mineSlot.date))}</span><span class="td-mine-time">${esc(fmtClock(mineSlot.min))}</span></div>
           ${mineSlot.place === "home" ? `<div class="td-mine-where">🏠 ${esc(whereLine(mineSlot))}</div>` : ""}
-          <div class="td-sub">Need to change it? Contact the bishop or the executive secretary.</div></div></div>` : "";
+          <div class="td-sub">${contactLine}</div>
+          <div class="td-mine-links"><button type="button" class="td-link" data-mine-change>Change time</button><span>·</span><button type="button" class="td-link" data-mine-cancel>Cancel sign-up</button></div>
+          <p class="td-err" id="td-mine-err" hidden></p></div></div>` : "";
     mount.innerHTML = `
       <div class="td-card td-intro">
         <h1>Tithing Declaration</h1>
@@ -119,10 +126,34 @@ export async function initTithingForm(mount, token) {
       ${mineCard}
       ${mineSlot ? "" : dayHtml || `<div class="td-card td-msg"><h2>No open times right now</h2><p>Please check back, or contact the bishop or the executive secretary.</p></div>`}
       ${!mineSlot && dayHtml && !openCount ? `<div class="td-card td-msg"><p>Every time is taken at the moment. Please contact the bishop or the executive secretary.</p></div>` : ""}
-      <p class="td-foot">Only the bishop and the people who help him schedule can see who signed up.</p>
+      <p class="td-foot">Only the bishop and the executive secretary can see who signed up.</p>
       <div class="td-sheet-bg" id="td-sheet-bg" hidden><div class="td-sheet" id="td-sheet" role="dialog" aria-modal="true"></div></div>`;
 
     mount.querySelectorAll("[data-slot]").forEach((b) => b.addEventListener("click", () => holdThenOpen(slots.find((s) => s.id === b.dataset.slot), b)));
+    mount.querySelector("[data-mine-cancel]")?.addEventListener("click", () => cancelMine(false));
+    mount.querySelector("[data-mine-change]")?.addEventListener("click", () => cancelMine(true));
+  }
+
+  // cancel the sign-up made on this phone: the key saved with it has to match, so only this phone can (10/25)
+  async function cancelMine(thenPick) {
+    const mine = readMine(); if (!mine) return;
+    const s = slots.find((x) => x.id === mine.id);
+    if (!thenPick && !confirm(`Cancel your ${s ? fmtClock(s.min) + " time on " + fmtLongDay(s.date) : "time"}?`)) return;
+    const errEl = mount.querySelector("#td-mine-err");
+    try {
+      const batch = writeBatch(db);
+      batch.set(doc(db, "tithing", token, "cancels", mine.id), { k: mine.k || myKey, at: serverTimestamp() });
+      batch.delete(doc(db, "tithing", token, "signups", mine.id));
+      batch.delete(doc(db, "tithing", token, "taken", mine.id));
+      await batch.commit();
+      taken.delete(mine.id); justBooked = null;
+      try { localStorage.removeItem(mineKey); } catch {}
+      if (thenPick) prefill = { name: mine.name || "", phone: mine.phone || "" };
+      render();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (e) {
+      if (errEl) { errEl.textContent = e && e.code === "permission-denied" ? `This one can't be changed from here — ${contactLine.replace(/^Contact/, "contact").replace(/\.$/, "")}.` : "Couldn't do that — check your connection and try again."; errEl.hidden = false; }
+    }
   }
 
   // tap a time → hold it (fails if someone else holds it) → open the form
@@ -144,8 +175,8 @@ export async function initTithingForm(mount, token) {
       <h2>${esc(fmtLongDay(s.date))}</h2>
       <p class="td-when">${fmtClock(s.min)} · ${s.len} minutes${s.place === "home" ? `<br>🏠 ${esc(whereLine(s))}` : ""}</p>
       ${s.priority ? `<p class="td-flag td-flag-note td-flag-block">🔒 This is a priority time slot. ${esc(s.priorityText || season.priorityText || PRIORITY_TEXT)}</p>` : ""}
-      <label class="td-field"><span>Your name <i>(or family name)</i></span><input id="td-name" autocomplete="name" maxlength="80"></label>
-      <label class="td-field"><span>Mobile number <i>(optional — only if you'd like a text reminder)</i></span><input id="td-phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="30"></label>
+      <label class="td-field"><span>Your name <i>(or family name)</i></span><input id="td-name" autocomplete="name" maxlength="80" value="${esc(prefill?.name || "")}"></label>
+      <label class="td-field"><span>Mobile number <i>(optional — only if you'd like a text reminder)</i></span><input id="td-phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="30" value="${esc(prefill?.phone || "")}"></label>
       ${s.place === "home" ? `<label class="td-field"><span>Your address <i>(optional)</i></span><input id="td-addr" autocomplete="street-address" maxlength="160"></label>` : ""}
       ${prev ? `<p class="td-sub">You already signed up for a time on this device. This adds another one.</p>` : ""}
       <p class="td-err" id="td-err" hidden></p>
@@ -170,11 +201,11 @@ export async function initTithingForm(mount, token) {
         // both docs go in together: the public marker that the time is gone, and the private name
         const batch = writeBatch(db);
         batch.set(doc(db, "tithing", token, "taken", s.id), { len: s.len, at: serverTimestamp() });
-        batch.set(doc(db, "tithing", token, "signups", s.id), { name, phone, address, at: serverTimestamp() });
+        batch.set(doc(db, "tithing", token, "signups", s.id), { name, phone, address, at: serverTimestamp(), k: myKey }); // k lets this phone cancel it later
         batch.delete(doc(db, "tithing", token, "holds", s.id)); // the hold has done its job
         await batch.commit();
         booked = true; holds.delete(s.id);
-        justBooked = { id: s.id, name };
+        justBooked = { id: s.id, name, phone, k: myKey }; prefill = null;
         saveMine(justBooked);
         taken.set(s.id, s.len);
         close();

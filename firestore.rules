@@ -174,6 +174,16 @@ service cloud.firestore {
           && request.resource.data.len == tithingDoc(token).slots[slotId]
           && request.resource.data.at == request.time
           && existsAfter(/databases/$(database)/documents/tithing/$(token)/signups/$(slotId)));
+        allow delete: if tithingManages()
+          || (tithingOpen(token) && !existsAfter(/databases/$(database)/documents/tithing/$(token)/signups/$(slotId))); // the person cancels: their name goes in the same batch (10/25)
+      }
+      // the person who signed up may cancel from their own phone (10/25): they write their secret key here in the same
+      // batch, and the sign-up may only be deleted when that key matches the one saved with it
+      match /cancels/{slotId} {
+        allow create, update: if tithingManages() || (tithingOpen(token)
+          && request.resource.data.keys().hasOnly(['k', 'at'])
+          && request.resource.data.k is string && request.resource.data.k.size() >= 8 && request.resource.data.k.size() <= 40
+          && request.resource.data.at == request.time);
         allow delete: if tithingManages();
       }
       // a time being filled in right now (2026-10-24): anyone may hold an open time for 3 minutes; a stale hold may be taken over
@@ -197,10 +207,14 @@ service cloud.firestore {
         allow read, write: if tithingManages();
       }
       match /signups/{slotId} {
-        allow read, update, delete: if tithingManages();
+        allow read, update: if tithingManages();
+        allow delete: if tithingManages()
+          || (tithingOpen(token) && resource.data.k is string && resource.data.k.size() >= 8
+              && getAfter(/databases/$(database)/documents/tithing/$(token)/cancels/$(slotId)).data.k == resource.data.k);
         allow create: if tithingManages() || (tithingOpen(token)
           && slotId in tithingDoc(token).slots
-          && request.resource.data.keys().hasOnly(['name', 'phone', 'address', 'at'])
+          && request.resource.data.keys().hasOnly(['name', 'phone', 'address', 'at', 'k'])
+          && (!('k' in request.resource.data) || (request.resource.data.k is string && request.resource.data.k.size() <= 40))
           && request.resource.data.name is string
           && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80
           && request.resource.data.phone is string && request.resource.data.phone.size() <= 30

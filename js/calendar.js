@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792983214";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792983214";
+import { db } from "./firebase-init.js?v=1792983988";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792983988";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792983214";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792983214";
-import { openCouncilDate } from "./council.js?v=1792983214";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792983214";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792983988";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792983988";
+import { openCouncilDate } from "./council.js?v=1792983988";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792983988";
 
 let events = [];
 let users = []; // app users, for the People picker on an event (2026-10-19)
@@ -75,8 +75,15 @@ export function initCalendar() {
   panel.querySelector("#btn-standing")?.addEventListener("click", editStanding);
   onSnapshot(collection(db, "users"), (qs) => {
     users = qs.docs.map((d) => ({ uid: d.id, name: d.data().name || "", phone: d.data().phone || "", calling: d.data().calling || "", role: d.data().role || "", councilMember: !!d.data().councilMember })).filter((u) => u.name && !qs.docs.find((d) => d.id === u.uid).data().alias && !qs.docs.find((d) => d.id === u.uid).data().revoked && qs.docs.find((d) => d.id === u.uid).data().role !== "pending").sort((a, b) => a.name.localeCompare(b.name));
+    syncExecSec();
   }, () => {});
   watchBishopCal(() => { render(); if (season) syncBusy(events); });
+  // the sign-up page names the executive secretary (it can't read users itself): keep that name on the season doc (10/25)
+  function syncExecSec() { // hoisted: the users snapshot may fire before this line runs
+    if (!season || !users.length || !can("tithing", "edit")) return;
+    const sec = users.find((u) => /executive\s+sec/i.test(u.calling))?.name || "";
+    if ((season.execSec || "") !== sec) updateDoc(doc(db, "tithing", season.token), { execSec: sec }).catch(() => {});
+  }
   panel.querySelectorAll("#cal-filter [data-cal]").forEach((b) => b.addEventListener("click", () => {
     calView = b.dataset.cal;
     panel.querySelectorAll("#cal-filter .chip").forEach((c) => c.classList.toggle("active", c === b));
@@ -97,7 +104,7 @@ export function initCalendar() {
       unsubSignups = next ? onSnapshot(collection(db, "tithing", next.token, "signups"), (s) => { signups = Object.fromEntries(s.docs.map((d) => [d.id, d.data()])); render(); }, () => {}) : null;
     }
     season = next;
-    render();
+    render(); syncExecSec();
   }, () => {});
   render();
 }
