@@ -2691,3 +2691,10 @@ tr.us-menu-open td { background: #f7f9fb; }
 .sv-col.sv-weekday .sv-head:hover { background: #f5ecd2; }
 .sv-nth.sv-wk { background: #f0e4c2; color: #6a5520; border-radius: 99px; padding: .05rem .45rem; font-size: .66rem; text-transform: uppercase; letter-spacing: .05em; }
 .sv-day-x { margin-left: auto; font-size: .7rem; opacity: .4; cursor: pointer; padding: 0 .3rem; border-radius: 6px; } .sv-day-x:hover { opacity: 1; background: rgba(0,0,0,.08); }
+/* tithing block: one short tag at the top right, and the first row leaves it room so a name never hides under it (Jordan 10/25) */
+.dv-tithing .dv-block-tag { max-width: none; }
+.dv-tithing .dv-slot:first-child { padding-right: 7.4rem; }
+.sv-col .dv-tithing .dv-slot:first-child { padding-right: 6.2rem; }
+.sv-col .dv-tithing .dv-block-tag { max-width: none; }
+/* a booked time goes light green; open times stay the tithing yellow — these are the tithing colours (Jordan 10/25) */
+.dv-slot.booked { background: #e4f3e8; }

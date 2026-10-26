@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792982863";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792982863";
+import { db } from "./firebase-init.js?v=1792982981";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792982981";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792982863";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792982863";
-import { openCouncilDate } from "./council.js?v=1792982863";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792982863";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792982981";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792982981";
+import { openCouncilDate } from "./council.js?v=1792982981";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792982981";
 
 let events = [];
 let users = []; // app users, for the People picker on an event (2026-10-19)
@@ -327,7 +327,7 @@ if (b.kind === "tithing") {
     // every sign-up time is its own row: "11:05 (10 min) The Smiths" as people book, "open" until they do (Jordan 10/18)
     const ticks = b.slots.map((s) => { const su = signups[s.id]; const st = su?.status === "attended" ? " came" : su?.status === "noshow" ? " noshow" : ""; return `<div class="dv-slot${su ? " booked" + st : s.blocked ? " off" : ""}" style="top:${(s.min - b.start) * PX_MIN}px;height:${s.len * PX_MIN}px" title="${fmtClock(s.min)}${su ? " · " + esc(su.name) + (su.phone ? " · " + esc(su.phone) : "") + (st === " came" ? " · came" : st === " noshow" ? " · no-show" : "") : s.blocked ? " · blocked" : " · open"}"><b>${fmtClock(s.min).replace(/ [AP]M$/, "")}</b> <i>(${s.len} min)</i> <span>${st === " came" ? "✓ " : st === " noshow" ? "✗ " : ""}${su ? esc(su.name) : s.blocked ? "blocked" : "open"}</span></div>`; }).join("");
     const booked = b.slots.filter((s) => signups[s.id]).length;
-    return `<div class="dv-block dv-tithing dv-slotted${dvFocus === "t:" + b.id ? " dv-focus" : ""}" data-block="t:${esc(b.id)}" style="${style}">${blockX(b)}<div class="dv-block-tag">Tithing declaration · ${booked}/${b.slots.filter((s) => !s.blocked || signups[s.id]).length} booked</div>${isPriority(b.win) ? `<div class="dv-block-tag dv-block-note">🔒 Priority</div>` : ""}<div class="dv-slots">${ticks}</div></div>`;
+    return `<div class="dv-block dv-tithing dv-slotted${dvFocus === "t:" + b.id ? " dv-focus" : ""}" data-block="t:${esc(b.id)}" style="${style}">${blockX(b)}<div class="dv-block-tag" title="Tithing declaration · ${booked} of ${b.slots.filter((s) => !s.blocked || signups[s.id]).length} booked${isPriority(b.win) ? " · priority times" : ""}">${isPriority(b.win) ? "🔒 " : ""}Tithing · ${booked}/${b.slots.filter((s) => !s.blocked || signups[s.id]).length}</div><div class="dv-slots">${ticks}</div></div>`;
   }
   if (b.kind === "interviews") {
     const len = Number(b.ev.len) || 15, names = b.ev.slots || {}; const ticks = [];
