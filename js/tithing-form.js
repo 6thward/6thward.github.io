@@ -2,13 +2,13 @@
 // No sign-in. Anyone with the link sees the open times (never who took the
 // others), picks one, and leaves a name — plus a phone number if they'd like
 // a text reminder.
-import { db } from "./firebase-init.js?v=1792981375";
+import { db } from "./firebase-init.js?v=1792982774";
 import {
   doc, getDoc, collection, onSnapshot, writeBatch, serverTimestamp, setDoc, deleteDoc,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import {
   GROUPS, PLACES, esc, fmtClock, fmtLongDay, slotsOf, sortWindows, parseSlotId, todayIso, nowMin, offList, isPriority, PRIORITY_TEXT, toMin,
-} from "./tithing-shared.js?v=1792981375";
+} from "./tithing-shared.js?v=1792982774";
 
 export async function initTithingForm(mount, token) {
   const fail = (title, msg) => { mount.innerHTML = `<div class="td-card td-msg"><h2>${esc(title)}</h2><p>${esc(msg)}</p></div>`; };
@@ -64,30 +64,42 @@ export async function initTithingForm(mount, token) {
       const regular = openToday.filter((s) => !s.priority);
       const offered = new Set([...openToday.filter((s) => s.priority), ...(OPEN_AHEAD > 0 ? regular.slice(0, OPEN_AHEAD) : regular)].map((s) => s.id));
       const hidden = OPEN_AHEAD > 0 ? Math.max(0, regular.length - OPEN_AHEAD) : 0;
-      const blocks = wins.map((w) => {
-        const all = upcoming.filter((s) => s.win === w.id); if (!all.length) return ""; // every window of the day shows, even before its times open up
+      const slotHtml = (s) => (isTaken(s)
+        ? `<span class="td-slot td-slot-taken" aria-disabled="true">${fmtClock(s.min)}</span>`
+        : isHeld(s) ? `<span class="td-slot td-slot-held" aria-disabled="true" title="Someone is signing up for this time right now">${fmtClock(s.min)}<small>being taken</small></span>`
+        : `<button type="button" class="td-slot" data-slot="${s.id}">${fmtClock(s.min)}</button>`);
+      // a priority block is an amber panel with its own heading (wireframe A, 2026-10-18); the wording is in the intro
+      // "At the Bishop's office" is left unsaid — only a home visit says where
+      const priBlocks = wins.filter(isPriority).map((w) => {
+        const all = upcoming.filter((s) => s.win === w.id); if (!all.length) return "";
         const list = all.filter((s) => isTaken(s) || offered.has(s.id));
-        const span = `${fmtClock(toMin(w.start))} – ${fmtClock(toMin(w.end))}`;
-        // a priority block is an amber panel with its own heading (wireframe A, 2026-10-18); the wording is in the intro
-        // "At the Bishop's office" is left unsaid — only a home visit says where
-        const pri = isPriority(w);
         return `
-          <div class="td-win${pri ? " td-win-res" : ""}">
-            ${pri ? `<div class="td-res-h">🔒 Priority time slots</div>${w.priorityText && w.priorityText !== (season.priorityText || PRIORITY_TEXT) ? `<p class="td-res-txt">${esc(w.priorityText)}</p>` : ""}` : ""}
+          <div class="td-win td-win-res">
+            <div class="td-res-h">🔒 Priority time slots</div>${w.priorityText && w.priorityText !== (season.priorityText || PRIORITY_TEXT) ? `<p class="td-res-txt">${esc(w.priorityText)}</p>` : ""}
             <div class="td-win-head">
-              <span class="td-span">${span}</span>
+              <span class="td-span">${fmtClock(toMin(w.start))} – ${fmtClock(toMin(w.end))}</span>
               ${w.place === "home" ? `<span class="td-place">🏠 ${esc(PLACES.home.pub)}</span>` : ""}
               <span class="td-len">${Number(w.len) || 15}-minute visits</span>
             </div>
             ${list.length ? "" : `<p class="td-later">These times open up as the earlier ones fill.</p>`}
-            <div class="td-slots">
-              ${list.map((s) => (isTaken(s)
-                ? `<span class="td-slot td-slot-taken" aria-disabled="true">${fmtClock(s.min)}</span>`
-                : isHeld(s) ? `<span class="td-slot td-slot-held" aria-disabled="true" title="Someone is signing up for this time right now">${fmtClock(s.min)}<small>being taken</small></span>`
-                : `<button type="button" class="td-slot" data-slot="${s.id}">${fmtClock(s.min)}</button>`)).join("")}
-            </div>
+            <div class="td-slots">${list.map(slotHtml).join("")}</div>
           </div>`;
       }).join("");
+      // the regular times of the day are one list, however many blocks the bishop drew them in — no per-block headings (Jordan 10/25)
+      const regWins = wins.filter((w) => !isPriority(w));
+      const regAll = upcoming.filter((s) => regWins.some((w) => w.id === s.win)).sort((a, b) => a.min - b.min);
+      const regList = regAll.filter((s) => isTaken(s) || offered.has(s.id));
+      const lens = [...new Set(regWins.map((w) => Number(w.len) || 15))].sort((x, y) => x - y);
+      const regBlock = regAll.length ? `
+          <div class="td-win">
+            <div class="td-win-head">
+              ${regWins.some((w) => w.place === "home") ? `<span class="td-place">🏠 ${esc(PLACES.home.pub)}</span>` : ""}
+              <span class="td-len">${lens.length > 1 ? `${lens[0]}–${lens[lens.length - 1]}` : lens[0]}-minute visits</span>
+            </div>
+            ${regList.length ? "" : `<p class="td-later">These times open up as the earlier ones fill.</p>`}
+            <div class="td-slots">${regList.map(slotHtml).join("")}</div>
+          </div>` : "";
+      const blocks = priBlocks + regBlock;
       return blocks ? `<section class="td-card td-day"><h2>${esc(fmtLongDay(d))}</h2>${blocks}${hidden ? `<p class="td-more">${hidden} more time${hidden === 1 ? "" : "s"} open${hidden === 1 ? "s" : ""} up as these fill.</p>` : ""}</section>` : "";
     }).join("");
 
