@@ -1,25 +1,25 @@
 // App shell: auth flow (Google + PIN), permission gating, tab routing.
-import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1792979980";
+import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1792980169";
 import {
   signInWithPopup, signInWithEmailAndPassword, signOut, onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
   doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast } from "./ui.js?v=1792979980";
-import { initTasks } from "./tasks.js?v=1792979980";
-import { initSacrament, openMeetingLink } from "./sacrament.js?v=1792979980";
-import { initCalendar, initBishopSchedule } from "./calendar.js?v=1792979980";
-import { initCallings } from "./callings.js?v=1792979980";
-import { initConfidential } from "./confidential.js?v=1792979980";
-import { initAdmin } from "./admin.js?v=1792979980";
-import { initBoard } from "./board.js?v=1792979980";
-import { initHomeSacrament } from "./home-sacrament.js?v=1792979980";
-import { initCouncil, initBishopric } from "./council.js?v=1792979980";
-import { initMessage } from "./message.js?v=1792979980";
-import { initTithingPage } from "./tithing.js?v=1792979980";
-import { initSelfReliance } from "./selfreliance.js?v=1792979980";
-import { QUICK_PIN_LENGTH, validQuickPin, derive, devicePins, rememberDevice, forgetDevice, createQuickAccount, changeQuickPin, deleteQuickAccount } from "./quick-pin.js?v=1792979980";
+import { openModal, closeModal, toast } from "./ui.js?v=1792980169";
+import { initTasks } from "./tasks.js?v=1792980169";
+import { initSacrament, openMeetingLink } from "./sacrament.js?v=1792980169";
+import { initCalendar, initBishopSchedule } from "./calendar.js?v=1792980169";
+import { initCallings } from "./callings.js?v=1792980169";
+import { initConfidential } from "./confidential.js?v=1792980169";
+import { initAdmin } from "./admin.js?v=1792980169";
+import { initBoard } from "./board.js?v=1792980169";
+import { initHomeSacrament } from "./home-sacrament.js?v=1792980169";
+import { initCouncil, initBishopric } from "./council.js?v=1792980169";
+import { initMessage } from "./message.js?v=1792980169";
+import { initTithingPage } from "./tithing.js?v=1792980169";
+import { initSelfReliance } from "./selfreliance.js?v=1792980169";
+import { QUICK_PIN_LENGTH, validQuickPin, derive, devicePins, rememberDevice, forgetDevice, createQuickAccount, changeQuickPin, deleteQuickAccount } from "./quick-pin.js?v=1792980169";
 
 const ROLE_RANK = { pending: 0, member: 1, bishopric: 2, bishop: 3 };
 

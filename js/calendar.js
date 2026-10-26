@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792979980";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792979980";
+import { db } from "./firebase-init.js?v=1792980169";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792980169";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792979980";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792979980";
-import { openCouncilDate } from "./council.js?v=1792979980";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792979980";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792980169";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792980169";
+import { openCouncilDate } from "./council.js?v=1792980169";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792980169";
 
 let events = [];
 let users = []; // app users, for the People picker on an event (2026-10-19)
@@ -284,11 +284,10 @@ function dayView(date) {
       <div class="dv-grid-wrap"><div class="dv-grid" id="dv-grid"></div></div>
       <div class="dv-side" id="dv-side"></div>
     </div>
-    <div class="modal-actions"><div class="right"><button class="btn" id="dv-close">Close</button><button class="btn btn-primary" id="dv-add">+ Add event</button></div></div>`);
+    <div class="modal-actions"><div class="right"><button class="btn" id="dv-close">Close</button></div></div>`); // "+ Add event" is gone: a drag on the timeline is the one way to add, so the form's Add button can't be confused with it (Jordan 10/25)
   el.classList.add("modal-wide", "cal-dayview");
   el.querySelector("#dv-close").addEventListener("click", () => { openDay = null; dvRetime = null; closeModal(); });
   el.querySelector("#dv-retime-cancel")?.addEventListener("click", (e) => { e.preventDefault(); dvRetime = null; drawDay(); el.querySelector("#dv-hint").textContent = "Drag across the timeline to add something."; });
-  el.querySelector("#dv-add").addEventListener("click", () => { dvNew = { startTime: dvSel ? hhmmOf(dvSel.a) : "", endTime: dvSel ? hhmmOf(dvSel.b) : "" }; dvSel = null; dvFocus = "new:"; drawDay(); });
   drawDay();
   wireDrag(el.querySelector("#dv-grid"));
 }
