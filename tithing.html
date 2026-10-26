@@ -18,6 +18,13 @@
   .td-note { background: var(--brand-soft); border-radius: 10px; padding: .6rem .75rem; white-space: pre-wrap; }
   .td-legend { font-size: .92rem; color: var(--soft); }
   .td-day h2 { margin: 0 0 .6rem; font-size: 1.2rem; }
+  /* each day is one grouped card with a blue header bar (Jordan 10/25) */
+  .td-day { padding: 0; overflow: hidden; border-color: #c9d6e4; }
+  .td-day h2 { margin: 0; padding: .7rem 1.1rem; background: #1f4e79; color: #fff; font-size: 1.15rem; letter-spacing: .01em; }
+  .td-day > .td-win, .td-day > .td-more { margin-left: 1.1rem; margin-right: 1.1rem; }
+  .td-day > .td-win:first-of-type { margin-top: .8rem; }
+  .td-day > .td-win:last-child, .td-day > .td-more:last-child { margin-bottom: 1rem; }
+  .td-day > .td-more { margin-bottom: 1rem; }
   .td-win { border-top: 1px solid #eef1f4; padding: .7rem 0 .2rem; }
   .td-day h2 + .td-win { border-top: none; padding-top: 0; }
   .td-win-head { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .6rem; margin-bottom: .55rem; font-size: .92rem; }
@@ -91,7 +98,7 @@
 <body>
 <div id="td"><div class="td-loading">Opening the sign-up…</div></div>
 <script type="module">
-  import { initTithingForm } from "./js/tithing-form.js?v=1792984079";
+  import { initTithingForm } from "./js/tithing-form.js?v=1792984222";
   initTithingForm(document.getElementById("td"), new URLSearchParams(location.search).get("k") || "");
 </script>
 </body>

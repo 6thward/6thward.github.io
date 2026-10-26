@@ -14,7 +14,7 @@ import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebase
 import {
   getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updatePassword, deleteUser, signOut,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-import { firebaseConfig, PIN_DOMAIN } from "./firebase-init.js?v=1792984079";
+import { firebaseConfig, PIN_DOMAIN } from "./firebase-init.js?v=1792984222";
 
 export const QUICK_PIN_LENGTH = 4;
 const KEY = "sw-quick";
