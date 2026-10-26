@@ -2679,3 +2679,6 @@ tr.us-menu-open td { background: #f7f9fb; }
 .wk-strip:not(.wk-now) .wk-type.type-other { background: #46586e; color: #fff; border-color: transparent; }
 .wk-strip:not(.wk-now) .wk-type.wk-type-conf { background: #1f2733; color: #fff; border-color: transparent; }
 .wk-strip:not(.wk-now) .wk-type.type-sacrament { border-color: #6b7584; }
+/* Sundays view drag: the block slides over the target column, which lights up (Jordan 10/25) */
+.sv-col .dv-block.dv-dragging { z-index: 30; box-shadow: 0 6px 18px rgba(0,0,0,.18); opacity: .95; }
+.sv-col .sv-body.sv-drop { background: #eef4fb; border-color: var(--brand); }

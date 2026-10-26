@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1792978942";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1792978942";
+import { db } from "./firebase-init.js?v=1792979710";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1792979710";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792978942";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792978942";
-import { openCouncilDate } from "./council.js?v=1792978942";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792978942";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1792979710";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1792979710";
+import { openCouncilDate } from "./council.js?v=1792979710";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1792979710";
 
 let events = [];
 let users = []; // app users, for the People picker on an event (2026-10-19)
@@ -640,8 +640,10 @@ function drawSchedule(pid, who) {
     if (ev?.series) { dayView(ev.date); dvFocus = "edit:" + ev.id; drawDay(); setTimeout(() => deleteFromBlock(ref, document.getElementById("dv-side")), 50); return; }
     deleteFromBlock(ref, null);
   }));
+  wireScheduleDrag(grid, days, panel.querySelector(".card")); // drag a block to another time, or across to another Sunday (Jordan 10/25)
   grid.querySelectorAll("[data-block]").forEach((n) => n.addEventListener("click", (e) => {
     e.stopPropagation();
+    if (dragJustHappened) { dragJustHappened = false; return; }
     const date = n.closest("[data-sv-date]").dataset.svDate, [t, id] = [n.dataset.block.slice(0, 1), n.dataset.block.slice(2)];
     if (t === "s") return standingDialog(id);
     if (t === "t") return openAt(date, "t:" + id);
@@ -815,26 +817,27 @@ function wireBlockDrag(grid, timed) {
   });
 }
 // a tithing block dragged to a new time: the window moves, and every sign-up in it moves to the same place in the new block (10/24)
-async function moveTithingBlock(b, ns, ne, mode = "move") {
+async function moveTithingBlock(b, ns, ne, mode = "move", dDays = 0, host = null) {
   const w = b.win, delta = ns - b.start, dEnd = ne - b.end;
   const booked = b.slots.filter((x) => signups[x.id]);
-  if (booked.length && delta && !confirm(`${booked.length} ${booked.length === 1 ? "person is" : "people are"} signed up in this block. Move ${booked.length === 1 ? "their time" : "their times"} by ${Math.abs(delta)} minutes ${delta > 0 ? "later" : "earlier"} too?`)) { drawDay(); return; }
+  if (booked.length && (delta || dDays) && !confirm(`${booked.length} ${booked.length === 1 ? "person is" : "people are"} signed up in this block. Move ${booked.length === 1 ? "their time" : "their times"} ${dDays ? `to ${fmtDate(addDaysIso(w.date, dDays))}` : `by ${Math.abs(delta)} minutes ${delta > 0 ? "later" : "earlier"}`} too?`)) { host ? drawSundays() : drawDay(); return; }
   // a repeating block asks whether the later Sundays shift the same way (Jordan 10/25)
   let targets = [w];
-  const side = document.getElementById("dv-side");
-  if (tithingSiblings(w).length && side) { targets = await askTithingScope(side, w, mode === "move" ? "Move" : "Change the end time of"); if (!targets) { drawDay(); return; } }
+  const side = host || document.getElementById("dv-side");
+  if (tithingSiblings(w).length && side) { targets = await askTithingScope(side, w, mode === "move" ? (dDays ? "Move to another Sunday:" : "Move") : "Change the end time of"); if (!targets) { host ? drawSundays() : drawDay(); return; } }
   try {
     const skipped = [], nextById = {};
     for (const x of targets) {
-      const o = { ...x, start: hhmmOf(toMinutes(x.start) + delta), end: hhmmOf(Math.max(toMinutes(x.start) + delta + (Number(x.len) || 15), toMinutes(x.end) + dEnd)) };
+      const o = { ...x, date: dDays ? addDaysIso(x.date, dDays) : x.date, start: hhmmOf(toMinutes(x.start) + delta), end: hhmmOf(Math.max(toMinutes(x.start) + delta + (Number(x.len) || 15), toMinutes(x.end) + dEnd)) };
+      if (dDays && (season.windows || []).some((y) => y.id !== x.id && !targets.includes(y) && y.date === o.date && toMinutes(y.start) < toMinutes(o.end) && toMinutes(o.start) < toMinutes(y.end))) { skipped.push(fmtDate(x.date) + " (a block is already there)"); continue; }
       if (!(await shiftTithingSignups(x, o, skipped))) continue;
       nextById[x.id] = o;
     }
-    if (!nextById[w.id]) { drawDay(); return; }
+    if (!nextById[w.id]) { toast(skipped[0] ? `Couldn't move: ${skipped[0]}` : "Couldn't move"); host ? drawSundays() : drawDay(); return; }
     const windows = (season.windows || []).map((x) => nextById[x.id] || x);
     const n = Object.keys(nextById).length;
-    await saveTithingWindows(windows, `${mode === "move" ? `Moved to ${fmtClock(ns)} – ${fmtClock(ne)}` : `Now ends at ${fmtClock(ne)}`}${n > 1 ? ` · ${n} Sundays` : ""}${booked.length && delta ? " — sign-ups moved too; let them know" : ""}${skipped.length ? ` · skipped ${skipped.join(", ")}` : ""}`);
-  } catch (err) { toast("Couldn't move: " + (err.code || err.message)); drawDay(); }
+    await saveTithingWindows(windows, `${mode === "move" ? `Moved to ${dDays ? fmtDate(nextById[w.id].date) + " " : ""}${fmtClock(ns)} – ${fmtClock(ne)}` : `Now ends at ${fmtClock(ne)}`}${n > 1 ? ` · ${n} Sundays` : ""}${booked.length && (delta || dDays) ? " — sign-ups moved too; let them know" : ""}${skipped.length ? ` · skipped ${skipped.join(", ")}` : ""}`);
+  } catch (err) { toast("Couldn't move: " + (err.code || err.message)); host ? drawSundays() : drawDay(); }
 }
 // the other Sundays a tithing block repeats on: the same series, or (older blocks) the same start, end and visit length
 function tithingSiblings(w) {
@@ -849,11 +852,66 @@ async function shiftTithingSignups(w, o, skipped) {
   if (!booked.length) return true;
   const outside = booked.some((s) => s.min + delta < toMinutes(o.start) || s.min + delta + s.len > toMinutes(o.end));
   if (outside) { skipped.push(fmtDate(w.date)); return false; }
-  if (!delta) return true;
+  if (!delta && (o.date || w.date) === w.date) return true; // same times, same day: nothing to re-key
   const batch = writeBatch(db), at = (c, id) => doc(db, "tithing", season.token, c, id);
-  booked.forEach((x) => { const nid = slotId(w.date, x.min + delta); batch.set(at("signups", nid), signups[x.id]); batch.set(at("taken", nid), { len: x.len, at: serverTimestamp() }); batch.delete(at("signups", x.id)); batch.delete(at("taken", x.id)); });
+  booked.forEach((x) => { const nid = slotId(o.date || w.date, x.min + delta); batch.set(at("signups", nid), signups[x.id]); batch.set(at("taken", nid), { len: x.len, at: serverTimestamp() }); batch.delete(at("signups", x.id)); batch.delete(at("taken", x.id)); });
   await batch.commit();
   return true;
+}
+// Sundays view drag: up / down changes the time, sideways carries the block to another Sunday (Jordan 10/25)
+function wireScheduleDrag(grid, days, host) {
+  const cols = () => [...grid.querySelectorAll("[data-sv-body]")];
+  days.forEach((d) => d.timed.forEach((b) => {
+    const isTithing = b.kind === "tithing";
+    if (isTithing ? !can("tithing", "edit") : (b.kind !== "event" && b.kind !== "interviews")) return;
+    const ev = b.ev; if (!isTithing && (!ev || !(can("calendar", "edit") || ev.createdBy === ctx.uid))) return;
+    const col = grid.querySelector(`[data-sv-body="${d.date}"]`), n = col?.querySelector(`[data-block="${isTithing ? "t" : "e"}:${CSS.escape(b.id)}"]`); if (!n) return;
+    n.classList.add("dv-movable");
+    n.insertAdjacentHTML("beforeend", `<div class="dv-resize" title="Drag to change the end time"></div>`);
+    let mode = null, startX = 0, startY = 0, moved = false, ns = b.start, ne = b.end, toDate = d.date;
+    n.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || e.target.closest("[data-islot], [data-xblock]")) return;
+      mode = e.target.classList.contains("dv-resize") ? "resize" : "move"; startX = e.clientX; startY = e.clientY; moved = false; ns = b.start; ne = b.end; toDate = d.date;
+      if (isTithing && mode === "resize" && b.slots.some((x) => signups[x.id])) { mode = null; return toast("People are signed up in this block — move the whole block instead"); }
+      n.setPointerCapture(e.pointerId); e.stopPropagation();
+    });
+    n.addEventListener("pointermove", (e) => {
+      if (!mode) return;
+      const dy = snap((e.clientY - startY) / PX_MIN), dx = e.clientX - startX;
+      if (Math.abs(dy) >= SNAP || Math.abs(dx) > 24) moved = true;
+      if (!moved) return;
+      if (mode === "move") { const len = b.end - b.start; ns = Math.max(DAY_START, Math.min(DAY_END - len, b.start + dy)); ne = ns + len; }
+      else { ne = Math.max(b.start + SNAP, Math.min(DAY_END, b.end + dy)); ns = b.start; }
+      n.style.top = `${(ns - DAY_START) * PX_MIN}px`; n.style.height = `${Math.max(14, (ne - ns) * PX_MIN)}px`;
+      const t = n.querySelector(".dv-block-title span"); if (t) t.textContent = `${fmtClock(ns)}–${fmtClock(ne)}`;
+      if (isTithing) n.querySelectorAll(".dv-slot b").forEach((el, i) => { const m = ns + i * b.win.len; if (m + b.win.len <= ne) el.textContent = fmtClock(m).replace(/ [AP]M$/, ""); });
+      if (mode === "move") { // sideways: slide over the column under the pointer and light it up
+        const over = cols().find((c) => { const r = c.getBoundingClientRect(); return e.clientX >= r.left && e.clientX < r.right; });
+        toDate = over?.dataset.svBody || d.date;
+        const r0 = col.getBoundingClientRect(), r1 = (over || col).getBoundingClientRect();
+        n.style.transform = `translateX(${r1.left - r0.left}px)`; n.classList.add("dv-dragging");
+        cols().forEach((c) => c.classList.toggle("sv-drop", c === over && over !== col));
+      }
+    });
+    const done = async (e) => {
+      if (!mode) return;
+      const m = mode; mode = null;
+      cols().forEach((c) => c.classList.remove("sv-drop"));
+      if (!moved) return; // a plain click — the click handler opens the Sunday
+      e.stopPropagation(); dragJustHappened = true; setTimeout(() => { dragJustHappened = false; }, 300);
+      const dDays = Math.round((new Date(toDate + "T12:00:00") - new Date(d.date + "T12:00:00")) / 864e5);
+      if (isTithing) return moveTithingBlock(b, ns, ne, m, dDays, host);
+      try {
+        let targets = [ev];
+        if (ev.series) { targets = await askSeriesScope(host, ev, m === "move" ? (dDays ? "Move to another Sunday:" : "Move") : "Change the end time of"); if (!targets) { drawSundays(); return; } }
+        const next = new Map(targets.map((x) => [x.id, { date: dDays ? addDaysIso(x.date, dDays) : x.date, startTime: hhmmOf(ns), endTime: hhmmOf(ne) }]));
+        await Promise.all([...next].map(([id, p]) => updateDoc(doc(db, "events", id), { ...p, updatedAt: serverTimestamp() })));
+        toast((m === "move" ? `Moved to ${dDays ? fmtDate(toDate) + " " : ""}${fmtClock(ns)} – ${fmtClock(ne)}` : `Now ends at ${fmtClock(ne)}`) + (targets.length > 1 ? ` · ${targets.length} meetings` : ""));
+        syncBusy(events.map((x) => next.has(x.id) ? { ...x, ...next.get(x.id) } : x));
+      } catch (err) { toast("Couldn't save: " + (err.code || err.message)); drawSundays(); }
+    };
+    n.addEventListener("pointerup", done); n.addEventListener("pointercancel", done);
+  }));
 }
 // "just this one / this and later / all" for a repeating tithing block — same look as the meeting version
 function askTithingScope(host, w, what) {
