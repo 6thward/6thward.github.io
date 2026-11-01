@@ -2,14 +2,14 @@
 // The agenda is an ordered list of items (speakers, hymns, prayers, business…)
 // that can be added, removed, reordered (drag or ▲▼), each with allotted minutes.
 // Two views: cards (with quick status) and a spreadsheet-style table with inline editing.
-import { db } from "./firebase-init.js?v=1793572240";
-import { ctx, hasRole, can as canDo } from "./app.js?v=1793572240";
+import { db } from "./firebase-init.js?v=1793572305";
+import { ctx, hasRole, can as canDo } from "./app.js?v=1793572305";
 import {
   collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1793572240";
-import { HYMNS } from "./hymns.js?v=1793572240";
-import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1793572240";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1793572305";
+import { HYMNS } from "./hymns.js?v=1793572305";
+import { loadProgramSettings, programSettingsSection, wireProgramSettings, openProgramDialog, publishProgram, publicLink, newShareToken } from "./program.js?v=1793572305";
 
 
 // dates in this tab are always Sundays — no weekday prefix needed
@@ -2566,16 +2566,17 @@ function renderAgendaView(m, canEdit = false) {
       val = esc(it.name || "") + (it.by ? ` <span class="row-sub">by ${esc(it.by)}</span>` : "");
     } else if (it.kind === "wardBusiness") {
       // releases first, then sustainings, each under its own heading — the order they're read from the pulpit (Jordan 11/01)
-      const person = (p) => `• ${esc(p.name)}${p.calling ? " — " + esc(p.calling) : ""}`;
+      const li = (t) => `<div class="ag-li">${t}</div>`; // hanging indent: a wrapped second line lines up with the text, not the bullet (Jordan 11/01)
+      const person = (p) => li(`${esc(p.name)}${p.calling ? " — " + esc(p.calling) : ""}`);
       const groups = [];
-      if ((it.releasings || []).length) groups.push(`<div class="ag-wb-h">Releases</div>${it.releasings.map(person).join("<br>")}`);
-      if ((it.sustainings || []).length) groups.push(`<div class="ag-wb-h">Sustainings</div>${it.sustainings.map(person).join("<br>")}`);
+      if ((it.releasings || []).length) groups.push(`<div class="ag-wb-h">Releases</div>${it.releasings.map(person).join("")}`);
+      if ((it.sustainings || []).length) groups.push(`<div class="ag-wb-h">Sustainings</div>${it.sustainings.map(person).join("")}`);
       const oth = otherLines(it);
-      if (oth.length) groups.push(`${groups.length ? `<div class="ag-wb-h">Other</div>` : ""}${oth.map((o) => `• ${esc(o)}`).join("<br>")}`);
+      if (oth.length) groups.push(`${groups.length ? `<div class="ag-wb-h">Other</div>` : ""}${oth.map((o) => li(esc(o))).join("")}`);
       if (groups.length) extraBelow = `<div class="ag-detail-box ag-detail-full">${groups.join("")}</div>`;
     } else if (it.kind === "announcements") {
       const lines = (it.text || "").split("\n").map((s) => s.trim()).filter(Boolean);
-      if (lines.length) extraBelow = `<div class="ag-detail-box ag-detail-full">${lines.map((l) => `• ${esc(l)}`).join("<br>")}</div>`;
+      if (lines.length) extraBelow = `<div class="ag-detail-box ag-detail-full">${lines.map((l) => `<div class="ag-li">${esc(l)}</div>`).join("")}</div>`;
     } else {
       val = esc(it.text || "");
     }
