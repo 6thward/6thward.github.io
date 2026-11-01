@@ -2699,3 +2699,43 @@ tr.us-menu-open td { background: #f7f9fb; }
 /* a booked time goes light green; open times stay the tithing yellow — these are the tithing colours (Jordan 10/25) */
 .dv-slot.booked { background: #e4f3e8; }
 .dv-tithing .dv-block-tag { opacity: 1; background: #f8e3a1; color: #6e5100; border: 1px solid #dcbd5b; border-radius: 99px; padding: .05rem .55rem; top: 3px; } /* a little pill (Jordan 10/25) */
+/* ---- Documents page (2026-11-01): letters on letterhead + uploaded files ---- */
+.doc-filter { width: 100%; max-width: 26rem; margin-bottom: .6rem; }
+.doc-list { display: flex; flex-direction: column; }
+.doc-row { display: flex; align-items: center; gap: .7rem; padding: .55rem .2rem; border-top: 1px solid var(--line); }
+.doc-row:first-child { border-top: 0; }
+.doc-ico { font-size: 1.3rem; width: 1.8rem; text-align: center; flex: none; }
+.doc-main { flex: 1; min-width: 0; }
+.doc-title { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.doc-link { background: none; border: 0; padding: 0; font: inherit; font-weight: 700; color: var(--ink); cursor: pointer; text-align: left; }
+.doc-link:hover { color: var(--brand); text-decoration: underline; text-underline-offset: 2px; }
+.doc-kind { font-size: .66rem; padding: .05rem .5rem; background: #e8eef5; color: var(--brand); }
+.doc-kind-letter { background: #ece6f7; color: var(--violet); } .doc-kind-pdf { background: #fbe3df; color: #b3402f; } .doc-kind-word { background: #dce9fb; color: #1f5fbf; }
+.doc-sub { margin-top: .1rem; }
+.doc-acts { display: flex; gap: .3rem; flex: none; flex-wrap: wrap; justify-content: flex-end; }
+.doc-empty { padding: .6rem .2rem; }
+/* the letter editor is drawn like the printed page */
+.ltr-meta { display: flex; gap: .8rem; flex-wrap: wrap; margin-bottom: .8rem; } .ltr-meta .field { margin: 0; } .ltr-f-title { flex: 1; min-width: 14rem; }
+.ltr-page { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 1in .9in; max-width: 8.5in; margin: 0 auto; font-family: Georgia, "Times New Roman", serif; font-size: 12pt; line-height: 1.45; color: #000; box-shadow: 0 2px 12px rgba(0,0,0,.06); }
+.ltr-head { display: flex; align-items: center; gap: .35in; border-bottom: 1.5px solid #000; padding-bottom: .14in; margin-bottom: .4in; }
+.ltr-logo { height: .85in; max-width: 2.6in; object-fit: contain; }
+.ltr-ward { font-size: 16pt; font-weight: 700; } .ltr-stake, .ltr-addr { font-size: 10.5pt; color: #222; }
+.ltr-dateline { min-height: 1.4em; margin-bottom: .25in; }
+.ltr-to { width: 100%; box-sizing: border-box; font: inherit; border: 1px dashed #c9ced6; border-radius: 4px; padding: .3rem .4rem; resize: vertical; margin-bottom: .25in; background: #fff; }
+.ltr-to:focus { outline: 2px solid var(--brand); border-color: transparent; }
+.ltr-tools { display: flex; gap: .15rem; align-items: center; flex-wrap: wrap; margin: 0 0 .3rem; font-family: -apple-system, system-ui, sans-serif; }
+.ltr-tools button { min-width: 1.9rem; height: 1.8rem; border: 1px solid var(--line); background: #f7f8fa; border-radius: 6px; cursor: pointer; font-size: .85rem; }
+.ltr-tools button:hover { background: #e8eef5; border-color: var(--brand); }
+.ltr-sep { width: 1px; height: 1.3rem; background: var(--line); margin: 0 .25rem; }
+.ltr-body { min-height: 3.2in; outline: none; padding: .3rem .4rem; border: 1px dashed #c9ced6; border-radius: 4px; }
+.ltr-body:focus { outline: 2px solid var(--brand); border-color: transparent; }
+.ltr-body:empty::before, .ltr-body > p:only-child:empty::before { content: attr(data-placeholder); color: #9aa3ae; }
+.ltr-body p, .ltr-body div { margin: 0 0 .17in; } .ltr-body h3 { font-size: 13pt; margin: .2in 0 .1in; } .ltr-body ul, .ltr-body ol { margin: 0 0 .17in; }
+.ltr-close { margin-top: .3in; } .ltr-close input, .ltr-sig input { font: inherit; border: 0; border-bottom: 1px dashed #c9ced6; padding: .1rem .2rem; background: transparent; width: 100%; max-width: 3.5in; display: block; }
+.ltr-close input:focus, .ltr-sig input:focus { outline: none; border-bottom-color: var(--brand); }
+.ltr-sig { margin-top: .5in; }
+.lh-logo-row { display: flex; gap: .8rem; align-items: center; }
+.lh-preview { width: 11rem; height: 4.5rem; border: 1px dashed var(--line); border-radius: 8px; display: flex; align-items: center; justify-content: center; background: #fff; }
+.lh-preview img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.lh-logo-btns { display: flex; gap: .4rem; flex-direction: column; }
+@media (max-width: 700px) { .ltr-page { padding: .6in .5in; } }

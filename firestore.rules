@@ -294,6 +294,18 @@ service cloud.firestore {
         allow delete: if canEdit('bishopric');
       }
     }
+    // Documents (2026-11-01): letters on letterhead + uploaded files (chunks), and the _letterhead doc
+    match /documents/{id} {
+      allow read: if canView('documents');
+      allow write: if canEdit('documents');
+      match /chunks/{cid} {
+        allow read: if canView('documents');
+        allow create: if canEdit('documents')
+          && request.resource.data.keys().hasOnly(['f', 'i', 'd'])
+          && request.resource.data.d is bytes && request.resource.data.d.size() <= 1000000;
+        allow delete: if canEdit('documents');
+      }
+    }
     match /councils/{id} {
       allow read: if canView('council');
       allow write: if canEdit('council');
