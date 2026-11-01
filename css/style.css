@@ -2768,3 +2768,4 @@ tr.us-menu-open td { background: #f7f9fb; }
 .td-daycard .td-srow-open .btn, .td-daycard .td-srow-blocked .btn, .td-daycard .td-srow-spacer .btn { margin-left: auto; } .td-daycard .td-srow-open .btn + .btn, .td-daycard .td-srow-spacer .btn + .btn { margin-left: 0; }
 .td-sched-cols .td-snote { display: none; }
 @media (max-width: 720px) { .td-daycard .td-srow .td-sname { flex: 1 1 auto; } .td-daycard .td-snote { flex-basis: 100%; margin-left: 5.9rem; } .td-daycard .td-sphone { flex-basis: 100%; } }
+.ag-wb-h { font-size: .72rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-soft); margin: .45rem 0 .15rem; } .ag-detail-box .ag-wb-h:first-child { margin-top: 0; } /* Releases / Sustainings / Other in the View modal (11/01) */
