@@ -2759,3 +2759,12 @@ tr.us-menu-open td { background: #f7f9fb; }
 .dv-trow.spacer { background: #e8eef5; } .dv-spacer-lbl { color: #46586e; font-style: italic; }
 .td-srow-spacer { background: #e8eef5; background-image: radial-gradient(rgba(31,78,121,.16) 1px, transparent 1.2px); background-size: 7px 7px; }
 .td-srow-spacer .td-stime { color: #46586e; } .td-spacer-lbl { color: #46586e; font-style: italic; font-weight: 600; }
+/* roster row, option A (11/01): Time · Name · Note · Phone (left-aligned) · Came / No-show · ✕ */
+.td-daycard .td-srow .td-sname { flex: 0 1 16rem; min-width: 9rem; }
+.td-daycard .td-srow-open .td-sname, .td-daycard .td-srow-blocked .td-sname, .td-daycard .td-srow-spacer .td-sname, .td-daycard .td-srow-busy .td-sname { flex: 1 1 auto; }
+.td-daycard .td-snote { flex: 1 1 10rem; width: auto; min-width: 8rem; }
+.td-daycard .td-snote-ro { flex: 1 1 10rem; max-width: none; }
+.td-daycard .td-sphone { flex: 0 0 11rem; justify-content: flex-start; }
+.td-daycard .td-srow-open .btn, .td-daycard .td-srow-blocked .btn, .td-daycard .td-srow-spacer .btn { margin-left: auto; } .td-daycard .td-srow-open .btn + .btn, .td-daycard .td-srow-spacer .btn + .btn { margin-left: 0; }
+.td-sched-cols .td-snote { display: none; }
+@media (max-width: 720px) { .td-daycard .td-srow .td-sname { flex: 1 1 auto; } .td-daycard .td-snote { flex-basis: 100%; margin-left: 5.9rem; } .td-daycard .td-sphone { flex-basis: 100%; } }

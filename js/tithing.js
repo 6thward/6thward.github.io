@@ -1,17 +1,17 @@
 // Tithing declaration sign-ups (2026-10-04) — the bishop's side, its own page
 // ("Tithing Declaration" tab, area key "tithing"): set when you're available, share the link / QR code, and see
 // who signed up. The public page is tithing.html (js/tithing-form.js).
-import { db } from "./firebase-init.js?v=1793572035";
-import { ctx, can } from "./app.js?v=1793572035";
+import { db } from "./firebase-init.js?v=1793572143";
+import { ctx, can } from "./app.js?v=1793572143";
 import {
   collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { watchBishopCal, standingEvents } from "./bishop-cal.js?v=1793572035";
-import { openModal, closeModal, toast } from "./ui.js?v=1793572035";
+import { watchBishopCal, standingEvents } from "./bishop-cal.js?v=1793572143";
+import { openModal, closeModal, toast } from "./ui.js?v=1793572143";
 import {
   GROUPS, PLACES, SLOT_LENGTHS, esc, toMin, fmtClock, fmtLongDay, fmtShortDay, slotsOf, slotMap, isPriority, PRIORITY_TEXT,
   sortWindows, overlaps, newToken, parseSlotId, todayIso, addDays, hhmm, busyFromEvents, sameBusy, offList,
-} from "./tithing-shared.js?v=1793572035";
+} from "./tithing-shared.js?v=1793572143";
 
 let mount = null, season = null, signups = [], unsubSignups = null, started = false, dirty = false;
 let events = null; // the ward calendar (events with cal: "bishop" block sign-up times); null until it loads
@@ -191,8 +191,8 @@ function render() {
       <span class="td-stime">${fmtClock(s.min)}</span>
       <span class="td-sname"><b>${esc(su.name)}</b> ${tags}${s.orphan ? `<span class="td-tag td-tag-warn" title="This time is no longer in your availability">⚠ outside your times</span>` : ""}${busyOf(s.id) ? `<span class="td-tag td-tag-warn" title="Something on the bishop's calendar overlaps this appointment">⚠ ${esc(busyOf(s.id))}</span>` : ""}
         ${su.address ? `<span class="row-sub td-saddr">${esc(su.address)}</span>` : ""}</span>
-      ${su.phone ? `<span class="td-sphone"><a href="tel:${esc(tel)}">${esc(su.phone)}</a>${tel && editor ? ` <a class="btn btn-sm" href="sms:${esc(tel)}?&body=${encodeURIComponent(reminderText(s))}" title="Opens a text message with the reminder already written">💬</a>` : ""}</span>` : `<span class="td-sphone row-sub">no number</span>`}
       ${editor ? `<input class="td-snote" data-note="${s.id}" value="${esc(su.note || "")}" placeholder="note" maxlength="140" autocomplete="off" title="A note for this appointment — saves when you leave the box">` : (su.note ? `<span class="td-snote td-snote-ro">${esc(su.note)}</span>` : "")}
+      ${su.phone ? `<span class="td-sphone"><a href="tel:${esc(tel)}">${esc(su.phone)}</a>${tel && editor ? ` <a class="btn btn-sm" href="sms:${esc(tel)}?&body=${encodeURIComponent(reminderText(s))}" title="Opens a text message with the reminder already written">💬</a>` : ""}</span>` : `<span class="td-sphone row-sub">no number</span>`}
       ${editor ? `<span class="td-status" data-for="${s.id}">
         <button type="button" class="td-st-btn td-st-yes${su.status === "attended" ? " on" : ""}" data-status="attended" title="They came">✓<span class="td-st-lbl"> Came</span></button>
         <button type="button" class="td-st-btn td-st-no${su.status === "noshow" ? " on" : ""}" data-status="noshow" title="They didn't come">✗<span class="td-st-lbl"> No-show</span></button>
