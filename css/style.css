@@ -2739,3 +2739,9 @@ tr.us-menu-open td { background: #f7f9fb; }
 .lh-preview img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .lh-logo-btns { display: flex; gap: .4rem; flex-direction: column; }
 @media (max-width: 700px) { .ltr-page { padding: .6in .5in; } }
+/* member-card notes: long pasted emails (non-breaking spaces, long links) wrap instead of running off the card (Jordan 11/01) */
+.member-board .board-note, .mtg-notes, .mtg-preview-body, .wc-notes { overflow-wrap: anywhere; word-break: break-word; min-width: 0; }
+.board-card { min-width: 0; }
+.member-board .list-row.board-card { display: block; } /* the card's flex row let a long note take its full content width; block = notes wrap to the card (11/01) */
+.member-board .board-note { max-width: 100%; box-sizing: border-box; }
+.member-board .board-card .todo-pills, .member-board .board-card .mtg-row { display: inline-flex; flex-wrap: wrap; vertical-align: middle; margin-right: .35rem; } /* the "+" and "+ meeting recap" chips stay on one line */

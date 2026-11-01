@@ -3,14 +3,14 @@
 // added, renamed, reordered and removed. Data:
 //   boardColumns/{id}  { label, order }
 //   board/{id}         { name, notes, column, order, createdAt, updatedAt }
-import { db } from "./firebase-init.js?v=1793543364";
-import { goTab, ctx, can } from "./app.js?v=1793543364";
+import { db } from "./firebase-init.js?v=1793557757";
+import { goTab, ctx, can } from "./app.js?v=1793557757";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openCaseById } from "./sr-cases.js?v=1793543364";
-import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1793543364";
-import { notesHtml, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1793543364";
+import { openCaseById } from "./sr-cases.js?v=1793557757";
+import { toast, esc, openModal, closeModal, fmtDate } from "./ui.js?v=1793557757";
+import { notesHtml, handleNoteKeys, toolbarHtml, wireToolbar } from "./notes.js?v=1793557757";
 
 // Next ordinance a person is working toward — shown as a pill beside the name.
 const ORDINANCES = ["Sacrament", "Aaronic Priesthood", "Melchizedek Priesthood", "Endowment", "Sealing"];
@@ -111,7 +111,7 @@ function render() {
     return `
     <div class="list-row call-card call-card-v board-card" data-id="${k.id}" style="--cc:${colColor(cols.findIndex((c) => c.id === k.column))};background:#fff;border:1px solid var(--line);border-left:5px solid var(--cc)">
       <div class="board-head"><div class="row-title">${esc(k.name || "—")}</div>${k.nextOrdinance || editor ? `<span class="ord-pill${k.nextOrdinance ? "" : " ord-empty"}${editor ? " ord-edit" : ""}" data-ord="1" title="${editor ? "Click to change" : ""}">${k.nextOrdinance ? "Next: " + esc(k.nextOrdinance) : "+ next ordinance"}</span>` : ""}${k.cadence || editor ? `<span class="ord-pill cad-pill${k.cadence ? "" : " ord-empty"}${editor ? " ord-edit" : ""}" data-cad="1" title="${editor ? "How often you meet — click to change" : ""}">${k.cadence ? "Meets: " + esc(cadenceLabel(k.cadence)) : "+ regular meeting"}</span>` : ""}</div>
-      ${k.notes || editor ? `<div class="row-sub board-note${k.notes ? "" : " board-note-empty"}${editor ? " board-note-edit" : ""}${k.notes && !expandedNotes.has(k.id) ? " board-note-clamp" : ""}" data-notes="1" title="${editor ? "Click to edit" : ""}">${k.notes ? esc(k.notes) : "+ notes"}</div><div class="board-note-more" data-more="${k.id}" hidden>${expandedNotes.has(k.id) ? "less ▴" : "more ▾"}</div>` : ""}
+      ${k.notes || editor ? `<div class="row-sub board-note${k.notes ? "" : " board-note-empty"}${editor ? " board-note-edit" : ""}${k.notes && !expandedNotes.has(k.id) ? " board-note-clamp" : ""}" data-notes="1" title="${editor ? "Click to edit" : ""}">${k.notes ? esc(String(k.notes).replace(/\u00a0/g, " ")) : "+ notes"}</div><div class="board-note-more" data-more="${k.id}" hidden>${expandedNotes.has(k.id) ? "less ▴" : "more ▾"}</div>` : ""}
       <div class="todo-pills">${open.map((t) => todoPill(k, t)).join("")}${editor ? `<span class="todo-pill todo-add-pill" data-addtodo="1" title="Add a to-do — type and press Enter">+</span>` : ""}</div>
       <div class="mtg-row">${meetingsPill(k, editor)}${k.srCase && can("selfreliance") ? `<span class="sr-link-pill" data-srcase="${esc(k.srCase)}" title="Open their Self-Reliance card">🧾 Self-Reliance${srCases.find((c) => c.id === k.srCase)?.status === "closed" ? " · closed" : ""}</span>` : ""}</div>
     </div>`;
