@@ -1,17 +1,17 @@
 // Tithing declaration sign-ups (2026-10-04) — the bishop's side, its own page
 // ("Tithing Declaration" tab, area key "tithing"): set when you're available, share the link / QR code, and see
 // who signed up. The public page is tithing.html (js/tithing-form.js).
-import { db } from "./firebase-init.js?v=1793557757";
-import { ctx, can } from "./app.js?v=1793557757";
+import { db } from "./firebase-init.js?v=1793571434";
+import { ctx, can } from "./app.js?v=1793571434";
 import {
   collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { watchBishopCal, standingEvents } from "./bishop-cal.js?v=1793557757";
-import { openModal, closeModal, toast } from "./ui.js?v=1793557757";
+import { watchBishopCal, standingEvents } from "./bishop-cal.js?v=1793571434";
+import { openModal, closeModal, toast } from "./ui.js?v=1793571434";
 import {
   GROUPS, PLACES, SLOT_LENGTHS, esc, toMin, fmtClock, fmtLongDay, fmtShortDay, slotsOf, slotMap, isPriority, PRIORITY_TEXT,
   sortWindows, overlaps, newToken, parseSlotId, todayIso, addDays, hhmm, busyFromEvents, sameBusy, offList,
-} from "./tithing-shared.js?v=1793557757";
+} from "./tithing-shared.js?v=1793571434";
 
 let mount = null, season = null, signups = [], unsubSignups = null, started = false, dirty = false;
 let events = null; // the ward calendar (events with cal: "bishop" block sign-up times); null until it loads
@@ -191,6 +191,7 @@ function render() {
       <span class="td-sname"><b>${esc(su.name)}</b> ${tags}${s.orphan ? `<span class="td-tag td-tag-warn" title="This time is no longer in your availability">⚠ outside your times</span>` : ""}${busyOf(s.id) ? `<span class="td-tag td-tag-warn" title="Something on the bishop's calendar overlaps this appointment">⚠ ${esc(busyOf(s.id))}</span>` : ""}
         ${su.address ? `<span class="row-sub td-saddr">${esc(su.address)}</span>` : ""}</span>
       ${su.phone ? `<span class="td-sphone"><a href="tel:${esc(tel)}">${esc(su.phone)}</a>${tel && editor ? ` <a class="btn btn-sm" href="sms:${esc(tel)}?&body=${encodeURIComponent(reminderText(s))}" title="Opens a text message with the reminder already written">💬</a>` : ""}</span>` : `<span class="td-sphone row-sub">no number</span>`}
+      ${editor ? `<input class="td-snote" data-note="${s.id}" value="${esc(su.note || "")}" placeholder="note" maxlength="140" autocomplete="off" title="A note for this appointment — saves when you leave the box">` : (su.note ? `<span class="td-snote td-snote-ro">${esc(su.note)}</span>` : "")}
       ${editor ? `<span class="td-status" data-for="${s.id}">
         <button type="button" class="td-st-btn td-st-yes${su.status === "attended" ? " on" : ""}" data-status="attended" title="They came">✓<span class="td-st-lbl"> Came</span></button>
         <button type="button" class="td-st-btn td-st-no${su.status === "noshow" ? " on" : ""}" data-status="noshow" title="They didn't come">✗<span class="td-st-lbl"> No-show</span></button>
@@ -205,9 +206,9 @@ function render() {
     main = `<div class="card"><h3 class="td-h">Everyone who came <span class="pill pill-approved">${came.length}</span><span class="row-sub" style="font-weight:400">— marked by the bishop, here or on the calendar</span><button class="btn btn-sm" id="td-print-came" type="button" style="margin-left:auto">🖨 Print</button></h3>
       ${came.length ? `<table class="td-list"><thead><tr><th>Name</th><th>Appointment</th><th>Phone</th></tr></thead><tbody>${came.map((r) => `<tr><td><b>${esc(r.name)}</b></td><td>${esc(fmtShortDay(r.date))} · ${fmtClock(r.min)}</td><td>${esc(r.phone || "")}</td></tr>`).join("")}</tbody></table>` : `<div class="empty-note" style="padding:.6rem">Nobody marked yet. Tick ✓ Came on a person's row as they arrive.</div>`}</div>`;
   } else if (dayPick === "past") {
-    main = `<div class="card"><h3 class="td-h">Past days</h3>${pastD.map(dayBlock).join("")}</div>`;
+    main = `<div class="card td-daycard"><h3 class="td-h">Past days</h3>${pastD.map(dayBlock).join("")}</div>`;
   } else if (sel) {
-    main = `<div class="card"><h3 class="td-h">${esc(fmtLongDay(dayPick))} <span class="row-sub" style="font-weight:400">tick ✓ Came as people arrive · ⋮⋮ moves someone · 💬 texts a reminder</span></h3>${sel.list.map(rowHtml).join("")}</div>`;
+    main = `<div class="card td-daycard"><h3 class="td-h">${esc(fmtLongDay(dayPick))} <span class="row-sub" style="font-weight:400">tick ✓ Came as people arrive · ⋮⋮ moves someone · 💬 texts a reminder</span></h3>${sel.list.map(rowHtml).join("")}</div>`;
   } else {
     main = `<div class="card"><div class="empty-note" style="padding:.6rem">Nothing scheduled yet. Set your times on the Calendar or Bishop's Schedule — drag out a block and pick “Tithing declaration”.</div></div>`;
   }
@@ -387,6 +388,16 @@ function render() {
     catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
   }));
 
+  mount.querySelectorAll("[data-note]").forEach((inp) => {
+    const save = async () => {
+      const id = inp.dataset.note, su = byId[id], note = inp.value.trim();
+      if (!su || (su.note || "") === note) return;
+      try { await updateDoc(doc(db, "tithing", season.token, "signups", id), { note, noteBy: ctx.name || "", noteAt: serverTimestamp() }); su.note = note; }
+      catch (e) { toast("Couldn't save the note: " + (e.code || e.message)); }
+    };
+    inp.addEventListener("blur", save);
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); inp.blur(); } });
+  });
   mount.querySelectorAll("[data-rmsign]").forEach((b) => b.addEventListener("click", async () => {
     const su = byId[b.dataset.rmsign]; if (!su) return;
     if (!confirm(`Remove ${su.name}'s sign-up and open this time back up?`)) return;

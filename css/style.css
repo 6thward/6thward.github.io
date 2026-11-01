@@ -2745,3 +2745,11 @@ tr.us-menu-open td { background: #f7f9fb; }
 .member-board .list-row.board-card { display: block; } /* the card's flex row let a long note take its full content width; block = notes wrap to the card (11/01) */
 .member-board .board-note { max-width: 100%; box-sizing: border-box; }
 .member-board .board-card .todo-pills, .member-board .board-card .mtg-row { display: inline-flex; flex-wrap: wrap; vertical-align: middle; margin-right: .35rem; } /* the "+" and "+ meeting recap" chips stay on one line */
+/* tithing roster: a notes box per appointment, and the day card stops short of the full page (Jordan 11/01) */
+.td-daycard { max-width: 1180px; }
+.td-snote { flex: none; width: 13rem; font: inherit; font-size: .86rem; padding: .25rem .5rem; border: 1px solid var(--line); border-radius: 7px; background: #fff; color: var(--ink); }
+.td-snote::placeholder { color: #b7bfcb; font-style: italic; }
+.td-snote:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.td-snote-ro { font-size: .86rem; color: var(--ink-soft); max-width: 13rem; }
+.td-srow.td-st-attended .td-snote, .td-srow.td-st-noshow .td-snote { background: rgba(255,255,255,.7); }
+@media (max-width: 720px) { .td-snote { width: 100%; margin-left: 5.9rem; } }
