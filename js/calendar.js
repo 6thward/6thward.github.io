@@ -2,15 +2,15 @@
 // 2026-10-11 — events belong to the Ward calendar or the Bishop's calendar (cal: "ward" | "bishop").
 // Bishop's events block tithing-declaration sign-up times they overlap (tithing/{token}.busy), and
 // tithing availability + booked appointments show here as calendar items of their own.
-import { db } from "./firebase-init.js?v=1793571434";
-import { ctx, hasRole, can, goTab } from "./app.js?v=1793571434";
+import { db } from "./firebase-init.js?v=1793572035";
+import { ctx, hasRole, can, goTab } from "./app.js?v=1793572035";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1793571434";
-import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1793571434";
-import { openCouncilDate } from "./council.js?v=1793571434";
-import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1793571434";
+import { slotsOf, slotMap, busyFromEvents, sameBusy, fmtClock, parseSlotId, offList, isPriority, PRIORITY_TEXT, slotId } from "./tithing-shared.js?v=1793572035";
+import { watchBishopCal, bishopCalConfig, standingEvents, WEEKDAYS } from "./bishop-cal.js?v=1793572035";
+import { openCouncilDate } from "./council.js?v=1793572035";
+import { openModal, closeModal, toast, esc, fmtDate, fmtTime, todayISO } from "./ui.js?v=1793572035";
 
 let events = [];
 let users = []; // app users, for the People picker on an event (2026-10-19)
@@ -113,7 +113,7 @@ export function initCalendar() {
 // one item per availability block: "Tithing declaration 2:00–4:00 PM · 3 of 8 booked"
 function tithingItems(date) {
   if (!season) return [];
-  const slots = slotsOf(season.windows, offList(season)).filter((s) => s.date === date);
+  const slots = slotsOf(season.windows, offList(season), season.spacers || []).filter((s) => s.date === date);
   return (season.windows || []).filter((w) => w.date === date).map((w) => {
     const mine = slots.filter((s) => s.win === w.id), booked = mine.filter((s) => signups[s.id]);
     return { tithing: true, id: "t:" + w.id, date, startTime: w.start, endTime: w.end, cal: "bishop",
@@ -304,7 +304,7 @@ function dayBlocks(date, who) { // who: a schedule tab's owner — ward items + 
   events.filter((e) => e.date === date && showIt(e) && (!who || calOf(e) !== "bishop" || ownerOf(e) === who || attends(e, who))).forEach((e) => out.push({ kind: e.kind === "interviews" ? "interviews" : "event", id: e.id, title: e.title, start: e.startTime ? toMinutes(e.startTime) : null, end: e.endTime ? toMinutes(e.endTime) : (e.startTime ? toMinutes(e.startTime) + 60 : null), cal: calOf(e), ev: e }));
   standingEvents([date]).filter(showIt).forEach((e) => out.push({ kind: "standing", id: e.id, title: e.title, start: toMinutes(e.startTime), end: toMinutes(e.endTime), cal: "bishop", ev: { color: e.color || "" }, standing: e.standing }));
   if (season && calView !== "ward" && (!who || who === "bishop")) {
-    const slots = slotsOf(season.windows, offList(season)).filter((s) => s.date === date);
+    const slots = slotsOf(season.windows, offList(season), season.spacers || []).filter((s) => s.date === date);
     (season.windows || []).filter((w) => w.date === date).forEach((w) => {
       const mine = slots.filter((s) => s.win === w.id);
       out.push({ kind: "tithing", id: w.id, title: "Tithing declaration", start: toMinutes(w.start), end: toMinutes(w.end), cal: "bishop", win: w, slots: mine });
@@ -332,7 +332,7 @@ const blockX = (b) => (b.kind === "standing" ? "" : `<button type="button" class
 function blockMarkup(b, style) {
 if (b.kind === "tithing") {
     // every sign-up time is its own row: "11:05 (10 min) The Smiths" as people book, "open" until they do (Jordan 10/18)
-    const ticks = b.slots.map((s) => { const su = signups[s.id]; const st = su?.status === "attended" ? " came" : su?.status === "noshow" ? " noshow" : ""; return `<div class="dv-slot${su ? " booked" + st : s.blocked ? " off" : ""}" style="top:${(s.min - b.start) * PX_MIN}px;height:${s.len * PX_MIN}px" title="${fmtClock(s.min)}${su ? " · " + esc(su.name) + (su.phone ? " · " + esc(su.phone) : "") + (st === " came" ? " · came" : st === " noshow" ? " · no-show" : "") : s.blocked ? " · blocked" : " · open"}"><b>${fmtClock(s.min).replace(/ [AP]M$/, "")}</b> <i>(${s.len} min)</i> <span>${st === " came" ? "✓ " : st === " noshow" ? "✗ " : ""}${su ? esc(su.name) : s.blocked ? "blocked" : "open"}</span></div>`; }).join("");
+    const ticks = b.slots.map((s) => { const su = signups[s.id]; const st = su?.status === "attended" ? " came" : su?.status === "noshow" ? " noshow" : ""; return `<div class="dv-slot${su ? " booked" + st : s.spacer ? " spacer" : s.blocked ? " off" : ""}" style="top:${(s.min - b.start) * PX_MIN}px;height:${s.len * PX_MIN}px" title="${fmtClock(s.min)}${su ? " · " + esc(su.name) + (su.phone ? " · " + esc(su.phone) : "") + (st === " came" ? " · came" : st === " noshow" ? " · no-show" : "") : s.spacer ? " · catch-up time" : s.blocked ? " · blocked" : " · open"}"><b>${fmtClock(s.min).replace(/ [AP]M$/, "")}</b> <i>(${s.len} min)</i> <span>${st === " came" ? "✓ " : st === " noshow" ? "✗ " : ""}${su ? esc(su.name) : s.spacer ? "☕ catch up" : s.blocked ? "blocked" : "open"}</span></div>`; }).join("");
     const booked = b.slots.filter((s) => signups[s.id]).length;
     return `<div class="dv-block dv-tithing dv-slotted${dvFocus === "t:" + b.id ? " dv-focus" : ""}" data-block="t:${esc(b.id)}" style="${style}">${blockX(b)}<div class="dv-block-tag" title="Tithing declaration · ${booked} of ${b.slots.filter((s) => !s.blocked || signups[s.id]).length} booked${isPriority(b.win) ? " · priority times" : ""}">${isPriority(b.win) ? "🔒 " : ""}Tithing · ${booked}/${b.slots.filter((s) => !s.blocked || signups[s.id]).length}</div><div class="dv-slots">${ticks}</div></div>`;
   }
@@ -450,10 +450,11 @@ function focusHtml(date, blocks) {
       <h4 class="dv-side-h">Times <span class="pill pill-role-member">${booked.length} of ${b.slots.filter((s) => !s.blocked || signups[s.id]).length} booked</span></h4>
       ${ed ? `<div class="row-sub" style="margin:-.2rem 0 .3rem">Type a name on a time to sign someone up yourself (Enter saves); clear it to open the time again. ⊘ blocks a time out so nobody can take it.</div>` : ""}
       <div class="dv-irows">${b.slots.map((s) => { const su = signups[s.id]; const busyT = !su && s.blocked && season.busy?.[s.id];
-        return `<div class="dv-irow dv-trow${su ? " booked" : s.blocked ? " off" : ""}"><b>${fmtClock(s.min)}</b>${
+        return `<div class="dv-irow dv-trow${su ? " booked" : s.spacer ? " spacer" : s.blocked ? " off" : ""}"><b>${fmtClock(s.min)}</b>${
           busyT ? `<span class="row-sub" title="On the bishop's calendar">📅 ${esc(busyT)}</span>`
+          : !su && s.spacer ? `<span class="row-sub dv-spacer-lbl">☕ catch-up time</span>${ed ? `<button type="button" class="btn btn-sm btn-ghost" data-tblock="${s.id}" data-on="0" title="Open this time back up">open up</button>` : ""}`
           : !su && s.blocked ? `<span class="row-sub">blocked out</span>${ed ? `<button type="button" class="btn btn-sm btn-ghost" data-tblock="${s.id}" data-on="0" title="Open this time back up">unblock</button>` : ""}`
-          : `<input data-tname="${s.id}" value="${esc(su?.name || "")}" placeholder="open" autocomplete="off" ${ed ? "" : "disabled"} title="${su?.phone ? esc(su.phone) : ""}">${ed && !su ? `<button type="button" class="btn btn-sm btn-ghost" data-tblock="${s.id}" data-on="1" title="Block out this time so nobody can sign up for it">⊘</button>` : su && ed ? `<span class="dv-tst" data-tst-for="${s.id}"><button type="button" class="dv-st-btn dv-st-yes${su.status === "attended" ? " on" : ""}" data-tstatus="attended" title="They came">✓</button><button type="button" class="dv-st-btn dv-st-no${su.status === "noshow" ? " on" : ""}" data-tstatus="noshow" title="They didn't come">✗</button></span>` : su?.phone ? `<span class="row-sub dv-tphone">${esc(su.phone)}</span>` : ""}`}</div>`; }).join("")}</div>
+          : `<input data-tname="${s.id}" value="${esc(su?.name || "")}" placeholder="open" autocomplete="off" ${ed ? "" : "disabled"} title="${su?.phone ? esc(su.phone) : ""}">${ed && !su ? `<button type="button" class="btn btn-sm btn-ghost" data-tblock="${s.id}" data-on="1" data-kind="spacer" title="Keep this time as a catch-up break — nobody can sign up for it">☕</button><button type="button" class="btn btn-sm btn-ghost" data-tblock="${s.id}" data-on="1" title="Block out this time so nobody can sign up for it">⊘</button>` : su && ed ? `<span class="dv-tst" data-tst-for="${s.id}"><button type="button" class="dv-st-btn dv-st-yes${su.status === "attended" ? " on" : ""}" data-tstatus="attended" title="They came">✓</button><button type="button" class="dv-st-btn dv-st-no${su.status === "noshow" ? " on" : ""}" data-tstatus="noshow" title="They didn't come">✗</button></span>` : su?.phone ? `<span class="row-sub dv-tphone">${esc(su.phone)}</span>` : ""}`}</div>`; }).join("")}</div>
       <div class="dv-form-actions">${ed ? `<button type="button" class="btn btn-ghost btn-danger" id="dv-f-remove">Remove block</button>` : ""}<button type="button" class="btn" id="dv-back">Back</button>${ed ? `<button type="button" class="btn btn-primary" id="dv-f-save">Save</button>` : ""}</div>`;
   }
   const ev = b.ev, len = Number(ev.len) || 15, names = ev.slots || {}, ed = can("calendar", "edit") || ev.createdBy === ctx.uid;
@@ -574,17 +575,18 @@ function wireSide(date, blocks, keep) {
     catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
   }));
   side.querySelectorAll("[data-tblock]").forEach((b) => b.addEventListener("click", async () => {
-    const id = b.dataset.tblock, on = b.dataset.on === "1";
+    const id = b.dataset.tblock, on = b.dataset.on === "1", spacer = b.dataset.kind === "spacer";
     const w0 = (season.windows || []).find((x) => x.id === dvFocus.slice(2));
     let ids = [id];
     if (w0 && tithingSiblings(w0).length) { // the same time of day on the repeating blocks too, if he wants (Jordan 10/25)
-      const targets = await askTithingScope(side, w0, on ? `Block out ${fmtClock(parseSlotId(id).min)} on` : `Open ${fmtClock(parseSlotId(id).min)} back up on`); if (!targets) return;
+      const targets = await askTithingScope(side, w0, on ? `${spacer ? "Keep a catch-up break at" : "Block out"} ${fmtClock(parseSlotId(id).min)} on` : `Open ${fmtClock(parseSlotId(id).min)} back up on`); if (!targets) return;
       const min = parseSlotId(id).min; ids = targets.filter((w) => toMinutes(w.start) <= min && min < toMinutes(w.end)).map((w) => slotId(w.date, min)).filter((sid) => !signups[sid]);
     }
     const blocked = on ? [...new Set([...(season.blocked || []), ...ids])] : (season.blocked || []).filter((x) => !ids.includes(x));
+    const spacers = on && spacer ? [...new Set([...(season.spacers || []), ...ids])] : (season.spacers || []).filter((x) => !ids.includes(x)); // a catch-up time is blocked + marked
     try {
-      await updateDoc(doc(db, "tithing", season.token), { blocked, slots: slotMap(season.windows, [...blocked, ...Object.keys(season.busy || {})]), updatedAt: serverTimestamp() });
-      season = { ...season, blocked }; toast((on ? "Blocked out" : "Open again") + (ids.length > 1 ? ` on ${ids.length} Sundays` : "")); drawDay();
+      await updateDoc(doc(db, "tithing", season.token), { blocked, spacers, slots: slotMap(season.windows, [...blocked, ...Object.keys(season.busy || {})]), updatedAt: serverTimestamp() });
+      season = { ...season, blocked, spacers }; toast((on ? (spacer ? "Catch-up break" : "Blocked out") : "Open again") + (ids.length > 1 ? ` on ${ids.length} Sundays` : "")); drawDay();
     } catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
   }));
   // repeat an existing tithing block onto later dates (2026-10-18)

@@ -1,17 +1,17 @@
 // Tithing declaration sign-ups (2026-10-04) — the bishop's side, its own page
 // ("Tithing Declaration" tab, area key "tithing"): set when you're available, share the link / QR code, and see
 // who signed up. The public page is tithing.html (js/tithing-form.js).
-import { db } from "./firebase-init.js?v=1793571434";
-import { ctx, can } from "./app.js?v=1793571434";
+import { db } from "./firebase-init.js?v=1793572035";
+import { ctx, can } from "./app.js?v=1793572035";
 import {
   collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { watchBishopCal, standingEvents } from "./bishop-cal.js?v=1793571434";
-import { openModal, closeModal, toast } from "./ui.js?v=1793571434";
+import { watchBishopCal, standingEvents } from "./bishop-cal.js?v=1793572035";
+import { openModal, closeModal, toast } from "./ui.js?v=1793572035";
 import {
   GROUPS, PLACES, SLOT_LENGTHS, esc, toMin, fmtClock, fmtLongDay, fmtShortDay, slotsOf, slotMap, isPriority, PRIORITY_TEXT,
   sortWindows, overlaps, newToken, parseSlotId, todayIso, addDays, hhmm, busyFromEvents, sameBusy, offList,
-} from "./tithing-shared.js?v=1793571434";
+} from "./tithing-shared.js?v=1793572035";
 
 let mount = null, season = null, signups = [], unsubSignups = null, started = false, dirty = false;
 let events = null; // the ward calendar (events with cal: "bishop" block sign-up times); null until it loads
@@ -133,7 +133,7 @@ function render() {
 
   const today = todayIso();
   const windows = sortWindows(season.windows);
-  const slots = slotsOf(windows, offList(season));
+  const slots = slotsOf(windows, offList(season), season.spacers || []);
   const busyOf = (id) => (season.busy || {})[id] || "";
   const byId = Object.fromEntries(signups.map((s) => [s.id, s]));
   const slotIds = new Set(slots.map((s) => s.id));
@@ -181,8 +181,9 @@ function render() {
     const su = byId[s.id];
     const tags = `${s.place === "home" ? `<span class="td-tag td-tag-home" title="Home visit">🏠</span>` : ""}${s.priority ? `<span class="td-tag td-tag-note">Priority</span>` : ""}`;
     if (!su && s.blocked && busyOf(s.id)) return `<div class="td-srow td-srow-blocked td-srow-busy" data-slot="${s.id}"><span class="td-grip td-grip-none"></span><span class="td-stime">${fmtClock(s.min)}</span><span class="td-sname row-sub" title="On the bishop's calendar — change or move that event on the Calendar page to free this time">📅 ${esc(busyOf(s.id))}</span></div>`;
+    if (!su && s.spacer) return `<div class="td-srow td-srow-spacer" data-slot="${s.id}"><span class="td-grip td-grip-none"></span><span class="td-stime">${fmtClock(s.min)}</span><span class="td-sname td-spacer-lbl">☕ Catch-up time</span>${editor ? `<button class="btn btn-sm btn-ghost" data-block="${s.id}" data-on="0" type="button" title="Open this time back up for sign-ups">open up</button>` : ""}</div>`;
     if (!su && s.blocked) return `<div class="td-srow td-srow-blocked" data-slot="${s.id}"><span class="td-grip td-grip-none"></span><span class="td-stime">${fmtClock(s.min)}</span><span class="td-sname row-sub">blocked out</span>${editor ? `<button class="btn btn-sm btn-ghost" data-block="${s.id}" data-on="0" type="button" title="Open this time back up for sign-ups">unblock</button>` : ""}</div>`;
-    if (!su) return `<div class="td-srow td-srow-open" data-slot="${s.id}"><span class="td-grip td-grip-none"></span><span class="td-stime">${fmtClock(s.min)}</span><span class="td-sname row-sub">open ${tags}</span>${editor ? `<button class="btn btn-sm btn-ghost" data-addname="${s.id}" type="button" title="Put someone in this time yourself">+ add name</button><button class="btn btn-sm btn-ghost td-blk" data-block="${s.id}" data-on="1" type="button" title="Block out this time so nobody can sign up for it">⊘<span class="td-st-lbl"> block</span></button>` : ""}</div>`;
+    if (!su) return `<div class="td-srow td-srow-open" data-slot="${s.id}"><span class="td-grip td-grip-none"></span><span class="td-stime">${fmtClock(s.min)}</span><span class="td-sname row-sub">open ${tags}</span>${editor ? `<button class="btn btn-sm btn-ghost" data-addname="${s.id}" type="button" title="Put someone in this time yourself">+ add name</button><button class="btn btn-sm btn-ghost td-blk" data-block="${s.id}" data-on="1" data-kind="spacer" type="button" title="Keep this time as a catch-up break — nobody can sign up for it">☕<span class="td-st-lbl"> catch-up</span></button><button class="btn btn-sm btn-ghost td-blk" data-block="${s.id}" data-on="1" type="button" title="Block out this time so nobody can sign up for it">⊘<span class="td-st-lbl"> block</span></button>` : ""}</div>`;
     const digits = String(su.phone || "").replace(/\D/g, "");
     const tel = digits.length === 10 ? "+1" + digits : digits ? "+" + digits : "";
     return `<div class="td-srow${su.status ? " td-st-" + esc(su.status) : ""}" data-slot="${s.id}">
@@ -382,9 +383,10 @@ function render() {
 
   // block out one time (or open it back up): it disappears from the sign-up page
   mount.querySelectorAll("[data-block]").forEach((b) => b.addEventListener("click", async () => {
-    const id = b.dataset.block, on = b.dataset.on === "1";
+    const id = b.dataset.block, on = b.dataset.on === "1", spacer = b.dataset.kind === "spacer";
     const blocked = on ? [...new Set([...(season.blocked || []), id])] : (season.blocked || []).filter((x) => x !== id);
-    try { await updateDoc(seasonRef(), { blocked, slots: slotMap(season.windows, [...blocked, ...Object.keys(season.busy || {})]), updatedAt: serverTimestamp() }); toast(on ? "Blocked out" : "Open again"); }
+    const spacers = on && spacer ? [...new Set([...(season.spacers || []), id])] : (season.spacers || []).filter((x) => x !== id); // catch-up = blocked + marked (11/01)
+    try { await updateDoc(seasonRef(), { blocked, spacers, slots: slotMap(season.windows, [...blocked, ...Object.keys(season.busy || {})]), updatedAt: serverTimestamp() }); toast(on ? (spacer ? "Catch-up break" : "Blocked out") : "Open again"); }
     catch (err) { toast("Couldn't save: " + (err.code || err.message)); }
   }));
 

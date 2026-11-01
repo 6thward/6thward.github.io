@@ -41,15 +41,15 @@ export const overlaps = (a, b) => a.date === b.date && toMin(a.start) < toMin(b.
 
 // every sign-up time the availability produces, in order; times the bishop blocked out
 // are still listed (blocked: true) so his schedule can show and unblock them
-export function slotsOf(windows, blocked) {
-  const out = [], seen = new Set(), off = new Set(blocked || []);
+export function slotsOf(windows, blocked, spacers) { // spacers (11/01): catch-up times — kept in `blocked` too, so nobody can take them; `spacer` only changes the look
+  const out = [], seen = new Set(), off = new Set(blocked || []), sp = new Set(spacers || []);
   sortWindows(windows).forEach((w) => {
     const len = Number(w.len) || 15, end = toMin(w.end);
     for (let t = toMin(w.start); t + len <= end; t += len) {
       const id = slotId(w.date, t);
       if (seen.has(id)) continue;
       seen.add(id);
-      out.push({ id, date: w.date, min: t, len, place: w.place || "office", group: w.group || "", priority: isPriority(w), priorityText: w.priorityText || "", win: w.id, blocked: off.has(id) });
+      out.push({ id, date: w.date, min: t, len, place: w.place || "office", group: w.group || "", priority: isPriority(w), priorityText: w.priorityText || "", win: w.id, blocked: off.has(id), spacer: sp.has(id) });
     }
   });
   return out;
