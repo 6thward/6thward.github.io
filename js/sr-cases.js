@@ -18,18 +18,18 @@
 //   plan[]     — the plan, as dated notes { id, at, text, by } (2026-10-11)
 
 // Same privacy as the rest of this page: only the bishop and people given Self-Reliance.
-import { db } from "./firebase-init.js?v=1793572305";
-import { ctx, can, goTab } from "./app.js?v=1793572305";
+import { db } from "./firebase-init.js?v=1793596007";
+import { ctx, can, goTab } from "./app.js?v=1793596007";
 import {
   collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1793572305";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine, inlineFmt } from "./notes.js?v=1793572305";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1793572305";
+import { uploadAttachment, fetchAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1793596007";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, plainLine, inlineFmt } from "./notes.js?v=1793596007";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1793596007";
 import {
   INC, EXP, QA, parseCsv, mapResponses, personKey, respTotals, fmtUsd, isBlank, writeupSections,
   parseBudgetCsv, parseMoney, budgetTotals, fmtUsdC,
-} from "./sr-import.js?v=1793572305";
+} from "./sr-import.js?v=1793596007";
 
 let mount = null, cases = [], started = false, openId = null, openRi = null;
 let loaded = null, markLoaded = null; // resolves once the cards have arrived (for opening one from another page)
@@ -102,7 +102,26 @@ export function initCases(el) {
 
 // dated notes, newest first; a card from before the log existed may still carry one undated `notes` text
 const actionsOf = (c) => [...(c.actions || [])].sort((a, b) => String(b.at).localeCompare(String(a.at))); // newest first
-const ACTION_TYPES = [["food", "Food"], ["check", "Check"], ["meeting", "Meeting"], ["noshow", "No Show"], ["call", "Call"], ["visit", "Visit"], ["member", "Member Action"], ["other", "Other"]]; // No Show = a meeting they didn't come to; Member Action = something we asked THEM to do, open until marked done (2026-10-11)
+const ACTION_TYPES = [["bishop", "Bishop Meeting"], ["eq", "EQ Visit"], ["rs", "RS Visit"], ["call", "Call"], ["visit", "Visit"], ["food", "Food"], ["check", "Check"], ["noshow", "No Show"], ["other", "Other"], ["meeting", "Meeting"], ["member", "Member Action"]]; // Bishop / EQ / RS are the history categories (2026-11-01); Meeting + Member Action are older entries (member actions now live under Commitments)
+const REQ_TYPES = [["food", "Food"], ["di", "DI"], ["rent", "Rent"], ["utility", "Utility"], ["cash", "Other cash"], ["other", "Other"]];
+const reqTypeLabel = (t) => (REQ_TYPES.find(([k]) => k === t) || [])[1] || "";
+let histFilter = "all", finOpen = false, formOpen = false; // the open card's history filter and finance folds (2026-11-01)
+// commitments: the card's own list, plus any older "Member action" entries until the first commitment save folds them in
+const commitmentsOf = (c) => [...(c.commitments || []), ...(c.actions || []).filter((a) => a.type === "member").map((a) => ({ id: a.id, at: a.at, by: a.by, text: a.text, due: "", status: a.done ? "kept" : "", followups: [], legacy: true }))]
+  .sort((a, b) => (a.status === "kept") - (b.status === "kept") || String(a.due || "9").localeCompare(String(b.due || "9")) || String(b.at).localeCompare(String(a.at)));
+const helpedTotal = (c) => (c.requests || []).filter((q) => q.status !== "open" && q.outcome !== "declined" && q.amount != null && q.amount !== "").reduce((s, q) => s + (Number(q.amount) || 0), 0);
+const lastTouch = (c) => [...(c.actions || []).map((a) => a.at), ...(c.requests || []).flatMap((q) => [q.at, q.closedAt]), ...(c.log || []).map((n) => n.at), ...(c.writeups || []).map((w) => w.at), ...(c.commitments || []).flatMap((m) => [m.at, ...(m.followups || []).map((f) => f.at)])].filter(Boolean).sort().pop() || c.created || "";
+// everything that happened, newest first: visits and meetings, requests and their decisions, notes, the specialist's notes
+function timelineOf(c) {
+  const cat = (t) => (t === "bishop" || t === "meeting" ? "bishop" : t === "eq" ? "eq" : t === "rs" ? "rs" : "other");
+  const label = (t) => (t === "meeting" ? "Meeting" : actionTypeLabel(t) || "Note");
+  const out = [];
+  (c.actions || []).filter((a) => a.type !== "member").forEach((a) => out.push({ kind: "act", at: a.at, cat: cat(a.type), label: label(a.type), a }));
+  requestsOf(c).forEach((q) => { if (q.id !== "legacy" || q.text) { out.push({ kind: "req", at: q.at, cat: "req", label: "Request", q }); if (q.status !== "open" && q.closedAt) out.push({ kind: "dec", at: q.closedAt, cat: "req", label: "Decision", q }); } });
+  writeupsOf(c).forEach((w) => out.push({ kind: "wu", at: w.at, cat: "sp", label: "Self-Reliance Specialist Notes", w }));
+  logOf(c).forEach((n) => out.push({ kind: "note", at: n.at, cat: "other", label: "Note", n }));
+  return out.sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")));
+}
 const actionTypeLabel = (t) => (ACTION_TYPES.find(([k]) => k === t) || [])[1] || "";
 const isMemberAction = (a) => a && a.type === "member";
 const openMemberActions = (c) => actionsOf(c).filter((a) => isMemberAction(a) && !a.done);
@@ -340,16 +359,51 @@ const writeupsOf = (c) => [...(c.writeups || []), ...((c.writeup || "").trim() ?
   .sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")));
 const wuSummary = (w) => { const secs = writeupSections(w.text); const first = secs[0] || { title: "", paras: [] }; const line = first.title || plainLine(first.paras[0] || ""); return line.length > 110 ? line.slice(0, 108) + "…" : line; };
 function detailHtml(c, ri) {
+  // Version 1 (2026-11-01): what you act on (requests, commitments, plan) on the left; the record (history, documents, finances) on the right
   const rs = sorted(c), r = rs[ri] || null, st = statusOf(c), ed = editor();
+  const opens = openRequests(c), past = requestsOf(c).filter((q) => q.status !== "open");
+  const files = c.files || [], finFiles = files.filter((f) => f.category === "finance"), docFiles = files.filter((f) => f.category !== "finance");
+  const reqLabel = (q) => `${reqTypeLabel(q.type) || "Request"}${q.amount != null && q.amount !== "" ? ` · ${fmtUsdC(Number(q.amount))}` : ""}`;
+  const docsFor = (q) => docFiles.filter((f) => f.forRequest === q.id);
+  const reqCard = (q) => `<div class="src-req-card${ed ? " src-act-ed" : ""}" data-req="${esc(q.id)}" ${ed ? `title="Click to edit the request"` : ""}>
+      <div class="src-req-top"><b>${esc(reqTypeLabel(q.type) || "Request")}</b>${q.amount != null && q.amount !== "" ? `<span class="src-req-amt">${fmtUsdC(Number(q.amount))}</span>` : ""}</div>
+      <div class="src-req-txt">${esc(plainLine(q.text || ""))}</div>
+      <div class="src-req-sub">asked ${esc(fmtDay(q.at) || "—")}${q.by ? ` · ${esc(q.by)}` : ""}${docsFor(q).length ? ` · ${docsFor(q).map((f) => `<span class="src-req-doc" data-file="${esc(f.id)}">📎 ${esc(f.name)}</span>`).join(" ")}` : ""}</div>
+      ${ed ? `<div class="src-req-acts"><button type="button" class="btn btn-sm src-btn-ok" data-reqdec="${esc(q.id)}|accepted">✓ Accept</button><button type="button" class="btn btn-sm" data-reqdec="${esc(q.id)}|declined">✗ Decline</button><span class="row-sub">— a note of what was given goes on the timeline</span></div><div class="src-req-decform" data-decslot="${esc(q.id)}"></div>` : ""}
+    </div>`;
+  const pastRow = (q) => `<div class="src-past-row${ed ? " src-act-ed" : ""}" data-req="${esc(q.id)}" ${ed ? `title="Click to edit"` : ""}><span class="src-act-date">${esc(fmtShort(q.at) || "—")}</span><span class="src-past-type">${esc(reqTypeLabel(q.type) || "Request")}</span><span class="src-past-txt">${esc(plainLine(q.text || ""))}${q.amount != null && q.amount !== "" ? ` <span class="row-sub">· ${fmtUsdC(Number(q.amount))}</span>` : ""}${q.decisionNote ? `<div class="src-past-note">${esc(q.decisionNote)}</div>` : ""}</span>${ed ? `<button type="button" class="src-reqst src-reqst-${q.outcome === "declined" ? "declined" : "closed"}" data-reqst="${esc(q.id)}" title="${q.outcome === "declined" ? "Declined" : "Accepted"}${q.closedAt ? " " + esc(fmtDay(q.closedAt)) : ""} — click to re-open">${q.outcome === "declined" ? "Declined" : "Accepted"}</button>` : `<span class="src-reqst src-reqst-${q.outcome === "declined" ? "declined" : "closed"}">${q.outcome === "declined" ? "Declined" : "Accepted"}</span>`}</div>`;
+  const cms = commitmentsOf(c), kept = cms.filter((x) => x.status === "kept").length;
+  const cmRow = (m) => { const fu = (m.followups || []).slice(-1)[0]; return `<div class="src-cm${ed ? " src-cm-ed" : ""}" data-cm="${esc(m.id)}">
+      ${ed ? `<button type="button" class="src-cm-box src-cm-${m.status || "open"}" data-cmst="${esc(m.id)}" title="${m.status === "kept" ? "Kept — click to mark not yet" : m.status === "missed" ? "Not yet — click to clear" : "Open — click once they've done it"}"></button>` : `<span class="src-cm-box src-cm-${m.status || "open"}"></span>`}
+      <div class="src-cm-body"><div class="src-cm-txt">${esc(plainLine(m.text || ""))}</div>${fu ? `<div class="src-cm-fu">${esc(fmtShort(fu.at))} — ${esc(fu.text)}</div>` : ""}${ed ? `<div class="src-cm-fuslot" data-fuslot="${esc(m.id)}"></div>` : ""}</div>
+      <span class="src-cm-due">${m.due ? "by " + esc(fmtShort(m.due + "T12:00:00")) : ""}${ed ? `<button type="button" class="btn btn-sm btn-ghost" data-cmfu="${esc(m.id)}" title="Add a follow-up note — are they doing it?">+ note</button>` : ""}</span>
+    </div>`; };
+  const plan = planOf(c);
+  const planRow = (x) => `<div class="src-act src-plan-row${ed ? " src-act-ed" : ""}" data-plan="${esc(x.id)}" ${ed ? `title="Click to edit"` : ""}><span class="src-plan-txt">${esc(plainLine(x.text || ""))}</span><span class="src-plan-by">${x.due ? "by " + esc(fmtShort(x.due + "T12:00:00")) : x.goal ? "goal" : esc(fmtShort(x.at))}</span></div>`;
+  // ---- history: one dated stream ----
+  const tl = timelineOf(c).filter((e) => histFilter === "all" || e.cat === histFilter);
+  const catPill = (e) => `<span class="src-tl-pill src-tlp-${esc(e.cat)}">${esc(e.label)}</span>`;
+  const tlRow = (e) => {
+    if (e.kind === "wu") { const open = wuOpen.has(e.w.id); return `<div class="src-tl-ev" data-wuid="${esc(e.w.id)}"><div class="src-tl-d"><span class="src-tl-date">${esc(fmtShort(e.at))}</span> ${catPill(e)}${e.w.by ? `<span class="src-tl-by">${esc(e.w.by)}</span>` : ""}<button type="button" class="src-tl-exp" data-${open ? "wufold" : "wuopen"}="${esc(e.w.id)}">${open ? "▾ hide" : "▸ show"}</button>${ed && open ? `<button type="button" class="btn btn-sm btn-ghost" data-wuedit="${esc(e.w.id)}">✎</button>` : ""}</div>${open ? `<div class="src-tl-note src-wu-card"><div class="src-writeup">${writeupHtml(e.w.text)}</div></div>` : `<div class="src-tl-t row-sub">${esc(wuSummary(e.w))}</div>`}</div>`; }
+    if (e.kind === "note") return `<div class="src-tl-ev" data-note="${esc(e.n.id)}"><div class="src-tl-d"><span class="src-tl-date">${esc(fmtShort(e.at) || "earlier")}</span> ${catPill(e)}${e.n.by ? `<span class="src-tl-by">${esc(e.n.by)}</span>` : ""}${ed ? `<button type="button" class="btn btn-sm btn-ghost" data-richedit="note:${esc(e.n.id)}" title="Edit">✎</button><button type="button" class="btn btn-sm btn-ghost" data-ndel="${esc(e.n.id)}" title="Delete">✕</button>` : ""}</div><div class="src-rich src-tl-rich" data-rich="note:${esc(e.n.id)}">${notesHtml(e.n.text, "note:" + e.n.id, ed, (i) => `data-rtodo="note:${esc(e.n.id)}|${i}"`)}</div></div>`;
+    if (e.kind === "req") return `<div class="src-tl-ev${ed ? " src-act-ed" : ""}" data-req="${esc(e.q.id)}"><div class="src-tl-d"><span class="src-tl-date">${esc(fmtShort(e.at))}</span> ${catPill(e)} <span class="src-reqst src-reqst-${e.q.status === "open" ? "open" : e.q.outcome === "declined" ? "declined" : "closed"}">${e.q.status === "open" ? "open" : e.q.outcome === "declined" ? "declined" : "accepted"}</span></div><div class="src-tl-t">${esc(reqLabel(e.q))} — ${esc(plainLine(e.q.text || ""))}</div></div>`;
+    if (e.kind === "dec") return `<div class="src-tl-ev"><div class="src-tl-d"><span class="src-tl-date">${esc(fmtShort(e.at))}</span> ${catPill(e)}${e.q.closedBy ? `<span class="src-tl-by">${esc(e.q.closedBy)}</span>` : ""}</div><div class="src-tl-t"><b>${esc(reqTypeLabel(e.q.type) || "Request")} ${e.q.outcome === "declined" ? "declined" : "accepted"}</b>${e.q.decisionNote ? ` — ${esc(e.q.decisionNote)}` : ""}</div></div>`;
+    const a = e.a; // an action-log entry
+    return `<div class="src-tl-ev${ed ? " src-act-ed" : ""}" data-act="${esc(a.id)}" ${ed ? `title="Click to edit"` : ""}><div class="src-tl-d"><span class="src-tl-date">${esc(fmtShort(a.at))}</span> ${catPill(e)}${a.by ? `<span class="src-tl-by">${esc(a.by)}</span>` : ""}</div><div class="src-tl-t">${esc(plainLine(a.text || ""))}</div></div>`;
+  };
+  const chips = [["all", "All"], ["bishop", "Bishop meeting"], ["eq", "EQ visit"], ["rs", "RS visit"], ["req", "Requests"], ["sp", "Specialist notes"], ["other", "Other"]];
+  // ---- finances ----
+  const bud = (c.budgets || [])[0], t = bud ? budgetTotals(bud) : r ? respTotals(r) : null;
   return `
     <div class="src-d-head">
       <div id="srd-who"><h3${ed ? ` class="src-name-ed" data-nameedit title="Click to edit the names"` : ""}>${esc(displayName(c))}${ed ? `<span class="src-name-pen">✎</span>` : ""}</h3>
         <div class="row-sub">${[boardCards.some((k) => k.srCase === c.id) ? `<a href="#" class="src-board-link" data-board="${esc(boardCards.find((k) => k.srCase === c.id).id)}" title="Open their Member Board card">📋 Member Board</a>` : "", c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : ""].filter(Boolean).join(" · ")}</div>
         <div class="src-bio-line" id="srd-bio">${(c.bio || "").trim()
           ? `<span class="src-bio${ed ? " src-bio-ed" : ""}"${ed ? ` data-bioedit title="Click to edit"` : ""}>${esc(c.bio)}</span>`
-          : ed ? `<span class="src-bio src-bio-empty" data-bioedit>+ Who they are — a line or two to jog your memory</span>` : ""}</div></div>
+          : ed ? `<span class="src-bio src-bio-empty" data-bioedit>+ Who they are — a line or two to jog your memory</span>` : ""}</div>
+        <div class="src-meta"><span>Opened <b>${esc(fmtShort(c.created) || "—")}</b></span><span>Last touch <b>${esc(fmtShort(lastTouch(c)) || "—")}</b></span><span>Helped so far <b>${fmtUsdC(helpedTotal(c))}</b></span><span>Specialist notes <b>${writeupsOf(c).length}</b></span></div></div>
       <div class="src-d-tools">
-        ${ed ? `<button type="button" class="pill src-st ${STATUS_PILL[st]}" id="srd-status" title="${st === "open" ? `Open — ${openRequests(c).length} open request${openRequests(c).length === 1 ? "" : "s"}. Click to close the card (and its open requests).` : `Closed${c.closedAt ? " " + esc(fmtDay(c.closedAt)) : ""}. Click to re-open.`}">${esc(STATUS.find(([k]) => k === st)?.[1] || st)}</button>`
+        ${ed ? `<button type="button" class="pill src-st ${STATUS_PILL[st]}" id="srd-status" title="${st === "open" ? `Open — ${opens.length} open request${opens.length === 1 ? "" : "s"}. Click to close the card (and its open requests).` : "Closed — click to re-open"}">${esc(STATUS.find(([k]) => k === st)?.[1] || st)}</button>`
           : `<span class="pill src-st ${STATUS_PILL[st]}">${esc(STATUS.find(([k]) => k === st)?.[1] || st)}</span>`}
         <button class="btn btn-sm" id="srd-print" type="button">🖨 Print</button>
       </div>
@@ -360,61 +414,41 @@ function detailHtml(c, ri) {
         ? `<div class="src-rich${ed ? " src-rich-edit-ok" : ""}" data-rich="summary">${notesHtml(c.summary, "summary", ed, (i) => `data-rtodo="summary|${i}"`)}</div>`
         : ed ? `<div class="src-rich src-rich-empty src-rich-edit-ok" data-rich="summary">+ Add your summary — the few lines you want to see first when you open this card</div>` : `<p class="row-sub" style="margin:0">No summary yet.</p>`}
     </div>
-    <div class="src-actions"><h4>Action log ${ed ? `<button class="btn btn-sm btn-ghost" id="srd-act-add" type="button">+ Add</button>` : ""}</h4>
-      <div id="srd-act-new"></div>
-      ${actionsOf(c).length ? `<div class="src-act-list">${actionsOf(c).map((a) => `<div class="src-act${ed ? " src-act-ed" : ""}" data-act="${esc(a.id)}" ${ed ? `title="Click to edit"` : ""}><span class="src-act-date">${esc(fmtDay(a.at) || "—")}</span>${a.type ? `<span class="src-act-type src-at-${esc(a.type)}">${esc(actionTypeLabel(a.type) || a.type)}</span>` : ""}<span class="src-act-text">${inlineFmt(a.text || "")}</span>${isMemberAction(a) ? (ed
-                ? `<button type="button" class="src-reqst src-reqst-${a.done ? "done" : "open"}" data-actdone="${esc(a.id)}" title="${a.done ? `Done${a.doneAt ? " " + esc(fmtDay(a.doneAt)) : ""} — click to re-open` : "Open — click once they've done it"}">${a.done ? "done" : "open"}</button>`
-                : `<span class="src-reqst src-reqst-${a.done ? "done" : "open"}">${a.done ? "done" : "open"}</span>`) : ""}${a.by ? `<span class="src-act-by">${esc(a.by)}</span>` : ""}</div>`).join("")}</div>`
-        : `<p class="row-sub" style="margin:0">Nothing logged yet${ed ? " — one line per thing done: paid rent, placed a food order, made a commitment." : "."}</p>`}
-    </div>
-    <div class="src-d-cols">
-      <div class="src-col">
-        ${budgetHtml(c)}
-        ${rs.length > 1 ? `<div class="src-tabs">${rs.map((x, i) => `<button type="button" class="chip${i === ri ? " active" : ""}" data-ri="${i}">Plan ${esc(fmtDay(x.at))}${i === rs.length - 1 ? " · latest" : ""}</button>`).join("")}</div>` : ""}
-        ${r ? `${rs.length <= 1 ? `<p class="row-sub" style="margin:0 0 .5rem">Self-Reliance Plan sent ${esc(fmtDay(r.at))}</p>` : ""}${planHtml(c, r)}` : `<div class="empty-note">No Self-Reliance Plan on file for this person yet. Import the specialist's responses to add it.</div>`}
-      </div>
-      <div class="src-col src-col-leader">
-        <div class="src-sec src-reqlog"><h4>Requests ${ed ? `<button class="btn btn-sm btn-ghost" id="srd-req-add" type="button" title="${st === "closed" ? "Log a new request — this re-opens the card" : "Log a new request"}">+ New request</button>` : ""}</h4>
+    <div class="src-v1">
+      <div class="src-v1-left">
+        <div class="src-sec src-box"><h4>Current request${opens.length === 1 ? "" : "s"} <span class="row-sub">${opens.length ? `${opens.length} open` : "none open"}</span>${ed ? `<button class="btn btn-sm btn-ghost" id="srd-req-add" type="button">+ New request</button>` : ""}</h4>
           <div id="srd-req-new"></div>
-          ${requestsOf(c).length ? `<div class="src-act-list">${requestsOf(c).map((q) => `<div class="src-act src-req-row${ed ? " src-act-ed" : ""}${q.status === "open" ? " src-req-open" : ""}" data-req="${esc(q.id)}" ${ed ? `title="Click to edit"` : ""}><span class="src-act-date">${esc(fmtDay(q.at) || "—")}</span><span class="src-act-text">${inlineFmt(q.text || "")}</span>${ed
-              ? `<button type="button" class="src-reqst src-reqst-${q.status}" data-reqst="${esc(q.id)}" title="${q.status === "open" ? "Open — click to close this request" : `Closed${q.closedAt ? " " + esc(fmtDay(q.closedAt)) : ""} — click to re-open it`}">${q.status}</button>`
-              : `<span class="src-reqst src-reqst-${q.status}">${q.status}</span>`}</div>`).join("")}</div>`
-            : `<p class="row-sub" style="margin:0">No request logged yet${ed ? " — e.g. One month of rent ($1,950) + 1–2 food orders." : "."}</p>`}</div>
-        <div class="src-sec src-planlog"><h4>Plan ${ed ? `<button class="btn btn-sm btn-ghost" id="srd-plan-add" type="button">+ Add</button>` : ""}</h4>
+          ${opens.length ? opens.map(reqCard).join("") : `<p class="row-sub" style="margin:0">Nothing open${ed ? " — log a new request when they ask for help." : "."}</p>`}</div>
+        <div class="src-sec src-box"><h4>Past requests <span class="row-sub">${past.length}</span></h4>
+          ${past.length ? `<div class="src-past">${past.map(pastRow).join("")}</div>` : `<p class="row-sub" style="margin:0">None yet.</p>`}</div>
+        <div class="src-sec src-box"><h4>Commitments <span class="row-sub">${cms.length ? `${kept} of ${cms.length} kept` : ""}</span>${ed ? `<button class="btn btn-sm btn-ghost" id="srd-cm-add" type="button">+ Add</button>` : ""}</h4>
+          <div id="srd-cm-new"></div>
+          ${cms.length ? cms.map(cmRow).join("") : `<p class="row-sub" style="margin:0">None yet${ed ? " — what you asked them to do, with a date; add notes on whether they're doing it." : "."}</p>`}</div>
+        <div class="src-sec src-box"><h4>Plan &amp; goals ${ed ? `<button class="btn btn-sm btn-ghost" id="srd-plan-add" type="button">+ Add</button>` : ""}</h4>
           <div id="srd-plan-new"></div>
-          ${planOf(c).length ? `<div class="src-act-list">${planOf(c).map((x) => `<div class="src-act src-plan-row${ed ? " src-act-ed" : ""}" data-plan="${esc(x.id)}" ${ed ? `title="Click to edit"` : ""}><span class="src-act-date">${esc(fmtDay(x.at) || "—")}</span><span class="src-act-text">${inlineFmt(x.text || "")}</span>${x.by ? `<span class="src-act-by">${esc(x.by)}</span>` : ""}</div>`).join("")}</div>`
-            : `<p class="row-sub" style="margin:0">No plan yet${ed ? " — add the steps you and the specialist agreed on, one line each." : "."}</p>`}</div>
-        <div class="src-sec" id="srd-wus"><h4>Specialist’s write-ups ${ed ? `<button class="btn btn-sm btn-ghost" id="srd-wu-add" type="button">+ Add write-up</button>` : ""}</h4>
-          <div id="srd-wu-new"></div>
-          ${(() => { const list = writeupsOf(c); if (!list.length) return `<p class="row-sub" style="margin:0">No write-up yet${ed ? " — paste the specialist's report with “+ Add write-up”." : "."}</p>`;
-            return list.map((w, i) => {
-              const open = wuOpen.has(w.id) || (i === 0 && !wuOpen.has("~" + w.id) && ![...wuOpen].some((k) => !k.startsWith("~"))); // the newest unfolds by itself
-              const head = `<span class="src-wu-date">${esc(fmtDay(w.at) || "undated")}</span>${w.by ? `<span class="src-wu-by">· ${esc(w.by)}</span>` : ""}`;
-              return open
-                ? `<div class="src-wu-card" data-wuid="${esc(w.id)}">
-                    <div class="src-wu-head" data-wufold="${esc(w.id)}" title="Click to fold this write-up up">${head}<span class="src-wu-tools">${ed ? `<button type="button" class="btn btn-sm btn-ghost" data-wuedit="${esc(w.id)}">✎ Edit</button>` : ""}<span class="src-wu-caret">▴</span></span></div>
-                    <div class="src-writeup">${writeupHtml(w.text)}</div>
-                  </div>`
-                : `<button type="button" class="src-wu-pill" data-wuopen="${esc(w.id)}" title="Click to read">${head}<span class="src-wu-sum">${esc(wuSummary(w))}</span><span class="src-wu-caret">▾</span></button>`;
-            }).join(""); })()}</div>
-        <div class="src-sec"><h4>Notes ${ed ? `<button class="btn btn-sm btn-ghost" id="srd-note-add" type="button">+ Add note</button>` : ""}</h4>
-          <div id="srd-note-new"></div>
-          ${logOf(c).length ? logOf(c).map((n) => `<div class="src-note" data-note="${esc(n.id)}">
-              <div class="src-note-head"><b>${esc(fmtDay(n.at) || "Earlier note")}</b>${n.by ? `<span> · ${esc(n.by)}</span>` : ""}${n.editedAt ? `<span class="row-sub"> · edited</span>` : ""}
-                ${ed ? `<span class="src-note-tools"><button type="button" class="btn btn-sm btn-ghost" data-richedit="note:${esc(n.id)}" title="Edit this note">✎</button><button type="button" class="btn btn-sm btn-ghost" data-ndel="${esc(n.id)}" title="Delete this note">✕</button></span>` : ""}</div>
-              <div class="src-rich${ed ? " src-rich-edit-ok" : ""}" data-rich="note:${esc(n.id)}">${notesHtml(n.text, "note:" + n.id, ed, (i) => `data-rtodo="note:${esc(n.id)}|${i}"`)}</div>
-            </div>`).join("") : `<p class="row-sub" style="margin:0">No notes yet${ed ? " — add one after a visit, a phone call, or a new report from the specialist." : "."}</p>`}</div>
-        <div class="src-sec"><h4>Attachments ${ed ? `<button class="btn btn-sm btn-ghost" id="srd-attach" type="button" title="Attach an invoice, statement, PDF or image">📎 Add file</button>` : ""}</h4>
-          ${(c.files || []).length ? `<div class="src-files">${(c.files || []).map((f) => `<div class="src-file" data-file="${esc(f.id)}" title="Open ${esc(f.name)}">
-              ${isImage(f) ? `<img class="src-thumb" data-thumb="${esc(f.id)}" alt="${esc(f.name)}"${thumbs.get(f.id) ? ` src="${thumbs.get(f.id)}"` : ""}>` : `<span class="src-file-ic">${fileIcon(f)}</span>`}
-              <span class="src-file-name">${esc(f.name)}</span><span class="row-sub">${fmtBytes(f.size)}</span>
-              ${ed ? `<button type="button" class="btn btn-sm btn-ghost" data-rmfile="${esc(f.id)}" title="Remove this file">✕</button>` : ""}
-            </div>`).join("")}</div>` : `<p class="row-sub" style="margin:0">None yet.</p>`}
+          ${plan.length ? `<div class="src-act-list">${plan.map(planRow).join("")}</div>` : `<p class="row-sub" style="margin:0">No plan yet${ed ? " — the steps you and the specialist agreed on, one line each, with a date or a goal." : "."}</p>`}</div>
+      </div>
+      <div class="src-v1-right">
+        <div class="src-sec src-box"><h4>History ${ed ? `<span class="src-h-actions"><button class="btn btn-sm btn-ghost" id="srd-act-add" type="button">+ Add</button><button class="btn btn-sm btn-ghost" id="srd-note-add" type="button" title="A longer note with formatting">+ Note</button><button class="btn btn-sm btn-ghost" id="srd-wu-add" type="button" title="Paste the self-reliance specialist's notes">+ Specialist notes</button></span>` : ""}</h4>
+          <div class="src-hchips">${chips.map(([k, l]) => `<button type="button" class="src-hchip${histFilter === k ? " on" : ""}" data-hf="${k}">${l}</button>`).join("")}</div>
+          <div id="srd-act-new"></div><div id="srd-note-new"></div><div id="srd-wu-new"></div>
+          ${tl.length ? `<div class="src-tl-v1">${tl.map(tlRow).join("")}</div>` : `<p class="row-sub" style="margin:0">Nothing here yet${ed ? " — add a visit, a meeting, a note, or paste the specialist's notes." : "."}</p>`}</div>
+        <div class="src-sec src-box"><h4>Documents ${ed ? `<button class="btn btn-sm btn-ghost" id="srd-attach" type="button" title="Lease, utility bill, request form…">⬆ Upload</button>` : ""}</h4>
+          ${docFiles.length ? `<div class="src-files">${docFiles.map((f) => fileRow(c, f, ed)).join("")}</div>` : `<p class="row-sub" style="margin:0">None yet${ed ? " — upload a lease, a bill, or the request form and tag it to the request it goes with." : "."}</p>`}
           <div class="src-upload row-sub" id="srd-upload" hidden></div>
           ${ed ? `<input type="file" id="srd-file" accept="${ATTACH_ACCEPT}" multiple hidden>` : ""}</div>
-        <div class="src-sec"><h4>Decision / help given</h4>
-          ${ed ? `<textarea id="srd-decision" class="src-ta" placeholder="What was decided, what was provided and when">${esc(c.decision || "")}</textarea>` : `<p>${esc(c.decision || "—")}</p>`}</div>
-
+        <div class="src-sec src-box"><h4>Financial summary ${ed ? `<span class="src-h-actions"><button class="btn btn-sm btn-ghost" id="srd-attach-fin" type="button" title="Bank or credit card statements, the financial summary form">⬆ Upload</button></span>` : ""}</h4>
+          ${t ? tiles(t, true) : `<p class="row-sub" style="margin:0 0 .4rem">No numbers yet${ed ? " — import the specialist's budget or the form answers below." : "."}</p>`}
+          ${bud ? `<p class="src-hint" style="margin:.25rem 0 0">From the specialist's budget “${esc(bud.title || "Current")}”</p>` : r ? `<p class="src-hint" style="margin:.25rem 0 0">As they reported it on the form, ${esc(fmtDay(r.at))}</p>` : ""}
+          <div class="src-files" style="margin-top:.5rem">
+            ${rs.length ? rs.map((x, i) => `<div class="src-file src-file-form${i === ri && formOpen ? " on" : ""}" data-form="${i}" title="Their answers on the financial summary form"><span class="src-file-ic">📊</span><span class="src-file-name">Financial summary form · ${esc(fmtDay(x.at))}</span><span class="row-sub">${i === ri && formOpen ? "▾ hide" : "▸ answers"}</span></div>`).join("") : ""}
+            ${finFiles.map((f) => fileRow(c, f, ed)).join("")}
+          </div>
+          ${formOpen && r ? `<div class="src-form-open">${planHtml(c, r)}</div>` : ""}
+          <div class="src-fold"><button type="button" class="src-foldbtn" id="srd-budget-fold">${finOpen ? "▾" : "▸"} Specialist's budget${(c.budgets || []).length ? ` · ${(c.budgets || []).length}` : ""}</button></div>
+          ${finOpen ? budgetHtml(c) : ""}
+          ${(c.decision || "").trim() ? `<p class="src-hint">Earlier decision note: ${esc(c.decision)}</p>` : ""}
+        </div>
       </div>
     </div>
     <div class="modal-actions">
@@ -422,12 +456,23 @@ function detailHtml(c, ri) {
       <button class="btn" id="srd-close" type="button">Close</button>
     </div>`;
 }
+// a document row: name, size, and the request (or "finances") it's tagged to (2026-11-01)
+function fileRow(c, f, ed) {
+  const reqs = requestsOf(c);
+  const tag = f.category === "finance" ? "Finances" : f.forRequest ? (reqs.find((q) => q.id === f.forRequest) ? `→ ${reqTypeLabel(reqs.find((q) => q.id === f.forRequest).type) || "Request"} · ${fmtShort(reqs.find((q) => q.id === f.forRequest).at)}` : "") : "";
+  return `<div class="src-file" data-file="${esc(f.id)}" title="Open ${esc(f.name)}">
+    ${isImage(f) ? `<img class="src-thumb" data-thumb="${esc(f.id)}" alt="${esc(f.name)}"${thumbs.get(f.id) ? ` src="${thumbs.get(f.id)}"` : ""}>` : `<span class="src-file-ic">${fileIcon(f)}</span>`}
+    <span class="src-file-name">${esc(f.name)}</span><span class="row-sub">${fmtBytes(f.size)}</span>
+    ${ed ? `<select class="src-ftag" data-ftag="${esc(f.id)}" title="Which request this goes with"><option value="">— tag —</option>${reqs.map((q) => `<option value="${esc(q.id)}"${f.forRequest === q.id && f.category !== "finance" ? " selected" : ""}>${esc(reqTypeLabel(q.type) || "Request")} · ${esc(fmtShort(q.at))}</option>`).join("")}<option value="~finance"${f.category === "finance" ? " selected" : ""}>Finances</option></select>` : (tag ? `<span class="src-ftag-ro">${esc(tag)}</span>` : "")}
+    ${ed ? `<button type="button" class="btn btn-sm btn-ghost" data-rmfile="${esc(f.id)}" title="Remove this file">✕</button>` : ""}
+  </div>`;
+}
 
 function openCase(id, ri, opts) {
   const c = cases.find((x) => x.id === id); if (!c) return;
   openId = id;
   openRi = ri ?? Math.max(0, sorted(c).length - 1);
-  openBi = 0; budgetEditing = false; wuOpen = new Set(); wuEditing = null;
+  openBi = 0; budgetEditing = false; wuOpen = new Set(); wuEditing = null; histFilter = "all"; finOpen = false; formOpen = false;
   const el = openModal(`<div id="srd"></div>`);
   el.classList.add("modal-wide", "src-modal");
   drawOpen();
@@ -473,7 +518,7 @@ function drawOpen() {
   if (!editor()) return;
 
   const picker = box.querySelector("#srd-file"), upStatus = box.querySelector("#srd-upload");
-  box.querySelector("#srd-attach").addEventListener("click", () => { picker.value = ""; picker.click(); });
+  box.querySelector("#srd-attach")?.addEventListener("click", () => { picker.dataset.cat = ""; picker.value = ""; picker.click(); });
   picker.addEventListener("change", async () => {
     const chosen = [...picker.files]; if (!chosen.length) return;
     const tooBig = chosen.filter((f) => f.size > MAX_ATTACH_BYTES);
@@ -481,7 +526,8 @@ function drawOpen() {
     const added = [];
     upStatus.hidden = false;
     try {
-      for (const f of chosen.filter((x) => x.size <= MAX_ATTACH_BYTES)) added.push(await uploadAttachment("srCases", c.id, f, (pct) => { upStatus.textContent = `Uploading ${f.name} — ${Math.round(pct * 100)}%`; }));
+      const cat = picker.dataset.cat === "finance" ? "finance" : "doc"; picker.dataset.cat = "";
+      for (const f of chosen.filter((x) => x.size <= MAX_ATTACH_BYTES)) added.push({ ...(await uploadAttachment("srCases", c.id, f, (pct) => { upStatus.textContent = `Uploading ${f.name} — ${Math.round(pct * 100)}%`; })), category: cat, forRequest: "" });
       if (added.length) await save({ files: [...(c.files || []), ...added] }, added.length === 1 ? "Attached" : `${added.length} files attached`);
     } catch (e) { toast("Upload failed: " + (e.code || e.message)); }
     upStatus.hidden = true;
@@ -604,12 +650,14 @@ function drawOpen() {
   // --- action log + request log: one-line dated entries, added and edited in place (2026-10-11) ---
   // the action log carries a type (Food / Check / Meeting…); a new request on a closed card re-opens it
   const LOGS = {
-    actions: { list: actionsOf, prefix: "a", typed: true, placeholder: "What was done — e.g. Paid $1,000 towards October rent", noun: "Entry",
+    actions: { list: actionsOf, prefix: "a", typed: true, placeholder: "What happened — e.g. Met after church; reviewed commitments", noun: "Entry",
       save: (next, msg) => save({ actions: next }, msg) },
-    requests: { list: requestsOf, prefix: "q", typed: false, status: true, placeholder: "What they're asking for — e.g. One month of rent ($1,950) + 1–2 food orders", noun: "Request",
+    requests: { list: requestsOf, prefix: "q", req: true, placeholder: "What they're asking for — e.g. Overdue portion of the city utility bill", noun: "Request",
       save: (next, msg) => saveRequests(next, msg) },
-    plan: { list: planOf, prefix: "p", typed: false, placeholder: "A step in the plan — e.g. Rent split with daughter from November", noun: "Plan note",
+    plan: { list: planOf, prefix: "p", due: true, placeholder: "A step or a goal — e.g. Rent out the spare room", noun: "Plan note",
       save: (next, msg) => save({ plan: next }, msg) },
+    commitments: { list: commitmentsOf, prefix: "m", due: true, placeholder: "What they committed to do — e.g. Register for unemployment", noun: "Commitment",
+      save: (next, msg) => saveCommitments(next, msg) },
   };
   // the card's status follows its requests: open while any is open; closedAt = when the last one closed
   function saveRequests(next, msg) {
@@ -621,27 +669,30 @@ function drawOpen() {
     const note = anyOpen && !wasOpen ? " — card re-opened" : !anyOpen && wasOpen && list.length ? " — no open request, card closed" : "";
     return save(patch, msg + note);
   }
+  // commitments live in their own list; the first save folds the old "Member action" entries into it (2026-11-01)
+  function saveCommitments(next, msg) {
+    const legacyIds = new Set(actionsOf(c).filter(isMemberAction).map((a) => a.id));
+    return save({ commitments: next.map((m) => { const { legacy, ...rest } = m; return rest; }), actions: actionsOf(c).filter((a) => !legacyIds.has(a.id)) }, msg);
+  }
   const logForm = (which, slot, a) => {
     const L = LOGS[which];
     box.querySelector(".src-act-form")?.remove();
     const f = document.createElement("div");
     f.className = "src-act-form";
-    f.innerHTML = `${L.typed ? `<select data-atype class="src-act-type-sel">${ACTION_TYPES.map(([k, l]) => `<option value="${k}"${(a?.type || "") === k ? " selected" : ""}>${l}</option>`).join("")}</select>` : ""}${L.status ? `<select data-ast class="src-act-type-sel src-reqst-sel"><option value="open"${(a?.status || "open") === "open" ? " selected" : ""}>Open</option><option value="closed"${a?.status === "closed" ? " selected" : ""}>Closed</option></select>` : ""}${L.typed ? `<select data-adone class="src-act-type-sel src-reqst-sel"${isMemberAction(a) ? "" : " hidden"}><option value="open"${a?.done ? "" : " selected"}>Open</option><option value="done"${a?.done ? " selected" : ""}>Done</option></select>` : ""}<input type="date" data-ad value="${esc(isoDate(a?.at || new Date().toISOString()))}"><input data-at class="src-in" placeholder="${esc(L.placeholder)}" autocomplete="off" value="${esc(a?.text || "")}">
+    f.innerHTML = `${L.typed ? `<select data-atype class="src-act-type-sel">${ACTION_TYPES.filter(([k]) => !["member", "meeting"].includes(k) || (a?.type || "") === k).map(([k, l]) => `<option value="${k}"${(a?.type || "bishop") === k ? " selected" : ""}>${l}</option>`).join("")}</select>` : ""}${L.req ? `<select data-rtype class="src-act-type-sel">${REQ_TYPES.map(([k, l]) => `<option value="${k}"${(a?.type || "food") === k ? " selected" : ""}>${l}</option>`).join("")}</select><input data-ramt class="src-in src-in-amt" inputmode="decimal" placeholder="$ amount" autocomplete="off" value="${a?.amount != null ? esc(a.amount) : ""}">` : ""}<input type="date" data-ad value="${esc(isoDate(a?.at || new Date().toISOString()))}" title="${L.due ? "Date made" : "Date"}"><input data-at class="src-in" placeholder="${esc(L.placeholder)}" autocomplete="off" value="${esc(a?.text || "")}">${L.due ? `<label class="src-due">by <input type="date" data-adue value="${esc(a?.due || "")}" title="Due by (optional)"></label>` : ""}
       <span class="src-act-form-tools">${a ? `<button type="button" class="btn btn-sm btn-ghost btn-danger" data-x="delete" title="Delete this entry">✕</button>` : ""}<button type="button" class="btn btn-sm" data-x="cancel">Cancel</button><button type="button" class="btn btn-primary btn-sm" data-x="save">Save</button></span>`;
     if (a) slot.replaceWith(f); else slot.appendChild(f);
     const txt = f.querySelector("[data-at]"); txt.focus();
-    f.querySelector("[data-atype]")?.addEventListener("change", (e) => { const d = f.querySelector("[data-adone]"); if (d) d.hidden = e.target.value !== "member"; }); // Open / Done only matters for a Member Action
     const done = async (mode) => {
-      const text = txt.value.trim(), date = f.querySelector("[data-ad]").value, type = f.querySelector("[data-atype]")?.value || "", stv = f.querySelector("[data-ast]")?.value || "", dv = f.querySelector("[data-adone]")?.value || "";
+      const text = txt.value.trim(), date = f.querySelector("[data-ad]").value, type = f.querySelector("[data-atype]")?.value || f.querySelector("[data-rtype]")?.value || "", due = f.querySelector("[data-adue]")?.value || "";
+      const amtRaw = f.querySelector("[data-ramt]")?.value.replace(/[$,\s]/g, "") || "", amount = amtRaw === "" ? null : Number(amtRaw);
       f.remove();
       if (mode === "save" && text) {
         const today = isoDate();
         const at = a && isoDate(a.at) === date ? a.at : (!date || date === today) && !a ? new Date().toISOString() : (date || today) + "T12:00:00";
-        const stPatch = L.status ? { status: stv, closedAt: stv === "closed" ? (a?.status === "closed" && a.closedAt ? a.closedAt : new Date().toISOString()) : "" } : {};
-        if (L.typed && type === "member") { stPatch.done = dv === "done"; stPatch.doneAt = dv === "done" ? (a?.done && a.doneAt ? a.doneAt : new Date().toISOString()) : ""; }
-        else if (L.typed) { stPatch.done = false; stPatch.doneAt = ""; }
-        const next = a ? L.list(c).map((x) => (x.id === a.id ? { ...x, text, at, ...(L.typed ? { type } : {}), ...stPatch } : x))
-          : [...L.list(c), { id: L.prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), at, text, by: ctx.name || "", ...(L.typed ? { type } : {}), ...stPatch }];
+        const extra = L.req ? { type, amount: isFinite(amount) ? amount : null, status: a?.status || "open" } : L.typed ? { type, done: false, doneAt: "" } : L.due ? { due } : {};
+        const next = a ? L.list(c).map((x) => (x.id === a.id ? { ...x, text, at, ...extra, ...(L.req ? { status: x.status } : {}) } : x))
+          : [...L.list(c), { id: L.prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), at, text, by: ctx.name || "", ...extra }];
         await L.save(next, a ? `${L.noun} saved` : `${L.noun} added`);
       } else if (mode === "delete") {
         if (!confirm(`Delete “${a.text}”?`)) { drawOpen(); return; }
@@ -652,11 +703,71 @@ function drawOpen() {
     f.querySelectorAll("[data-x]").forEach((b) => b.addEventListener("click", () => done(b.dataset.x)));
     f.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.tagName !== "SELECT") { e.preventDefault(); done("save"); } if (e.key === "Escape") { e.preventDefault(); done("cancel"); } });
   };
+  // ---- Version 1 extras (2026-11-01): accept / decline, commitments, document tags, history filter, finance folds ----
+  box.querySelectorAll("[data-hf]").forEach((b) => b.addEventListener("click", () => { histFilter = b.dataset.hf; drawOpen(); }));
+  box.querySelector("#srd-budget-fold")?.addEventListener("click", () => { finOpen = !finOpen; drawOpen(); });
+  box.querySelectorAll("[data-form]").forEach((el) => el.addEventListener("click", () => { const i = Number(el.dataset.form); formOpen = !(formOpen && openRi === i); openRi = i; drawOpen(); }));
+  box.querySelectorAll(".src-req-doc[data-file]").forEach((el) => el.addEventListener("click", async (e) => { e.stopPropagation(); const meta = (c.files || []).find((f) => f.id === el.dataset.file); if (meta) { try { await openAttachment("srCases", meta); } catch (err) { toast(err.message || "Couldn't open"); } } }));
+  // accept / decline a request: a short note of what was given (or why not), then it closes and lands on the timeline
+  box.querySelectorAll("[data-reqdec]").forEach((b) => b.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const [qid, outcome] = b.dataset.reqdec.split("|"), q = requestsOf(c).find((x) => x.id === qid); if (!q) return;
+    const slot = box.querySelector(`[data-decslot="${CSS.escape(qid)}"]`); if (!slot) return;
+    slot.innerHTML = `<div class="src-act-form src-decform"><span class="src-dec-lbl">${outcome === "accepted" ? "✓ Accepting" : "✗ Declining"}</span><input data-dn class="src-in" placeholder="${outcome === "accepted" ? "What was given — e.g. paid $291.89 to the city on Nov 1" : "Why not, in a few words"}" autocomplete="off"><span class="src-act-form-tools"><button type="button" class="btn btn-sm" data-x="cancel">Cancel</button><button type="button" class="btn btn-primary btn-sm" data-x="save">${outcome === "accepted" ? "Accept" : "Decline"}</button></span></div>`;
+    const inp = slot.querySelector("[data-dn]"); inp.focus();
+    const done = async (commit) => {
+      const note = inp.value.trim(); slot.innerHTML = "";
+      if (!commit) return;
+      await saveRequests(requestsOf(c).map((x) => (x.id === qid ? { ...x, status: "closed", outcome, decisionNote: note, closedAt: new Date().toISOString(), closedBy: ctx.name || "" } : x)), outcome === "accepted" ? "Request accepted" : "Request declined");
+      drawOpen();
+    };
+    slot.querySelectorAll("[data-x]").forEach((x) => x.addEventListener("click", (ev) => { ev.stopPropagation(); done(x.dataset.x === "save"); }));
+    slot.addEventListener("click", (ev) => ev.stopPropagation());
+    inp.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); done(true); } if (ev.key === "Escape") { ev.preventDefault(); done(false); } });
+  }));
+  // commitments: add, edit, tick, follow-up notes
+  box.querySelector("#srd-cm-add")?.addEventListener("click", () => logForm("commitments", box.querySelector("#srd-cm-new"), null));
+  box.querySelectorAll(".src-cm-ed").forEach((row) => row.addEventListener("click", (e) => {
+    if (e.target.closest("button, input, .src-act-form")) return;
+    if (window.getSelection && String(window.getSelection())) return;
+    const m = commitmentsOf(c).find((x) => x.id === row.dataset.cm); if (m) logForm("commitments", row, m);
+  }));
+  box.querySelectorAll("[data-cmst]").forEach((b) => b.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    const m = commitmentsOf(c).find((x) => x.id === b.dataset.cmst); if (!m) return;
+    const next = m.status === "kept" ? "missed" : m.status === "missed" ? "" : "kept";
+    await saveCommitments(commitmentsOf(c).map((x) => (x.id === m.id ? { ...x, status: next, statusAt: new Date().toISOString() } : x)), next === "kept" ? "Kept" : next === "missed" ? "Not yet" : "Open again");
+    drawOpen();
+  }));
+  box.querySelectorAll("[data-cmfu]").forEach((b) => b.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const slot = box.querySelector(`[data-fuslot="${CSS.escape(b.dataset.cmfu)}"]`); if (!slot || slot.querySelector("input")) return;
+    slot.innerHTML = `<div class="src-act-form src-fuform"><input data-fut class="src-in" placeholder="Are they doing it? — e.g. said he'd post it this week" autocomplete="off"><span class="src-act-form-tools"><button type="button" class="btn btn-sm" data-x="cancel">Cancel</button><button type="button" class="btn btn-primary btn-sm" data-x="save">Add</button></span></div>`;
+    const inp = slot.querySelector("[data-fut]"); inp.focus();
+    const done = async (commit) => {
+      const text = inp.value.trim(); slot.innerHTML = "";
+      if (!commit || !text) return;
+      await saveCommitments(commitmentsOf(c).map((x) => (x.id === b.dataset.cmfu ? { ...x, followups: [...(x.followups || []), { at: new Date().toISOString(), by: ctx.name || "", text }] } : x)), "Note added");
+      drawOpen();
+    };
+    slot.querySelectorAll("[data-x]").forEach((x) => x.addEventListener("click", (ev) => { ev.stopPropagation(); done(x.dataset.x === "save"); }));
+    slot.addEventListener("click", (ev) => ev.stopPropagation());
+    inp.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); done(true); } if (ev.key === "Escape") { ev.preventDefault(); done(false); } });
+  }));
+  // tag a document to a request, or to the finances
+  box.querySelectorAll("[data-ftag]").forEach((sel) => { sel.addEventListener("click", (e) => e.stopPropagation()); sel.addEventListener("change", async (e) => {
+    e.stopPropagation();
+    const v = sel.value, id = sel.dataset.ftag;
+    await save({ files: (c.files || []).map((f) => (f.id === id ? { ...f, category: v === "~finance" ? "finance" : "doc", forRequest: v && v !== "~finance" ? v : "" } : f)) }, "Tagged");
+    drawOpen();
+  }); });
+  // uploads into the finance bucket go straight in as finance files
+  box.querySelector("#srd-attach-fin")?.addEventListener("click", () => { const p = box.querySelector("#srd-file"); if (p) { p.dataset.cat = "finance"; p.value = ""; p.click(); } });
   box.querySelector("#srd-act-add")?.addEventListener("click", () => logForm("actions", box.querySelector("#srd-act-new"), null));
   box.querySelector("#srd-req-add")?.addEventListener("click", () => logForm("requests", box.querySelector("#srd-req-new"), null));
   box.querySelector("#srd-plan-add")?.addEventListener("click", () => logForm("plan", box.querySelector("#srd-plan-new"), null));
   box.querySelectorAll(".src-act-ed[data-act], .src-act-ed[data-req], .src-act-ed[data-plan]").forEach((row) => row.addEventListener("click", (e) => {
-    if (e.target.closest("a, button")) return;
+    if (e.target.closest("a, button, select, input, .src-act-form")) return;
     if (window.getSelection && String(window.getSelection())) return;
     const which = row.dataset.req ? "requests" : row.dataset.plan ? "plan" : "actions";
     const a = LOGS[which].list(c).find((x) => x.id === (row.dataset.req || row.dataset.plan || row.dataset.act)); if (a) logForm(which, row, a);
@@ -674,7 +785,7 @@ function drawOpen() {
     e.stopPropagation();
     const q = requestsOf(c).find((x) => x.id === b.dataset.reqst); if (!q) return;
     const closing = q.status === "open";
-    await saveRequests(requestsOf(c).map((x) => (x.id === q.id ? { ...x, status: closing ? "closed" : "open", closedAt: closing ? new Date().toISOString() : "" } : x)), closing ? "Request closed" : "Request re-opened");
+    await saveRequests(requestsOf(c).map((x) => (x.id === q.id ? { ...x, status: closing ? "closed" : "open", closedAt: closing ? new Date().toISOString() : "", ...(closing ? {} : { outcome: "", decisionNote: "" }) } : x)), closing ? "Request closed" : "Request re-opened");
     drawOpen();
   }));
   // the name itself (plus spouse and email) edits in place from the headline (2026-10-11)
@@ -714,10 +825,6 @@ function drawOpen() {
     await saveLog(logOf(c).map((x) => (x.id === n.id ? { ...x, id: x.id === "legacy" ? "n" + Date.now().toString(36) : x.id, text: toggleTodoLine(x.text, idx) } : x)));
   }));
 
-  [["#srd-decision", "decision"]].forEach(([sel, key]) => {
-    const inp = box.querySelector(sel);
-    inp.addEventListener("change", () => { if (inp.value.trim() !== (c[key] || "")) save({ [key]: inp.value.trim() }, "Saved"); });
-  });
   // --- the specialist's write-ups: fold / unfold, add, edit (with the notes toolbar), delete ---
   box.querySelectorAll("[data-wuopen]").forEach((b) => b.addEventListener("click", () => { wuOpen.add(b.dataset.wuopen); drawOpen(); }));
   box.querySelectorAll("[data-wufold]").forEach((h) => h.addEventListener("click", (e) => {
@@ -885,6 +992,7 @@ function printCase(c, r) {
     ${(c.bio || "").trim() ? `<p class="raw">${esc(c.bio)}</p>` : ""}
     ${requestsOf(c).length ? `<h2>Requests</h2><table>${requestsOf(c).map((q) => `<tr><td style="white-space:nowrap;padding-right:1rem">${esc(fmtDay(q.at) || "—")}</td><td style="white-space:nowrap;padding-right:1rem;text-transform:uppercase;font-size:.75em">${esc(q.status)}</td><td>${esc(plainLine(q.text || ""))}</td></tr>`).join("")}</table>` : ""}
     ${planOf(c).length ? `<h2>Plan</h2><table>${planOf(c).map((x) => `<tr><td style="white-space:nowrap;padding-right:1rem">${esc(fmtDay(x.at) || "—")}</td><td>${esc(plainLine(x.text || ""))}</td></tr>`).join("")}</table>` : ""}
+    ${commitmentsOf(c).length ? `<h2>Commitments</h2><table>${commitmentsOf(c).map((m) => `<tr><td style="white-space:nowrap;padding-right:1rem">${m.status === "kept" ? "☑" : "☐"} ${m.due ? "by " + esc(fmtShort(m.due + "T12:00:00")) : ""}</td><td>${esc(plainLine(m.text || ""))}${(m.followups || []).length ? `<div class="raw">${esc((m.followups || []).slice(-1)[0].text)}</div>` : ""}</td></tr>`).join("")}</table>` : ""}
     ${actionsOf(c).length ? `<h2>Action log</h2><table>${actionsOf(c).map((a) => `<tr><td style="white-space:nowrap;padding-right:1rem">${esc(fmtDay(a.at) || "—")}</td><td style="white-space:nowrap;padding-right:1rem">${esc(actionTypeLabel(a.type))}${isMemberAction(a) ? ` · ${a.done ? "done" : "open"}` : ""}</td><td>${esc(plainLine(a.text || ""))}</td></tr>`).join("")}</table>` : ""}
     ${(c.budgets || []).map((b, i) => { const bt = budgetTotals(b); const rowsOf = (ls) => (ls || []).map((l) => `<tr><td>${esc(l.label)}${l.note ? `<div class="raw">${esc(l.note)}</div>` : ""}</td><td class="n">${l.amount == null ? "cut" : fmtUsdC(l.amount)}</td></tr>`).join("");
       return `<h2>${i === 0 ? "Budget from the specialist" : "What-if"}: ${esc(b.title || "")}</h2>
