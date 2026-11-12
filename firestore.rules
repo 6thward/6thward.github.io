@@ -306,16 +306,16 @@ service cloud.firestore {
         allow delete: if canEdit('documents');
       }
     }
-    // Bishop's Counsel (2026-11-11): private like the Bishop page — the bishop, or anyone given the page by name
+    // Bishop's Council (2026-11-11): the bishop and the bishopric role, or anyone given the page by name
     match /bishopCounsel/{id} {
-      allow read: if isBishop() || pinLevel('counsel') == 'view' || pinLevel('counsel') == 'edit';
-      allow write: if isBishop() || pinLevel('counsel') == 'edit';
+      allow read: if isBishopric() || pinLevel('counsel') == 'view' || pinLevel('counsel') == 'edit';
+      allow write: if isBishopric() || pinLevel('counsel') == 'edit';
       match /chunks/{cid} {
-        allow read: if isBishop() || pinLevel('counsel') == 'view' || pinLevel('counsel') == 'edit';
-        allow create: if (isBishop() || pinLevel('counsel') == 'edit')
+        allow read: if isBishopric() || pinLevel('counsel') == 'view' || pinLevel('counsel') == 'edit';
+        allow create: if (isBishopric() || pinLevel('counsel') == 'edit')
           && request.resource.data.keys().hasOnly(['f', 'i', 'd'])
           && request.resource.data.d is bytes && request.resource.data.d.size() <= 1000000;
-        allow delete: if isBishop() || pinLevel('counsel') == 'edit';
+        allow delete: if isBishopric() || pinLevel('counsel') == 'edit';
       }
     }
     match /councils/{id} {

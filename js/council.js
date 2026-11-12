@@ -9,16 +9,16 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1794449377";
-import { ctx, can } from "./app.js?v=1794449377";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1794449377";
-import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1794449377";
+import { db } from "./firebase-init.js?v=1794449461";
+import { ctx, can } from "./app.js?v=1794449461";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1794449461";
+import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1794449461";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { watchBishopCal, bishopCalConfig, councilTimeFor } from "./bishop-cal.js?v=1794449377";
+import { watchBishopCal, bishopCalConfig, councilTimeFor } from "./bishop-cal.js?v=1794449461";
 const clock12 = (hhmm) => { const [h, m] = String(hhmm).split(":").map(Number); return `${h % 12 || 12}:${String(m || 0).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`; };
-import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1794449377";
+import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1794449461";
 
 // One agenda page per "board": Ward Council (councils/…) and, since 2026-10-25, the Bishopric meeting (bishopric/…).
 // The same code runs twice with a config; a Bishopric item can be sent to the next ward council agenda.
@@ -1070,10 +1070,10 @@ const BISHOPRIC = makeAgenda({
   isMember: isBishopricPerson,
   weekday: () => Number((bishopCalConfig().bishopric || {}).weekday) || 0,
 });
-// Bishop's Counsel (2026-11-11): notes and action items for meetings on any day — private to the bishop unless the page is granted
+// Bishop's Council (2026-11-11): notes and action items for meetings on any day — the bishop and the bishopric role see it; others by grant
 const COUNSEL = makeAgenda({
   key: "counsel", area: "counsel", coll: "bishopCounsel", panel: "panel-counsel", calKey: "counsel", dates: false, board: false, showOnCouncil: false, anyDay: true,
-  title: "Bishop's Counsel", noun: "meetings", info: "Notes and action items for each meeting. Pick the day, add the items you talked about, and give follow-ups an owner. ‹ › walk the days that have notes.",
+  title: "Bishop's Council", noun: "meetings", info: "Notes and action items for each meeting. Pick the day, add the items you talked about, and give follow-ups an owner. ‹ › walk the days that have notes.",
   isMember: isBishopricPerson,
 });
 export function initCounsel() { COUNSEL.init(); }
