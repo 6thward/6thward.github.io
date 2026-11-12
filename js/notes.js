@@ -9,7 +9,7 @@
 //   "## Name"               → a name card: the lines under it (until the next "## " or a "---" line)
 //                             sit inside a card headed by that name; cards in a row form a group (2026-10-11)
 // The text is stored exactly as typed, so it stays readable anywhere.
-import { esc } from "./ui.js?v=1794450318";
+import { esc } from "./ui.js?v=1794450785";
 
 const MAX_LEVEL = 3;
 const levelOf = (indent) => Math.min(MAX_LEVEL, Math.floor(String(indent || "").replace(/\t/g, "  ").length / 2));
@@ -28,8 +28,9 @@ const sentPills = (h, live) => h.replace(/\s*\{&gt;(council|bishopric):(\d{4}-\d
 // marks only (no lead-in): colours/highlights, then **bold**
 function marks(text) {
   let h = sentPills(esc(text)).replace(/\{@([^{}]+)\}/g, (_, n) => `<span class="nt-who" data-who="${n.trim()}" title="Assigned to ${n.trim()}">→ ${n.trim()}</span>`);
-  for (let pass = 0; pass < 2; pass++) { // twice = one level of nesting ({y:{red:x}})
-    h = h.replace(COLOR_RE, (_, code, body) => (HL.has(code) ? `<mark class="nt-hl nt-hl-${code}">${body}</mark>` : `<span class="nt-c nt-c-${code}">${body}</span>`));
+  for (let pass = 0; pass < 6; pass++) { // inside-out: a highlight inside a colour, and older notes with highlights stacked on each other
+    const next = h.replace(COLOR_RE, (_, code, body) => (HL.has(code) ? `<mark class="nt-hl nt-hl-${code}">${body}</mark>` : `<span class="nt-c nt-c-${code}">${body}</span>`));
+    if (next === h) break; h = next;
   }
   h = h.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
   // web addresses become links, shown shortened (2026-10-11); the text is already escaped, so & is &amp; here
@@ -265,7 +266,7 @@ function nxParse(raw) {
 }
 function nxInline(text) {
   let h = sentPills(esc(text), true).replace(/\{@([^{}]+)\}/g, (_, n) => `<span class="nt-who nx-who" contenteditable="false" data-who="${n.trim()}">→ ${n.trim()}</span>`);
-  for (let pass = 0; pass < 2; pass++) h = h.replace(COLOR_RE, (_, code, body) => (HL.has(code) ? `<mark class="nt-hl nt-hl-${code}" data-c="${code}">${body}</mark>` : `<span class="nt-c nt-c-${code}" data-c="${code}">${body}</span>`));
+  for (let pass = 0; pass < 6; pass++) { const next = h.replace(COLOR_RE, (_, code, body) => (HL.has(code) ? `<mark class="nt-hl nt-hl-${code}" data-c="${code}">${body}</mark>` : `<span class="nt-c nt-c-${code}" data-c="${code}">${body}</span>`)); if (next === h) break; h = next; }
   return h.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
 }
 function nxSerInline(node) {
@@ -304,7 +305,9 @@ function enhance(ta) {
   const serLine = (line) => { const t = line.dataset.type, ind = "  ".repeat(Number(line.dataset.lvl) || 0), x = lineText(line).replace(/\*\*\*\*/g, "");
     return t === "rule" ? "---" : t === "bullet" ? `${ind}- ${x}` : t === "todo" ? `${ind}[${line.dataset.done ? "x" : " "}] ${x}` : t === "card" ? `## ${x}` : x; };
   const serialize = () => lines().map(serLine).join("\n").replace(/\s+$/, "");
-  const load = (text) => { rich.innerHTML = ""; String(text || "").split("\n").forEach((l) => rich.appendChild(mkLine(nxParse(l)))); mark(); };
+  const sameFam = (x, y) => HL.has(x) === HL.has(y);
+  const flatten = (root) => root.querySelectorAll("[data-c] [data-c]").forEach((inner) => { const outer = inner.parentElement.closest("[data-c]"); if (outer && sameFam(outer.dataset.c, inner.dataset.c)) inner.replaceWith(...inner.childNodes); });
+  const load = (text) => { rich.innerHTML = ""; String(text || "").split("\n").forEach((l) => rich.appendChild(mkLine(nxParse(l)))); flatten(rich); mark(); };
   const mark = () => { const ls = lines(); rich.classList.toggle("nx-empty", ls.length <= 1 && (!ls[0] || (ls[0].dataset.type === "p" && !ls[0].textContent))); };
   const caret = (node, offset) => { const r = document.createRange(); r.setStart(node, offset); r.collapse(true); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); };
   const caretStart = (line) => caret(line, 0);
@@ -410,23 +413,41 @@ function enhance(ta) {
   }
   function color(code) {
     rich.focus();
-    const r = range(); if (!r || r.collapsed) return;
+    const r = range(); if (!r) return;
+    if (r.collapsed) { // no selection: "✕ colour" clears the highlight / colour the cursor is sitting in
+      if (code) return;
+      const hit = []; let n = r.startContainer; while (n && n !== rich) { if (n.dataset && n.dataset.c) hit.push(n); n = n.parentNode; }
+      if (!hit.length) return;
+      hit.forEach((el) => el.replaceWith(...el.childNodes)); sync(); return;
+    }
     const a = lineOf(r.startContainer), b = lineOf(r.endContainer);
     if (!a || a !== b) { // several lines: colour each line's part on its own would be a guess — keep it to one line
       const tip = rich.parentNode && rich.parentNode.querySelector(".nx-tip"); if (!tip) { const t = document.createElement("div"); t.className = "nx-tip row-sub"; t.textContent = "Select words on one line to colour them."; rich.after(t); setTimeout(() => t.remove(), 3500); } return; }
-    const sameFamily = (el) => !code || HL.has(el.dataset.c) === HL.has(code);
+    const fam = (el) => !code || sameFam(el.dataset.c, code); // clearing lifts every colour; a new highlight replaces highlights, a new text colour replaces text colours
     const frag = r.extractContents();
-    frag.querySelectorAll("[data-c]").forEach((el) => { if (sameFamily(el)) el.replaceWith(...el.childNodes); });
-    if (!code) { // clear: also lift the words out of a colour they sit inside
-      const holder = document.createElement("span"); holder.appendChild(frag); r.insertNode(holder);
-      let up = holder.parentNode; while (up && up !== a) { const next = up.parentNode; if (up.dataset && up.dataset.c) { const before = up.cloneNode(false), after = up.cloneNode(false); while (up.firstChild && up.firstChild !== holder) before.appendChild(up.firstChild); while (holder.nextSibling) after.appendChild(holder.nextSibling); up.replaceWith(...(before.textContent ? [before] : []), holder, ...(after.textContent ? [after] : [])); } up = next; }
-      const sel = getSelection(), nr = document.createRange(); nr.selectNodeContents(holder); const kids = [...holder.childNodes]; holder.replaceWith(...kids);
-      if (kids.length) { nr.setStartBefore(kids[0]); nr.setEndAfter(kids[kids.length - 1]); sel.removeAllRanges(); sel.addRange(nr); }
-    } else {
-      const w = document.createElement(HL.has(code) ? "mark" : "span"); w.className = HL.has(code) ? `nt-hl nt-hl-${code}` : `nt-c nt-c-${code}`; w.dataset.c = code;
-      w.appendChild(frag); r.insertNode(w);
-      const sel = getSelection(), nr = document.createRange(); nr.selectNodeContents(w); sel.removeAllRanges(); sel.addRange(nr);
+    frag.querySelectorAll("[data-c]").forEach((el) => { if (fam(el)) el.replaceWith(...el.childNodes); });
+    const holder = document.createElement("span"); holder.appendChild(frag); r.insertNode(holder);
+    // lift the words out of any colour of that kind they sit inside, by splitting it around them — never a highlight inside a highlight
+    let node = holder;
+    while (node.parentNode && node.parentNode !== a) {
+      const up = node.parentNode;
+      if (up.dataset && up.dataset.c && fam(up)) {
+        const before = up.cloneNode(false), after = up.cloneNode(false);
+        while (up.firstChild && up.firstChild !== node) before.appendChild(up.firstChild);
+        while (node.nextSibling) after.appendChild(node.nextSibling);
+        up.replaceWith(...(before.textContent ? [before] : []), node, ...(after.textContent ? [after] : []));
+      } else node = up;
     }
+    const kids = [...holder.childNodes];
+    let first = kids[0], last = kids[kids.length - 1];
+    if (code && kids.length) {
+      const w = document.createElement(HL.has(code) ? "mark" : "span"); w.className = HL.has(code) ? `nt-hl nt-hl-${code}` : `nt-c nt-c-${code}`; w.dataset.c = code;
+      holder.replaceWith(w); kids.forEach((k) => w.appendChild(k)); first = last = w;
+    } else holder.replaceWith(...kids);
+    a.querySelectorAll("[data-c]").forEach((el) => { if (!el.textContent) el.remove(); });
+    flatten(a);
+    a.querySelectorAll("[data-c]").forEach((el) => { while (el.isConnected && el.nextSibling && el.nextSibling.nodeType === 1 && el.nextSibling.dataset.c === el.dataset.c) { const nx = el.nextSibling; while (nx.firstChild) el.appendChild(nx.firstChild); nx.remove(); } }); // two pieces of the same colour side by side become one
+    if (first && first.isConnected && last.isConnected) { const sel = getSelection(), nr = document.createRange(); nr.setStartBefore(first); nr.setEndAfter(last); sel.removeAllRanges(); sel.addRange(nr); }
     fixEmpty(a); sync();
   }
   ta._nxCmd = cmd; ta._nxColor = color;
