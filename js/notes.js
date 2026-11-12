@@ -4,12 +4,13 @@
 //   "[ ] item" / "[x] item" → to-do with a checkbox that ticks in place
 //   two spaces in front     → a sub-point (up to three levels deep)   (2026-10-04)
 //   **words**               → bold;  "Lead-in: rest" → the lead-in is bold
+//   __words__               → underlined   (2026-11-11)
 //   {@Name}                 → that line is assigned to Name (shown as a pill)   (2026-10-04)
 //   {>council:2026-11-15}   → that line was copied to that meeting's agenda (council | bishopric), shown as a pill   (2026-11-11)
 //   "## Name"               → a name card: the lines under it (until the next "## " or a "---" line)
 //                             sit inside a card headed by that name; cards in a row form a group (2026-10-11)
 // The text is stored exactly as typed, so it stays readable anywhere.
-import { esc } from "./ui.js?v=1794452715";
+import { esc } from "./ui.js?v=1794454026";
 
 const MAX_LEVEL = 3;
 // a dash that got caught inside bold ("**-** words", "**- words**") still starts a bullet (2026-11-11)
@@ -20,8 +21,9 @@ const levelOf = (indent) => Math.min(MAX_LEVEL, Math.floor(String(indent || "").
 export const HIGHLIGHTS = [["y", "Yellow", "#fff3a3"], ["g", "Green", "#c9f2d0"], ["p", "Pink", "#ffd3e4"], ["b", "Blue", "#cfe6ff"]];
 export const TEXT_COLORS = [["red", "Red", "#c0392b"], ["orange", "Orange", "#c76a12"], ["green", "Green", "#2e7d4f"], ["blue", "Blue", "#1f5fbf"], ["purple", "Purple", "#7a3fb0"]];
 const HL = new Set(HIGHLIGHTS.map((h) => h[0]));
+const UNDER_RE = /(^|[^\w/.\-])__([^_\s](?:[^_]*[^_\s])?)__(?![\w_])/g;
 const COLOR_RE = /\{(y|g|p|b|red|orange|green|blue|purple):([^{}]*)\}/g;
-const stripMarks = (t) => String(t).replace(/\s*\{@[^{}]*\}/g, "").replace(/\s*\{>[^{}]*\}/g, "").replace(/\{(?:y|g|p|b|red|orange|green|blue|purple):/g, "").replace(/[{}]/g, "").replace(/\*\*/g, "");
+const stripMarks = (t) => String(t).replace(/\s*\{@[^{}]*\}/g, "").replace(/\s*\{>[^{}]*\}/g, "").replace(/\{(?:y|g|p|b|red|orange|green|blue|purple):/g, "").replace(/[{}]/g, "").replace(/\*\*/g, "").replace(UNDER_RE, "$1$2");
 
 const SENT_LABEL = { council: "Ward council", bishopric: "Bishopric" };
 const sentDay = (iso) => { const d = new Date(iso + "T12:00:00"); return isNaN(d) ? iso : d.toLocaleDateString("en-US", { month: "short", day: "numeric" }); };
@@ -34,7 +36,7 @@ function marks(text) {
     const next = h.replace(COLOR_RE, (_, code, body) => (HL.has(code) ? `<mark class="nt-hl nt-hl-${code}">${body}</mark>` : `<span class="nt-c nt-c-${code}">${body}</span>`));
     if (next === h) break; h = next;
   }
-  h = h.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+  h = h.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(UNDER_RE, "$1<u>$2</u>");
   // web addresses become links, shown shortened (2026-10-11); the text is already escaped, so & is &amp; here
   return h.replace(/https?:\/\/[^\s<]+/g, (url) => {
     const clean = url.replace(/[.,;:!?)\]]+$/, ""), tail = url.slice(clean.length);
@@ -210,11 +212,11 @@ export function handleNoteKeys(ta, e) {
 }
 
 // wrap the selection in ** ** (or drop in an empty pair and put the cursor inside)
-export function toggleBold(ta) {
+export function toggleBold(ta, mk = "**") { // "**" bold, "__" underline
   const a = ta.selectionStart, b = ta.selectionEnd, sel = ta.value.slice(a, b);
-  if (sel && /^\*\*[\s\S]*\*\*$/.test(sel)) ta.setRangeText(sel.slice(2, -2), a, b, "select");
-  else if (sel) ta.setRangeText(`**${sel}**`, a, b, "select");
-  else { ta.setRangeText("****", a, b, "start"); ta.setSelectionRange(a + 2, a + 2); }
+  if (sel && sel.length >= 4 && sel.startsWith(mk) && sel.endsWith(mk)) ta.setRangeText(sel.slice(2, -2), a, b, "select");
+  else if (sel) ta.setRangeText(`${mk}${sel}${mk}`, a, b, "select");
+  else { ta.setRangeText(mk + mk, a, b, "start"); ta.setSelectionRange(a + 2, a + 2); }
   ta.focus(); ta.dispatchEvent(new Event("input"));
 }
 
@@ -226,6 +228,7 @@ export function toolbarHtml(hint) {
     `<button type="button" class="btn btn-sm" data-nt="in" title="Make it a sub-point (Tab)">→ Sub-point</button>` +
     `<button type="button" class="btn btn-sm" data-nt="out" title="Move it back out (Shift+Tab)">←</button>` +
     `<button type="button" class="btn btn-sm nt-bold" data-nt="bold" title="Bold the selected words (⌘B)"><b>B</b></button>` +
+    `<button type="button" class="btn btn-sm nt-bold" data-nt="under" title="Underline the selected words (⌘U)"><u>U</u></button>` +
     `<span class="nt-pal" title="Highlight the selected words">${HIGHLIGHTS.map(([c, l, hex]) => `<button type="button" class="nt-sw" data-color="${c}" title="Highlight ${l.toLowerCase()}" style="background:${hex}"></button>`).join("")}</span>` +
     `<span class="nt-pal" title="Colour the selected words">${TEXT_COLORS.map(([c, l, hex]) => `<button type="button" class="nt-sw nt-sw-text" data-color="${c}" title="${l} text" style="color:${hex}">A</button>`).join("")}</span>` +
     `<button type="button" class="btn btn-sm btn-ghost" data-color="" title="Remove colour and highlight from the selected words">✕ colour</button>` +
@@ -243,6 +246,7 @@ export function wireToolbar(box, ta) {
       else if (k === "person") prefixLine(ta, "## ");
       else if (k === "in") indentLines(ta, 1);
       else if (k === "out") indentLines(ta, -1);
+      else if (k === "under") toggleBold(ta, "__");
       else toggleBold(ta);
     });
   });
@@ -269,7 +273,7 @@ function nxParse(raw) {
 function nxInline(text) {
   let h = sentPills(esc(text), true).replace(/\{@([^{}]+)\}/g, (_, n) => `<span class="nt-who nx-who" contenteditable="false" data-who="${n.trim()}">→ ${n.trim()}</span>`);
   for (let pass = 0; pass < 6; pass++) { const next = h.replace(COLOR_RE, (_, code, body) => (HL.has(code) ? `<mark class="nt-hl nt-hl-${code}" data-c="${code}">${body}</mark>` : `<span class="nt-c nt-c-${code}" data-c="${code}">${body}</span>`)); if (next === h) break; h = next; }
-  return h.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+  return h.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(UNDER_RE, "$1<u>$2</u>");
 }
 function nxSerInline(node) {
   let out = "";
@@ -283,6 +287,8 @@ function nxSerInline(node) {
     if (c && t) t = `{${c}:${t}}`;
     const bold = n.tagName === "B" || n.tagName === "STRONG" || /^(bold|[6-9]00)$/.test((n.style && n.style.fontWeight) || "");
     if (bold && t.trim()) { const m = /^(\s*)([\s\S]*?)(\s*)$/.exec(t); t = `${m[1]}**${m[2]}**${m[3]}`; }
+    const under = n.tagName === "U" || /underline/.test((n.style && (n.style.textDecorationLine || n.style.textDecoration)) || "");
+    if (under && t.trim()) { const m = /^(\s*)([\s\S]*?)(\s*)$/.exec(t); t = `${m[1]}\u0002${m[2]}\u0003${m[3]}`; } // marked for now; serLine turns the marks into __ and joins neighbours
     out += t;
   });
   return out;
@@ -304,7 +310,7 @@ function enhance(ta) {
   const lines = () => [...rich.children];
   const lineOf = (node) => { let n = node; while (n && n.parentNode !== rich) n = n.parentNode; return n && n.nodeType === 1 ? n : null; };
   const lineText = (line) => nxSerInline(line);
-  const serLine = (line) => { const t = line.dataset.type, ind = "  ".repeat(Number(line.dataset.lvl) || 0), x = lineText(line).replace(/\*\*\*\*/g, "");
+  const serLine = (line) => { const t = line.dataset.type, ind = "  ".repeat(Number(line.dataset.lvl) || 0), x = lineText(line).replace(/\*\*\*\*/g, "").replace(/\u0003\u0002/g, "").replace(/[\u0002\u0003]/g, "__");
     return t === "rule" ? "---" : t === "bullet" ? `${ind}- ${x}` : t === "todo" ? `${ind}[${line.dataset.done ? "x" : " "}] ${x}` : t === "card" ? `## ${x}` : x; };
   const serialize = () => lines().map(serLine).join("\n").replace(/\s+$/, "");
   const sameFam = (x, y) => HL.has(x) === HL.has(y);
@@ -351,7 +357,8 @@ function enhance(ta) {
       ta.dispatchEvent(new KeyboardEvent("keydown", { key: e.key, metaKey: e.metaKey, ctrlKey: e.ctrlKey, bubbles: true, cancelable: true })); return;
     }
     if (mod && (e.key === "b" || e.key === "B")) { e.preventDefault(); cmd("bold"); return; }
-    if (mod && /^[iu]$/i.test(e.key)) { e.preventDefault(); return; } // no italics / underline in notes
+    if (mod && (e.key === "u" || e.key === "U")) { e.preventDefault(); cmd("under"); return; }
+    if (mod && /^i$/i.test(e.key)) { e.preventDefault(); return; } // no italics in notes
     if (e.key === "Tab" && !mod && !e.altKey) { const ls = selLines(); if (ls.some((l) => l.dataset.type === "bullet" || l.dataset.type === "todo")) { e.preventDefault(); indent(e.shiftKey ? -1 : 1); } return; }
     const r = range(); if (!r) return;
     if (e.key === "Enter") {
@@ -409,7 +416,7 @@ function enhance(ta) {
   rich.addEventListener("blur", () => { syncing = true; desc.set.call(ta, serialize()); syncing = false; ta.dispatchEvent(new Event("blur")); });
   function cmd(k) {
     rich.focus();
-    if (k === "bold") { try { document.execCommand("styleWithCSS", false, false); } catch {} document.execCommand("bold"); sync(); return; }
+    if (k === "bold" || k === "under") { try { document.execCommand("styleWithCSS", false, false); } catch {} document.execCommand(k === "bold" ? "bold" : "underline"); sync(); return; }
     if (k === "in" || k === "out") { indent(k === "in" ? 1 : -1); return; }
     const type = k === "bullet" ? "bullet" : k === "todo" ? "todo" : "card";
     const ls = selLines().filter((l) => l.dataset.type !== "rule"); if (!ls.length) return;

@@ -2847,3 +2847,4 @@ textarea.nx-src { display: none !important; }
 .nt-sent-bishopric { background: #e4f3e8; color: #2e7d4f; }
 .wc-cnotes div[data-aline]:hover > .nt-assign { opacity: 1; } /* plain lines show + assign / copy to on hover too (11/11) */
 .wc-cnotes div[data-aline]:hover > .nt-assign { opacity: 1; } /* plain lines show + assign / copy to on hover too (11/11) */
+.nx-rich u, .wc-cnotes u, .src-rich u, .rc-list u { text-decoration: underline; text-underline-offset: 2px; }
