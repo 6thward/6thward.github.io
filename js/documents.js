@@ -4,11 +4,11 @@
 //                             { kind: "file", title, note, link, file: {id,name,size,type,chunks,at}, by, updatedMs }
 //   documents/_letterhead     { kind: "letterhead", wardName, stake, address, contact, logoData }
 //   documents/{id}/chunks/…   the uploaded file itself (see files.js)
-import { db } from "./firebase-init.js?v=1794449461";
-import { ctx, can } from "./app.js?v=1794449461";
+import { db } from "./firebase-init.js?v=1794449943";
+import { ctx, can } from "./app.js?v=1794449943";
 import { collection, onSnapshot, setDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1794449461";
-import { uploadAttachment, fetchAttachment, deleteAttachment, openAttachment, fmtBytes, fileIcon, newFileId, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1794449461";
+import { openModal, closeModal, toast, esc, fmtDate, todayISO } from "./ui.js?v=1794449943";
+import { uploadAttachment, fetchAttachment, deleteAttachment, openAttachment, fmtBytes, fileIcon, newFileId, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1794449943";
 
 const COLL = "documents", LH_ID = "_letterhead";
 let docs = [], letterhead = null, started = false, view = "list", draft = null, filter = "";

@@ -2816,3 +2816,21 @@ tr.us-menu-open td { background: #f7f9fb; }
 .src-tl-date { white-space: nowrap; flex: none; }
 /* Bishop's Counsel (11/11): pick any day for a meeting */
 .wc-pick { display: inline-flex; gap: .35rem; align-items: center; flex-wrap: wrap; } .wc-pick input[type=date] { font: inherit; font-size: .88rem; padding: .25rem .4rem; border: 1px solid var(--line); border-radius: 7px; }
+/* ---- live notes editor (2026-11-11): the box shows the note the way it will look ---- */
+textarea.nx-src { display: none !important; }
+.nx-rich { position: relative; border: 1.5px solid var(--brand); border-radius: 8px; background: #fff; padding: .45rem .65rem; min-height: 4.2rem; line-height: 1.45; font-size: .95rem; color: var(--ink); outline: none; white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; }
+.nx-rich:focus { box-shadow: 0 0 0 3px var(--brand-soft); }
+.nx-rich.nx-empty::before { content: attr(data-placeholder); position: absolute; left: .65rem; right: .65rem; top: .45rem; color: #a7b0bd; pointer-events: none; }
+.nx-line { position: relative; min-height: 1.45em; }
+.nx-line[data-lvl="1"] { --nx-in: 1.2rem; } .nx-line[data-lvl="2"] { --nx-in: 2.4rem; } .nx-line[data-lvl="3"] { --nx-in: 3.6rem; }
+.nx-line[data-type="bullet"], .nx-line[data-type="todo"] { padding-left: calc(1.3rem + var(--nx-in, 0rem)); }
+.nx-line[data-type="bullet"]::before { content: "•"; position: absolute; left: calc(.4rem + var(--nx-in, 0rem)); color: var(--ink-soft); }
+.nx-line[data-type="todo"]::before { content: ""; position: absolute; left: calc(.1rem + var(--nx-in, 0rem)); top: .3em; width: .82rem; height: .82rem; border: 1.5px solid #8c96a3; border-radius: 3px; background: #fff; cursor: pointer; box-sizing: border-box; }
+.nx-line[data-type="todo"][data-done="1"]::before { content: "✓"; background: var(--ok, #2e7d4f); border-color: var(--ok, #2e7d4f); color: #fff; font-size: .62rem; font-weight: 800; line-height: .7rem; text-align: center; }
+.nx-line[data-type="todo"][data-done="1"] { color: var(--ink-soft); text-decoration: line-through; }
+.nx-line[data-type="card"] { font-weight: 800; padding-left: 1.5rem; margin-top: .3rem; } .nx-line[data-type="card"]::before { content: "👤"; position: absolute; left: 0; font-weight: 400; }
+.nx-line[data-type="rule"] { border-top: 1px dashed #b8bfc9; min-height: 0; height: 0; margin: .55rem 0; }
+.nx-rich b, .nx-rich strong { font-weight: 800; }
+.nx-who { user-select: all; }
+.nx-tip { margin-top: .25rem; }
+.src-ta-tall + .nx-rich { min-height: 12rem; }

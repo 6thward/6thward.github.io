@@ -8,7 +8,7 @@
 //   "## Name"               → a name card: the lines under it (until the next "## " or a "---" line)
 //                             sit inside a card headed by that name; cards in a row form a group (2026-10-11)
 // The text is stored exactly as typed, so it stays readable anywhere.
-import { esc } from "./ui.js?v=1794449461";
+import { esc } from "./ui.js?v=1794449943";
 
 const MAX_LEVEL = 3;
 const levelOf = (indent) => Math.min(MAX_LEVEL, Math.floor(String(indent || "").replace(/\t/g, "  ").length / 2));
@@ -223,10 +223,12 @@ export function toolbarHtml(hint) {
     `<span class="row-sub">${hint || "Tab makes a sub-point"}</span>`;
 }
 export function wireToolbar(box, ta) {
+  enhance(ta); // the box becomes a live editor: bold looks bold, bullets look like bullets (2026-11-11)
   box.querySelectorAll("[data-nt]").forEach((b) => {
     b.addEventListener("mousedown", (e) => e.preventDefault());
     b.addEventListener("click", () => {
       const k = b.dataset.nt;
+      if (ta._nx?.isConnected) return ta._nxCmd(k);
       if (k === "bullet") prefixLine(ta, "- ");
       else if (k === "todo") prefixLine(ta, "[ ] ");
       else if (k === "person") prefixLine(ta, "## ");
@@ -237,6 +239,200 @@ export function wireToolbar(box, ta) {
   });
   box.querySelectorAll("[data-color]").forEach((b) => {
     b.addEventListener("mousedown", (e) => e.preventDefault());
-    b.addEventListener("click", () => wrapColor(ta, b.dataset.color));
+    b.addEventListener("click", () => (ta._nx?.isConnected ? ta._nxColor(b.dataset.color) : wrapColor(ta, b.dataset.color)));
   });
+}
+
+// ---------- the live editor (2026-11-11) ----------
+// The textarea stays the source of truth (hidden): the page still reads ta.value and listens to its input /
+// keydown / blur. On top sits an editable box with one row per line of text, drawn the way the saved note
+// will look. Every change is written back to the textarea in the same plain format as before.
+const NX_TYPES = { bullet: "- ", todo: "[ ] ", card: "## " };
+function nxParse(raw) {
+  const line = String(raw).replace(/\s+$/, "");
+  let m;
+  if ((m = /^##\s+(.*)$/.exec(line))) return { type: "card", lvl: 0, text: m[1] };
+  if (line.trim() === "---") return { type: "rule", lvl: 0, text: "" };
+  if ((m = /^(\s*)[-•*]\s+(.*)$/.exec(line)) || (m = /^(\s*)[-•*]()$/.exec(line))) return { type: "bullet", lvl: levelOf(m[1]), text: m[2] || "" };
+  if ((m = /^(\s*)\[( |x|X)\]\s*(.*)$/.exec(line))) return { type: "todo", lvl: levelOf(m[1]), done: m[2].toLowerCase() === "x", text: m[3] };
+  return { type: "p", lvl: 0, text: line };
+}
+function nxInline(text) {
+  let h = esc(text).replace(/\{@([^{}]+)\}/g, (_, n) => `<span class="nt-who nx-who" contenteditable="false" data-who="${n.trim()}">→ ${n.trim()}</span>`);
+  for (let pass = 0; pass < 2; pass++) h = h.replace(COLOR_RE, (_, code, body) => (HL.has(code) ? `<mark class="nt-hl nt-hl-${code}" data-c="${code}">${body}</mark>` : `<span class="nt-c nt-c-${code}" data-c="${code}">${body}</span>`));
+  return h.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+}
+function nxSerInline(node) {
+  let out = "";
+  node.childNodes.forEach((n) => {
+    if (n.nodeType === 3) { out += n.nodeValue.replace(/ /g, " ").replace(/[​﻿]/g, ""); return; }
+    if (n.nodeType !== 1 || n.tagName === "BR") return;
+    if (n.dataset && n.dataset.who != null) { out += `{@${n.dataset.who}}`; return; }
+    let t = nxSerInline(n);
+    const c = n.dataset ? n.dataset.c : "";
+    if (c && t) t = `{${c}:${t}}`;
+    const bold = n.tagName === "B" || n.tagName === "STRONG" || /^(bold|[6-9]00)$/.test((n.style && n.style.fontWeight) || "");
+    if (bold && t.trim()) { const m = /^(\s*)([\s\S]*?)(\s*)$/.exec(t); t = `${m[1]}**${m[2]}**${m[3]}`; }
+    out += t;
+  });
+  return out;
+}
+function enhance(ta) {
+  if (ta._nx || typeof document === "undefined" || !document.createRange) return;
+  const desc = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value");
+  const rich = document.createElement("div");
+  rich.className = "nx-rich"; rich.contentEditable = "true"; rich.spellcheck = true;
+  ta._nx = rich;
+  let syncing = false;
+  const mkLine = (o) => {
+    const d = document.createElement("div"); d.className = "nx-line"; d.dataset.type = o.type || "p"; d.dataset.lvl = String(o.lvl || 0);
+    if (o.done) d.dataset.done = "1";
+    if (o.type === "rule") d.contentEditable = "false"; else d.innerHTML = nxInline(o.text || "") || "<br>";
+    return d;
+  };
+  const fixEmpty = (line) => { if (line.dataset.type !== "rule" && !line.textContent && !line.querySelector("[data-who]")) line.innerHTML = "<br>"; };
+  const lines = () => [...rich.children];
+  const lineOf = (node) => { let n = node; while (n && n.parentNode !== rich) n = n.parentNode; return n && n.nodeType === 1 ? n : null; };
+  const lineText = (line) => nxSerInline(line);
+  const serLine = (line) => { const t = line.dataset.type, ind = "  ".repeat(Number(line.dataset.lvl) || 0), x = lineText(line).replace(/\*\*\*\*/g, "");
+    return t === "rule" ? "---" : t === "bullet" ? `${ind}- ${x}` : t === "todo" ? `${ind}[${line.dataset.done ? "x" : " "}] ${x}` : t === "card" ? `## ${x}` : x; };
+  const serialize = () => lines().map(serLine).join("\n").replace(/\s+$/, "");
+  const load = (text) => { rich.innerHTML = ""; String(text || "").split("\n").forEach((l) => rich.appendChild(mkLine(nxParse(l)))); mark(); };
+  const mark = () => { const ls = lines(); rich.classList.toggle("nx-empty", ls.length <= 1 && (!ls[0] || (ls[0].dataset.type === "p" && !ls[0].textContent))); };
+  const caret = (node, offset) => { const r = document.createRange(); r.setStart(node, offset); r.collapse(true); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); };
+  const caretStart = (line) => caret(line, 0);
+  const caretEnd = () => { const last = rich.lastElementChild; if (!last) return; const r = document.createRange(); r.selectNodeContents(last); r.collapse(false); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); };
+  const range = () => { const sel = getSelection(); return sel.rangeCount && rich.contains(sel.anchorNode) ? sel.getRangeAt(0) : null; };
+  const selLines = () => { const r = range(); if (!r) return []; const a = lineOf(r.startContainer), b = lineOf(r.endContainer); if (!a) return []; const ls = lines(), i = ls.indexOf(a), j = b ? ls.indexOf(b) : i; return ls.slice(Math.min(i, j), Math.max(i, j) + 1); };
+  const setType = (line, type) => { line.dataset.type = type; if (type !== "todo") delete line.dataset.done; if (type === "p" || type === "card") line.dataset.lvl = "0"; };
+  const sync = () => {
+    // anything the browser left outside a row goes back into one
+    [...rich.childNodes].forEach((n) => { if (n.nodeType === 3 || (n.nodeType === 1 && !n.classList.contains("nx-line"))) { if (n.nodeType === 3 && !n.nodeValue.trim()) { n.remove(); return; } const d = mkLine({ type: "p", text: "" }); d.innerHTML = ""; n.replaceWith(d); d.appendChild(n); if (n.nodeType === 1 && n.tagName === "DIV") { while (n.firstChild) d.insertBefore(n.firstChild, n); n.remove(); } fixEmpty(d); } });
+    if (!rich.firstElementChild) rich.appendChild(mkLine({ type: "p", text: "" }));
+    lines().forEach((l) => { if (!l.dataset.type) { l.className = "nx-line"; l.dataset.type = "p"; l.dataset.lvl = "0"; } });
+    mark();
+    syncing = true; desc.set.call(ta, serialize()); syncing = false;
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  // typing "- ", "[ ] " or "## " at the start of a plain line turns it into that kind of line
+  const shortcuts = () => {
+    const r = range(); if (!r || !r.collapsed) return;
+    const line = lineOf(r.startContainer); if (!line || line.dataset.type !== "p") return;
+    const first = line.firstChild; if (!first || first.nodeType !== 3) return;
+    const m = /^(?:([-*•])|(\[\s?\])|(\[[xX]\])|(##))[  ]/.exec(first.nodeValue); if (!m) return;
+    const at = r.startContainer === first ? Math.max(0, r.startOffset - m[0].length) : null; // the cursor keeps its place in the words that are left
+    first.nodeValue = first.nodeValue.slice(m[0].length);
+    setType(line, m[1] ? "bullet" : m[4] ? "card" : "todo"); if (m[3]) line.dataset.done = "1";
+    if (!first.nodeValue) { first.remove(); fixEmpty(line); caretStart(line); } else if (at != null) caret(first, Math.min(at, first.nodeValue.length));
+  };
+  const atLineStart = (r, line) => { if (!r.collapsed) return false; const pre = document.createRange(); pre.setStart(line, 0); pre.setEnd(r.startContainer, r.startOffset); return !pre.toString() && !pre.cloneContents().querySelector("[data-who]"); };
+  const indent = (dir) => { let did = false; selLines().forEach((l) => { if (l.dataset.type !== "bullet" && l.dataset.type !== "todo") return; const n = Math.max(0, Math.min(MAX_LEVEL, (Number(l.dataset.lvl) || 0) + dir)); if (String(n) !== l.dataset.lvl) { l.dataset.lvl = String(n); did = true; } }); if (did) sync(); return did; };
+  rich.addEventListener("input", () => { shortcuts(); sync(); });
+  rich.addEventListener("keydown", (e) => {
+    const mod = e.metaKey || e.ctrlKey;
+    if (e.key === "Escape" || (e.key === "Enter" && mod)) { // the page's own Esc / ⌘Enter handlers live on the textarea
+      e.preventDefault(); desc.set.call(ta, serialize());
+      ta.dispatchEvent(new KeyboardEvent("keydown", { key: e.key, metaKey: e.metaKey, ctrlKey: e.ctrlKey, bubbles: true, cancelable: true })); return;
+    }
+    if (mod && (e.key === "b" || e.key === "B")) { e.preventDefault(); cmd("bold"); return; }
+    if (mod && /^[iu]$/i.test(e.key)) { e.preventDefault(); return; } // no italics / underline in notes
+    if (e.key === "Tab" && !mod && !e.altKey) { const ls = selLines(); if (ls.some((l) => l.dataset.type === "bullet" || l.dataset.type === "todo")) { e.preventDefault(); indent(e.shiftKey ? -1 : 1); } return; }
+    const r = range(); if (!r) return;
+    if (e.key === "Enter") {
+      e.preventDefault();
+      r.deleteContents();
+      const line = lineOf(r.startContainer) || rich.lastElementChild; if (!line) return;
+      const type = line.dataset.type, lvl = Number(line.dataset.lvl) || 0, listy = type === "bullet" || type === "todo";
+      if (listy && !lineText(line).trim() && !e.shiftKey) { if (lvl > 0) line.dataset.lvl = String(lvl - 1); else setType(line, "p"); sync(); return; } // empty item: step out
+      if (type === "p" && lineText(line).trim() === "---") { const rule = mkLine({ type: "rule" }), nl = mkLine({ type: "p", text: "" }); line.replaceWith(rule); rule.after(nl); caretStart(nl); sync(); return; }
+      const tail = document.createRange(); tail.setStart(r.startContainer, r.startOffset); tail.setEnd(line, line.childNodes.length);
+      const nl = mkLine({ type: e.shiftKey ? "p" : type === "card" ? "bullet" : type === "rule" ? "p" : type, lvl: e.shiftKey || type === "card" ? 0 : lvl, text: "" });
+      nl.innerHTML = ""; nl.appendChild(tail.extractContents()); fixEmpty(nl); fixEmpty(line);
+      line.after(nl); caretStart(nl); nl.scrollIntoView({ block: "nearest" }); sync(); return;
+    }
+    if (e.key === "Backspace" && r.collapsed) {
+      const line = lineOf(r.startContainer); if (!line || !atLineStart(r, line)) return;
+      const type = line.dataset.type, lvl = Number(line.dataset.lvl) || 0;
+      if (type !== "p") { e.preventDefault(); if (lvl > 0) line.dataset.lvl = String(lvl - 1); else setType(line, "p"); sync(); return; } // first un-list it
+      const prev = line.previousElementSibling; if (!prev) return;
+      e.preventDefault();
+      if (prev.dataset.type === "rule") { prev.remove(); sync(); return; }
+      if (prev.lastChild && prev.lastChild.nodeName === "BR") prev.lastChild.remove();
+      const at = prev.childNodes.length;
+      while (line.firstChild) { if (line.firstChild.nodeName === "BR" && line.childNodes.length === 1) { line.firstChild.remove(); break; } prev.appendChild(line.firstChild); }
+      line.remove(); fixEmpty(prev); caret(prev, Math.min(at, prev.childNodes.length)); sync();
+    }
+  });
+  // paste comes in as plain text; several lines become several rows (bullets and to-dos are recognised)
+  rich.addEventListener("paste", (e) => {
+    e.preventDefault();
+    const text = ((e.clipboardData || window.clipboardData).getData("text/plain") || "").replace(/\r\n?/g, "\n").replace(/ /g, " ");
+    if (!text) return;
+    const parts = text.split("\n");
+    if (parts.length === 1) { document.execCommand("insertText", false, text); return; }
+    const r = range(); if (!r) return; r.deleteContents();
+    const line = lineOf(r.startContainer) || rich.lastElementChild;
+    const tail = document.createRange(); tail.setStart(r.startContainer, r.startOffset); tail.setEnd(line, line.childNodes.length);
+    const rest = tail.extractContents();
+    const firstP = nxParse(parts[0]);
+    if (!lineText(line).trim() && firstP.type !== "p") { setType(line, firstP.type); line.dataset.lvl = String(firstP.lvl || 0); if (firstP.done) line.dataset.done = "1"; }
+    if (line.lastChild && line.lastChild.nodeName === "BR") line.lastChild.remove();
+    line.insertAdjacentHTML("beforeend", nxInline(firstP.text));
+    let last = line;
+    parts.slice(1).forEach((pt) => { const nl = mkLine(nxParse(pt)); last.after(nl); last = nl; });
+    if (last.lastChild && last.lastChild.nodeName === "BR") last.lastChild.remove();
+    const at = last.childNodes.length; last.appendChild(rest); fixEmpty(last); fixEmpty(line);
+    caret(last, Math.min(at, last.childNodes.length)); sync();
+  });
+  // a click on a to-do's box ticks it
+  rich.addEventListener("mousedown", (e) => {
+    const line = e.target.closest && e.target.closest('.nx-line[data-type="todo"]'); if (!line || !rich.contains(line)) return;
+    const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16, x = e.clientX - line.getBoundingClientRect().left - (Number(line.dataset.lvl) || 0) * 1.2 * rem;
+    if (x >= 0 && x < 1.25 * rem) { e.preventDefault(); if (line.dataset.done) delete line.dataset.done; else line.dataset.done = "1"; sync(); }
+  });
+  rich.addEventListener("blur", () => { syncing = true; desc.set.call(ta, serialize()); syncing = false; ta.dispatchEvent(new Event("blur")); });
+  function cmd(k) {
+    rich.focus();
+    if (k === "bold") { try { document.execCommand("styleWithCSS", false, false); } catch {} document.execCommand("bold"); sync(); return; }
+    if (k === "in" || k === "out") { indent(k === "in" ? 1 : -1); return; }
+    const type = k === "bullet" ? "bullet" : k === "todo" ? "todo" : "card";
+    const ls = selLines().filter((l) => l.dataset.type !== "rule"); if (!ls.length) return;
+    const all = ls.every((l) => l.dataset.type === type);
+    ls.forEach((l) => setType(l, all ? "p" : type)); // the same button again makes it plain
+    sync();
+  }
+  function color(code) {
+    rich.focus();
+    const r = range(); if (!r || r.collapsed) return;
+    const a = lineOf(r.startContainer), b = lineOf(r.endContainer);
+    if (!a || a !== b) { // several lines: colour each line's part on its own would be a guess — keep it to one line
+      const tip = rich.parentNode && rich.parentNode.querySelector(".nx-tip"); if (!tip) { const t = document.createElement("div"); t.className = "nx-tip row-sub"; t.textContent = "Select words on one line to colour them."; rich.after(t); setTimeout(() => t.remove(), 3500); } return; }
+    const sameFamily = (el) => !code || HL.has(el.dataset.c) === HL.has(code);
+    const frag = r.extractContents();
+    frag.querySelectorAll("[data-c]").forEach((el) => { if (sameFamily(el)) el.replaceWith(...el.childNodes); });
+    if (!code) { // clear: also lift the words out of a colour they sit inside
+      const holder = document.createElement("span"); holder.appendChild(frag); r.insertNode(holder);
+      let up = holder.parentNode; while (up && up !== a) { const next = up.parentNode; if (up.dataset && up.dataset.c) { const before = up.cloneNode(false), after = up.cloneNode(false); while (up.firstChild && up.firstChild !== holder) before.appendChild(up.firstChild); while (holder.nextSibling) after.appendChild(holder.nextSibling); up.replaceWith(...(before.textContent ? [before] : []), holder, ...(after.textContent ? [after] : [])); } up = next; }
+      const sel = getSelection(), nr = document.createRange(); nr.selectNodeContents(holder); const kids = [...holder.childNodes]; holder.replaceWith(...kids);
+      if (kids.length) { nr.setStartBefore(kids[0]); nr.setEndAfter(kids[kids.length - 1]); sel.removeAllRanges(); sel.addRange(nr); }
+    } else {
+      const w = document.createElement(HL.has(code) ? "mark" : "span"); w.className = HL.has(code) ? `nt-hl nt-hl-${code}` : `nt-c nt-c-${code}`; w.dataset.c = code;
+      w.appendChild(frag); r.insertNode(w);
+      const sel = getSelection(), nr = document.createRange(); nr.selectNodeContents(w); sel.removeAllRanges(); sel.addRange(nr);
+    }
+    fixEmpty(a); sync();
+  }
+  ta._nxCmd = cmd; ta._nxColor = color;
+  const mount = () => {
+    if (rich.isConnected) return true;
+    if (!ta.isConnected) return false;
+    rich.dataset.placeholder = ta.placeholder || "";
+    ta.after(rich); ta.classList.add("nx-src"); load(desc.get.call(ta));
+    return true;
+  };
+  // the page sets ta.value and calls ta.focus(): both now reach the live box
+  Object.defineProperty(ta, "value", { configurable: true, get() { return desc.get.call(ta); }, set(v) { desc.set.call(ta, v); if (!syncing && rich.isConnected) load(v); } });
+  ta.focus = () => { if (mount()) { rich.focus(); caretEnd(); } };
+  ta.setSelectionRange = () => {}; ta.select = () => {};
+  queueMicrotask(mount); setTimeout(mount, 60);
 }
