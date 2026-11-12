@@ -15,15 +15,15 @@
 // whose profile doc carries `alias: <googleUid>` plus a mirror of the name /
 // organization / calling / pages, so the rules see the same access either
 // way. The table shows one row; the mirror is kept in step on every save.
-import { db } from "./firebase-init.js?v=1793596007";
-import { ctx, AREAS, normalizePerms } from "./app.js?v=1793596007";
+import { db } from "./firebase-init.js?v=1794449377";
+import { ctx, AREAS, normalizePerms } from "./app.js?v=1794449377";
 import {
   collection, onSnapshot, updateDoc, setDoc, deleteDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { fmtPhone, normPhone, smsLink } from "./phone.js?v=1793596007";
-import { orgColor } from "./org-colors.js?v=1793596007";
-import { toast, esc, openModal, closeModal } from "./ui.js?v=1793596007";
-import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1793596007";
+import { fmtPhone, normPhone, smsLink } from "./phone.js?v=1794449377";
+import { orgColor } from "./org-colors.js?v=1794449377";
+import { toast, esc, openModal, closeModal } from "./ui.js?v=1794449377";
+import { createPinAccount, deletePinAccount, randomPin, validPin } from "./pin-auth.js?v=1794449377";
 
 let sort = { key: "created", dir: 1 }; // default: oldest at the top; click a header for A→Z / Z→A (2026-09-19)
 let showPastUsers = (() => { try { return localStorage.getItem("sw-users-past") === "1"; } catch { return false; } })(); // Past users folded unless they chose to see them (2026-10-18)
@@ -89,7 +89,7 @@ export function initAdmin() {
 function permsOf(u) {
   if (u.role === "bishop" || (u.email && u.email === "jordanchri@gmail.com")) return Object.fromEntries(AREAS.map((a) => [a.key, "edit"]));
   if (u.perms && Object.keys(u.perms).length) return normalizePerms(u.perms);
-  if (u.role === "bishopric") return normalizePerms(Object.fromEntries(AREAS.map((a) => [a.key, a.key === "confidential" || a.key === "selfreliance" || a.key === "tithing" || a.key === "users" ? "" : "edit"])));
+  if (u.role === "bishopric") return normalizePerms(Object.fromEntries(AREAS.map((a) => [a.key, a.key === "confidential" || a.key === "counsel" || a.key === "selfreliance" || a.key === "tithing" || a.key === "users" ? "" : "edit"])));
   if (u.role === "member") return normalizePerms({ sacrament: "edit", calendar: "edit", tasks: "edit" });
   return normalizePerms({});
 }

@@ -1,26 +1,26 @@
 // App shell: auth flow (Google + PIN), permission gating, tab routing.
-import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1793596007";
+import { auth, db, googleProvider, BISHOP_EMAIL, pinEmail, isPinEmail, PIN_LENGTH } from "./firebase-init.js?v=1794449377";
 import {
   signInWithPopup, signInWithEmailAndPassword, signOut, onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
   doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { openModal, closeModal, toast } from "./ui.js?v=1793596007";
-import { initTasks } from "./tasks.js?v=1793596007";
-import { initSacrament, openMeetingLink } from "./sacrament.js?v=1793596007";
-import { initCalendar, initBishopSchedule } from "./calendar.js?v=1793596007";
-import { initCallings } from "./callings.js?v=1793596007";
-import { initConfidential } from "./confidential.js?v=1793596007";
-import { initAdmin } from "./admin.js?v=1793596007";
-import { initBoard } from "./board.js?v=1793596007";
-import { initHomeSacrament } from "./home-sacrament.js?v=1793596007";
-import { initCouncil, initBishopric } from "./council.js?v=1793596007";
-import { initMessage } from "./message.js?v=1793596007";
-import { initTithingPage } from "./tithing.js?v=1793596007";
-import { initSelfReliance } from "./selfreliance.js?v=1793596007";
-import { initDocuments } from "./documents.js?v=1793596007";
-import { QUICK_PIN_LENGTH, validQuickPin, derive, devicePins, rememberDevice, forgetDevice, createQuickAccount, changeQuickPin, deleteQuickAccount } from "./quick-pin.js?v=1793596007";
+import { openModal, closeModal, toast } from "./ui.js?v=1794449377";
+import { initTasks } from "./tasks.js?v=1794449377";
+import { initSacrament, openMeetingLink } from "./sacrament.js?v=1794449377";
+import { initCalendar, initBishopSchedule } from "./calendar.js?v=1794449377";
+import { initCallings } from "./callings.js?v=1794449377";
+import { initConfidential } from "./confidential.js?v=1794449377";
+import { initAdmin } from "./admin.js?v=1794449377";
+import { initBoard } from "./board.js?v=1794449377";
+import { initHomeSacrament } from "./home-sacrament.js?v=1794449377";
+import { initCouncil, initBishopric, initCounsel } from "./council.js?v=1794449377";
+import { initMessage } from "./message.js?v=1794449377";
+import { initTithingPage } from "./tithing.js?v=1794449377";
+import { initSelfReliance } from "./selfreliance.js?v=1794449377";
+import { initDocuments } from "./documents.js?v=1794449377";
+import { QUICK_PIN_LENGTH, validQuickPin, derive, devicePins, rememberDevice, forgetDevice, createQuickAccount, changeQuickPin, deleteQuickAccount } from "./quick-pin.js?v=1794449377";
 
 const ROLE_RANK = { pending: 0, member: 1, bishopric: 2, bishop: 3 };
 
@@ -36,6 +36,7 @@ export const AREAS = [
   { key: "board",        label: "Member Board",   hint: "Person cards sorted into sections you name" },
   { key: "council",      label: "Ward Council",   hint: "Weekly council agendas" },
   { key: "bishopric",    label: "Bishopric",      hint: "Bishopric meeting agendas — bishop, counselors, clerk and secretaries" },
+  { key: "counsel",      label: "Bishop's Counsel", hint: "Notes and action items from the bishop's counsel meetings — private; grant with care" },
   { key: "confidential", label: "Bishop",         hint: "Bishop's private notes — grant with care" },
   { key: "selfreliance", label: "Self-Reliance",  hint: "Self-Reliance Plans people send in, with their bank and credit statements — grant with care" },
   { key: "tithing",      label: "Tithing Declaration", hint: "Set the bishop's available times, share the sign-up link, see who signed up and who came" },
@@ -68,7 +69,7 @@ export function hasRole(minRole) {
 function permsForRole(role) {
   const all = (lvl) => Object.fromEntries(AREAS.map((a) => [a.key, lvl]));
   if (role === "bishop") return all("edit");
-  if (role === "bishopric") return { ...all("edit"), confidential: "", selfreliance: "", tithing: "", users: "" }; // private pages are granted by name only
+  if (role === "bishopric") return { ...all("edit"), confidential: "", counsel: "", selfreliance: "", tithing: "", users: "" }; // private pages are granted by name only
   if (role === "member") return { ...all(""), sacrament: "view", calendar: "view", tasks: "view" };
   return all("");
 }
@@ -440,6 +441,7 @@ onAuthStateChanged(auth, async (user) => {
   if (can("board")) initBoard();
   if (can("council")) initCouncil();
   if (can("bishopric")) initBishopric();
+  if (can("counsel")) initCounsel();
   if (can("confidential")) initConfidential();
   if (can("selfreliance")) initSelfReliance();
   if (can("tithing")) initTithingPage();

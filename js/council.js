@@ -9,16 +9,16 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1793596007";
-import { ctx, can } from "./app.js?v=1793596007";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1793596007";
-import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1793596007";
+import { db } from "./firebase-init.js?v=1794449377";
+import { ctx, can } from "./app.js?v=1794449377";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1794449377";
+import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1794449377";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { watchBishopCal, bishopCalConfig, councilTimeFor } from "./bishop-cal.js?v=1793596007";
+import { watchBishopCal, bishopCalConfig, councilTimeFor } from "./bishop-cal.js?v=1794449377";
 const clock12 = (hhmm) => { const [h, m] = String(hhmm).split(":").map(Number); return `${h % 12 || 12}:${String(m || 0).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`; };
-import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1793596007";
+import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1794449377";
 
 // One agenda page per "board": Ward Council (councils/…) and, since 2026-10-25, the Bishopric meeting (bishopric/…).
 // The same code runs twice with a config; a Bishopric item can be sent to the next ward council agenda.
@@ -67,7 +67,7 @@ const nextWardCouncil = () => councilDates.find((d) => d >= todayIso()) || (() =
 function init() {
   if (started) return;
   started = true;
-  date = upcomingSunday();
+  date = cfg.anyDay ? todayIso() : upcomingSunday();
   let positioned = false; // jump to the next scheduled council once the dates have loaded
   panel = document.getElementById(cfg.panel);
   if (!panel) return;
@@ -83,17 +83,20 @@ function init() {
       <button class="btn btn-sm" id="wc-next" title="Next meeting">›</button>
       ${cfg.dates ? `<button class="btn btn-sm" id="wc-dates" title="Which Sundays have ward council, and what time it meets">📅 Council dates <span id="wc-time-lbl" class="wc-time-lbl"></span></button>
       <button class="btn btn-sm" id="wc-upcoming" title="The next councils at a glance — what's on each, who has the prayers">📋 Upcoming</button>`
+        : cfg.anyDay ? `<span class="wc-pick"><input type="date" id="wc-pick" title="Pick the day of a meeting"><button class="btn btn-sm" id="wc-pick-go" type="button" title="Open (or start) the notes for that day">Go to date</button><button class="btn btn-sm btn-primary" id="wc-today" type="button" title="Start notes for a meeting today">+ Today's meeting</button></span>`
         : `<span class="row-sub wc-time-note" title="Set the day and time under Calendar → Standing meetings">Meets <span id="wc-time-lbl" class="wc-time-lbl"></span></span>`}
     </div>
     <div id="wc-body"><div class="empty-note">Loading…</div></div>`;
   panel.querySelector("#wc-prev").addEventListener("click", () => { date = stepDate(date, -1); render(); });
   panel.querySelector("#wc-next").addEventListener("click", () => { date = stepDate(date, 1); render(); });
   panel.querySelector("#wc-dates")?.addEventListener("click", () => editDates());
+  panel.querySelector("#wc-pick-go")?.addEventListener("click", () => { const v = panel.querySelector("#wc-pick").value; if (/^\d{4}-\d{2}-\d{2}$/.test(v)) { date = v; render(); } else toast("Pick a date first"); });
+  panel.querySelector("#wc-today")?.addEventListener("click", () => { date = todayIso(); render(); });
   panel.querySelector("#wc-upcoming")?.addEventListener("click", () => showUpcoming());
   watchBishopCal(() => { // the meeting time shows on the button; the Calendar's standing-meeting setting is the same record (2026-10-18)
     const co = cfg.calKey === "council" ? councilTimeFor(date) : (bishopCalConfig()[cfg.calKey] || {}), lbl = panel.querySelector("#wc-time-lbl");
     if (lbl) lbl.textContent = co.on && co.start ? `${cfg.dates ? "· " : (["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"][Number(co.weekday) || 0] + " ")}${clock12(co.start)}${co.end ? " – " + clock12(co.end) : ""}` : (cfg.dates ? "" : "— not set");
-    if (!cfg.dates && !positioned) { date = upcomingSunday(); render(); } // the bishopric's weekday may have just loaded
+    if (!cfg.dates && !cfg.anyDay && !positioned) { date = upcomingSunday(); render(); } // the bishopric's weekday may have just loaded
   });
   onSnapshot(collection(db, "users"), (qs) => {
     const names = qs.docs.map((d) => d.data()).filter((u) => cfg.isMember(u) && !u.revoked && !u.alias && u.name).map((u) => u.name.trim());
@@ -111,7 +114,7 @@ function init() {
       if (d.id === "_dates") schedule = [...new Set((d.data().dates || []).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x)))].sort();
       else councils[d.id] = d.data();
     });
-    if (!positioned) { positioned = true; date = nextCouncil(); }
+    if (!positioned) { positioned = true; date = cfg.anyDay ? (() => { const all = Object.keys(councils).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort(); return all.find((d) => d >= todayIso()) || all[all.length - 1] || todayIso(); })() : nextCouncil(); } // an any-day page opens on its next (or latest) meeting
     render();
   });
   if (cfg.showOnCouncil) onSnapshot(collection(db, "councils"), (qs) => { // the Bishopric page sends items to the next ward council
@@ -233,6 +236,7 @@ function navDates() {
   return [...set].sort();
 }
 function stepDate(d, dir) {
+  if (cfg.anyDay) { const all = [...new Set([...navDates(), todayIso()])].sort(), later = all.filter((x) => x > d), earlier = all.filter((x) => x < d); return dir > 0 ? (later[0] || d) : (earlier[earlier.length - 1] || d); }
   if (!hasSchedule()) return shiftWeek(d, dir);
   const all = navDates();
   const later = all.filter((x) => x > d), earlier = all.filter((x) => x < d);
@@ -460,7 +464,7 @@ function render() {
   };
 
   const asg = cdoc.assign || {};
-  const assignCard = `
+  const assignCard = cfg.anyDay ? "" : `
     <div class="card wc-assign-card">
       <h3 style="margin:0 0 .4rem">Assignments</h3>
       <div class="wc-assign">
@@ -505,12 +509,12 @@ function render() {
     <div class="card" style="margin-top:.8rem">
       <h3 style="margin:0 0 .2rem;display:flex;align-items:center;gap:.5rem">Agenda <span class="pill ${open.length ? "pill-approved" : "pill-role-member"}">${open.length}</span>
         ${done.length ? `<span class="row-sub" style="font-weight:400">· ${done.length} discussed</span>` : ""}
-        ${!next && !isFuture(date) ? `<span class="row-sub" style="margin-left:auto;font-weight:400">Past meeting — record only</span>` : ""}
+        ${!next && !isFuture(date) && !cfg.anyDay ? `<span class="row-sub" style="margin-left:auto;font-weight:400">Past meeting — record only</span>` : ""}
         ${isFuture(date) && cfg.board ? `<span class="row-sub" style="margin-left:auto;font-weight:400">Board items join once this becomes the next council</span>` : ""}
       </h3>
       ${followupsHtml(cdoc, editor)}
       <div class="wc-list">
-        ${items.length ? items.map((it, i) => row(it, i + 1)).join("") : `<div class="empty-note" style="padding:.7rem">${next ? "Nothing on the agenda yet." : "No items."}</div>`}
+        ${items.length ? items.map((it, i) => row(it, i + 1)).join("") : `<div class="empty-note" style="padding:.7rem">${next || cfg.anyDay ? (cfg.anyDay ? "Nothing yet — add what you talked about." : "Nothing on the agenda yet.") : "No items."}</div>`}
       </div>
       ${editor ? `<div class="wc-add"><button type="button" class="btn" id="wc-additem">+ Add item</button><span class="wc-foldall"><button type="button" class="btn btn-sm btn-ghost" data-foldall="1">Collapse all</button><button type="button" class="btn btn-sm btn-ghost" data-foldall="0">Expand all</button></span></div>` : ""}
     </div>
@@ -1066,6 +1070,13 @@ const BISHOPRIC = makeAgenda({
   isMember: isBishopricPerson,
   weekday: () => Number((bishopCalConfig().bishopric || {}).weekday) || 0,
 });
+// Bishop's Counsel (2026-11-11): notes and action items for meetings on any day — private to the bishop unless the page is granted
+const COUNSEL = makeAgenda({
+  key: "counsel", area: "counsel", coll: "bishopCounsel", panel: "panel-counsel", calKey: "counsel", dates: false, board: false, showOnCouncil: false, anyDay: true,
+  title: "Bishop's Counsel", noun: "meetings", info: "Notes and action items for each meeting. Pick the day, add the items you talked about, and give follow-ups an owner. ‹ › walk the days that have notes.",
+  isMember: isBishopricPerson,
+});
+export function initCounsel() { COUNSEL.init(); }
 export function initCouncil() { COUNCIL.init(); }
 export function openCouncilDate(iso) { COUNCIL.openDate(iso); }
 export function initBishopric() { BISHOPRIC.init(); }
