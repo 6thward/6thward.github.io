@@ -9,16 +9,16 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1794450257";
-import { ctx, can } from "./app.js?v=1794450257";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1794450257";
-import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1794450257";
+import { db } from "./firebase-init.js?v=1794450318";
+import { ctx, can } from "./app.js?v=1794450318";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1794450318";
+import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1794450318";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, getDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { watchBishopCal, bishopCalConfig, councilTimeFor } from "./bishop-cal.js?v=1794450257";
+import { watchBishopCal, bishopCalConfig, councilTimeFor } from "./bishop-cal.js?v=1794450318";
 const clock12 = (hhmm) => { const [h, m] = String(hhmm).split(":").map(Number); return `${h % 12 || 12}:${String(m || 0).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`; };
-import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1794450257";
+import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1794450318";
 
 // One agenda page per "board": Ward Council (councils/…) and, since 2026-10-25, the Bishopric meeting (bishopric/…).
 // The same code runs twice with a config; a Bishopric item can be sent to the next ward council agenda.
@@ -253,7 +253,7 @@ async function copyLineTo(t, text, idx, when) {
   const lines = String(text || "").split("\n"), line = lines[idx] || "";
   const ind = (l) => /^\s*/.exec(l)[0].replace(/\t/g, "  ").length;
   const kids = [];
-  for (let i = idx + 1; i < lines.length; i++) { if (!lines[i].trim() || ind(lines[i]) <= ind(line)) break; kids.push(lines[i].replace(/\t/g, "  ").slice(ind(line) + 2)); }
+  for (let i = idx + 1; i < lines.length; i++) { if (!lines[i].trim() || ind(lines[i]) <= ind(line)) break; kids.push(lines[i].replace(/\t/g, "  ").slice(ind(line) + 2).replace(/\s*\{>[^{}]*\}/g, "")); }
   const plain = plainLine(line), m = /^([^:]{1,60}):\s+(.+)$/.exec(plain);
   const lead = m && m[1].trim().split(/\s+/).length <= 8;
   const title = (lead ? m[1].trim() : plain).slice(0, 140) || "From the notes";
@@ -680,8 +680,12 @@ function render() {
     setTimeout(() => document.addEventListener("mousedown", away, true), 0);
     pop.querySelectorAll("[data-target]").forEach((b) => b.addEventListener("click", async () => {
       const t = copyTargets().find((x) => x.key === b.dataset.target), pick = pop.querySelector(`[data-when="${b.dataset.target}"]`)?.value || ""; close(); if (!t) return;
-      try { const when = await copyLineTo(t, rawNotes.get(key) || "", idx, pick); toast(`Added to the ${t.label.toLowerCase()} agenda for ${fmtDay(when)}`); }
-      catch (err) { toast("Couldn't copy: " + (err.code || err.message)); }
+      try {
+        const src = rawNotes.get(key) || "", when = await copyLineTo(t, src, idx, pick);
+        // the line keeps a small pill saying where it went (11/11)
+        const ls = src.split("\n"); if (ls[idx] != null && !ls[idx].includes(`{>${t.key}:${when}}`)) { ls[idx] = `${ls[idx].replace(/\s+$/, "")} {>${t.key}:${when}}`; await saveNote(key, ls.join("\n")); }
+        toast(`Added to the ${t.label.toLowerCase()} agenda for ${fmtDay(when)}`); render();
+      } catch (err) { toast("Couldn't copy: " + (err.code || err.message)); }
     }));
   }));
   body.querySelectorAll(".wc-cnotes-edit .nt-assign:not(.nt-copy), .wc-cnotes-edit .nt-who").forEach((el) => el.addEventListener("click", (e) => {

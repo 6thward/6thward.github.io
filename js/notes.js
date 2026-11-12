@@ -5,10 +5,11 @@
 //   two spaces in front     → a sub-point (up to three levels deep)   (2026-10-04)
 //   **words**               → bold;  "Lead-in: rest" → the lead-in is bold
 //   {@Name}                 → that line is assigned to Name (shown as a pill)   (2026-10-04)
+//   {>council:2026-11-15}   → that line was copied to that meeting's agenda (council | bishopric), shown as a pill   (2026-11-11)
 //   "## Name"               → a name card: the lines under it (until the next "## " or a "---" line)
 //                             sit inside a card headed by that name; cards in a row form a group (2026-10-11)
 // The text is stored exactly as typed, so it stays readable anywhere.
-import { esc } from "./ui.js?v=1794450257";
+import { esc } from "./ui.js?v=1794450318";
 
 const MAX_LEVEL = 3;
 const levelOf = (indent) => Math.min(MAX_LEVEL, Math.floor(String(indent || "").replace(/\t/g, "  ").length / 2));
@@ -18,11 +19,15 @@ export const HIGHLIGHTS = [["y", "Yellow", "#fff3a3"], ["g", "Green", "#c9f2d0"]
 export const TEXT_COLORS = [["red", "Red", "#c0392b"], ["orange", "Orange", "#c76a12"], ["green", "Green", "#2e7d4f"], ["blue", "Blue", "#1f5fbf"], ["purple", "Purple", "#7a3fb0"]];
 const HL = new Set(HIGHLIGHTS.map((h) => h[0]));
 const COLOR_RE = /\{(y|g|p|b|red|orange|green|blue|purple):([^{}]*)\}/g;
-const stripMarks = (t) => String(t).replace(/\s*\{@[^{}]*\}/g, "").replace(/\{(?:y|g|p|b|red|orange|green|blue|purple):/g, "").replace(/[{}]/g, "").replace(/\*\*/g, "");
+const stripMarks = (t) => String(t).replace(/\s*\{@[^{}]*\}/g, "").replace(/\s*\{>[^{}]*\}/g, "").replace(/\{(?:y|g|p|b|red|orange|green|blue|purple):/g, "").replace(/[{}]/g, "").replace(/\*\*/g, "");
 
+const SENT_LABEL = { council: "Ward council", bishopric: "Bishopric" };
+const sentDay = (iso) => { const d = new Date(iso + "T12:00:00"); return isNaN(d) ? iso : d.toLocaleDateString("en-US", { month: "short", day: "numeric" }); };
+// "{>council:2026-11-15}" (already escaped, so the > is &gt;) → a small pill saying where the line was copied to
+const sentPills = (h, live) => h.replace(/\s*\{&gt;(council|bishopric):(\d{4}-\d{2}-\d{2})\}/g, (_, k, d) => ` <span class="nt-sent nt-sent-${k}"${live ? ` contenteditable="false" data-sent="${k}:${d}"` : ""} title="Copied to the ${SENT_LABEL[k].toLowerCase()} agenda for ${sentDay(d)}">⧉ ${SENT_LABEL[k]} · ${sentDay(d)}</span>`);
 // marks only (no lead-in): colours/highlights, then **bold**
 function marks(text) {
-  let h = esc(text).replace(/\{@([^{}]+)\}/g, (_, n) => `<span class="nt-who" data-who="${n.trim()}" title="Assigned to ${n.trim()}">→ ${n.trim()}</span>`);
+  let h = sentPills(esc(text)).replace(/\{@([^{}]+)\}/g, (_, n) => `<span class="nt-who" data-who="${n.trim()}" title="Assigned to ${n.trim()}">→ ${n.trim()}</span>`);
   for (let pass = 0; pass < 2; pass++) { // twice = one level of nesting ({y:{red:x}})
     h = h.replace(COLOR_RE, (_, code, body) => (HL.has(code) ? `<mark class="nt-hl nt-hl-${code}">${body}</mark>` : `<span class="nt-c nt-c-${code}">${body}</span>`));
   }
@@ -259,7 +264,7 @@ function nxParse(raw) {
   return { type: "p", lvl: 0, text: line };
 }
 function nxInline(text) {
-  let h = esc(text).replace(/\{@([^{}]+)\}/g, (_, n) => `<span class="nt-who nx-who" contenteditable="false" data-who="${n.trim()}">→ ${n.trim()}</span>`);
+  let h = sentPills(esc(text), true).replace(/\{@([^{}]+)\}/g, (_, n) => `<span class="nt-who nx-who" contenteditable="false" data-who="${n.trim()}">→ ${n.trim()}</span>`);
   for (let pass = 0; pass < 2; pass++) h = h.replace(COLOR_RE, (_, code, body) => (HL.has(code) ? `<mark class="nt-hl nt-hl-${code}" data-c="${code}">${body}</mark>` : `<span class="nt-c nt-c-${code}" data-c="${code}">${body}</span>`));
   return h.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
 }
@@ -269,6 +274,7 @@ function nxSerInline(node) {
     if (n.nodeType === 3) { out += n.nodeValue.replace(/ /g, " ").replace(/[​﻿]/g, ""); return; }
     if (n.nodeType !== 1 || n.tagName === "BR") return;
     if (n.dataset && n.dataset.who != null) { out += `{@${n.dataset.who}}`; return; }
+    if (n.dataset && n.dataset.sent) { out += `{>${n.dataset.sent}}`; return; }
     let t = nxSerInline(n);
     const c = n.dataset ? n.dataset.c : "";
     if (c && t) t = `{${c}:${t}}`;
@@ -291,7 +297,7 @@ function enhance(ta) {
     if (o.type === "rule") d.contentEditable = "false"; else d.innerHTML = nxInline(o.text || "") || "<br>";
     return d;
   };
-  const fixEmpty = (line) => { if (line.dataset.type !== "rule" && !line.textContent && !line.querySelector("[data-who]")) line.innerHTML = "<br>"; };
+  const fixEmpty = (line) => { if (line.dataset.type !== "rule" && !line.textContent && !line.querySelector("[data-who], [data-sent]")) line.innerHTML = "<br>"; };
   const lines = () => [...rich.children];
   const lineOf = (node) => { let n = node; while (n && n.parentNode !== rich) n = n.parentNode; return n && n.nodeType === 1 ? n : null; };
   const lineText = (line) => nxSerInline(line);
