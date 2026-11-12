@@ -2839,3 +2839,6 @@ textarea.nx-src { display: none !important; }
 .wc-copy-pop { width: 15rem; } .wc-copy-h { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-soft); padding: .2rem .4rem .35rem; }
 .wc-copy-opt { display: flex; justify-content: space-between; align-items: baseline; gap: .6rem; width: 100%; border: 0; background: transparent; font: inherit; padding: .45rem .5rem; border-radius: 8px; cursor: pointer; text-align: left; }
 .wc-copy-opt:hover { background: var(--brand-soft); } .wc-copy-opt span { font-size: .8rem; color: var(--ink-soft); white-space: nowrap; }
+.wc-copy-pop { width: 19rem; } .wc-copy-row { display: grid; grid-template-columns: 5.6rem 1fr auto; gap: .4rem; align-items: center; padding: .3rem .4rem; }
+.wc-copy-row select { font: inherit; font-size: .85rem; padding: .25rem .3rem; border: 1px solid var(--line); border-radius: 7px; min-width: 0; }
+.wc-copy-pop { width: 22rem; } .wc-copy-row { grid-template-columns: 6.4rem 1fr auto; } .wc-copy-row b { white-space: nowrap; }
