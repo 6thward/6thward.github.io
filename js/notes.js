@@ -8,7 +8,7 @@
 //   "## Name"               → a name card: the lines under it (until the next "## " or a "---" line)
 //                             sit inside a card headed by that name; cards in a row form a group (2026-10-11)
 // The text is stored exactly as typed, so it stays readable anywhere.
-import { esc } from "./ui.js?v=1794449943";
+import { esc } from "./ui.js?v=1794450067";
 
 const MAX_LEVEL = 3;
 const levelOf = (indent) => Math.min(MAX_LEVEL, Math.floor(String(indent || "").replace(/\t/g, "  ").length / 2));
@@ -87,8 +87,9 @@ export const plainLine = (line) => stripMarks(String(line ?? "").replace(/^\s*(?
 export function notesHtml(text, key, editable, attrFn, opts) {
   const attr = attrFn || ((i) => `data-todo-line="${esc(key)}|${i}"`);
   const canAssign = !!(opts && opts.assign && editable);
-  const aline = (i) => (canAssign ? ` data-aline="${esc(key)}|${i}"` : "");
-  const addBtn = (line) => (canAssign && !lineWho(line) ? `<button type="button" class="nt-assign" title="Assign this to someone">+ assign</button>` : "");
+  const aline = (i) => (canAssign || (opts && opts.copy && editable) ? ` data-aline="${esc(key)}|${i}"` : "");
+  const canCopy = !!(opts && opts.copy && editable);
+  const addBtn = (line) => (canAssign && !lineWho(line) ? `<button type="button" class="nt-assign" title="Assign this to someone">+ assign</button>` : "") + (canCopy ? `<button type="button" class="nt-assign nt-copy" title="Put this on another meeting's agenda">⧉ copy to</button>` : "");
   const lines = String(text || "").split("\n");
   let html = "", inList = false, inCard = false, inCards = false;
   const closeList = () => { if (inList) { html += "</ul>"; inList = false; } };

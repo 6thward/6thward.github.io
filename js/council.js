@@ -9,16 +9,16 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1794449943";
-import { ctx, can } from "./app.js?v=1794449943";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1794449943";
-import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1794449943";
+import { db } from "./firebase-init.js?v=1794450067";
+import { ctx, can } from "./app.js?v=1794450067";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1794450067";
+import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1794450067";
 import {
-  collection, onSnapshot, updateDoc, setDoc, doc, serverTimestamp,
+  collection, onSnapshot, updateDoc, setDoc, doc, getDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { watchBishopCal, bishopCalConfig, councilTimeFor } from "./bishop-cal.js?v=1794449943";
+import { watchBishopCal, bishopCalConfig, councilTimeFor } from "./bishop-cal.js?v=1794450067";
 const clock12 = (hhmm) => { const [h, m] = String(hhmm).split(":").map(Number); return `${h % 12 || 12}:${String(m || 0).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`; };
-import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1794449943";
+import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1794450067";
 
 // One agenda page per "board": Ward Council (councils/…) and, since 2026-10-25, the Bishopric meeting (bishopric/…).
 // The same code runs twice with a config; a Bishopric item can be sent to the next ward council agenda.
@@ -117,7 +117,7 @@ function init() {
     if (!positioned) { positioned = true; date = cfg.anyDay ? (() => { const all = Object.keys(councils).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort(); return all.find((d) => d >= todayIso()) || all[all.length - 1] || todayIso(); })() : nextCouncil(); } // an any-day page opens on its next (or latest) meeting
     render();
   });
-  if (cfg.showOnCouncil) onSnapshot(collection(db, "councils"), (qs) => { // the Bishopric page sends items to the next ward council
+  if (cfg.key !== "council") onSnapshot(collection(db, "councils"), (qs) => { // the Bishopric and Bishop's Council pages send items to the next ward council
     councilDocs = {}; councilDates = [];
     qs.docs.forEach((d) => { if (d.id === "_dates") councilDates = [...new Set((d.data().dates || []).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x)))].sort(); else councilDocs[d.id] = d.data(); });
     render();
@@ -234,6 +234,36 @@ function navDates() {
   const set = new Set(schedule);
   Object.keys(councils).forEach((d) => { if (/^\d{4}-\d{2}-\d{2}$/.test(d)) set.add(d); });
   return [...set].sort();
+}
+// where a line of notes can be copied to: the other standing meetings this person can edit (not the page they're on)
+function copyTargets() {
+  const nextOn = (wd) => { const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + ((7 + wd - d.getDay()) % 7)); return iso(d); };
+  const all = [
+    { key: "council", label: "Ward council", coll: "councils", area: "council", next: () => (cfg.key === "council" ? nextCouncil() : nextWardCouncil()) },
+    { key: "bishopric", label: "Bishopric meeting", coll: "bishopric", area: "bishopric", next: () => nextOn(Number((bishopCalConfig().bishopric || {}).weekday) || 0) },
+  ];
+  return all.filter((t) => t.key !== cfg.key && can(t.area, "edit"));
+}
+// the line becomes an agenda item: a short lead-in ("Feed the missionaries: …") is the title, the rest and any sub-points are its notes
+async function copyLineTo(t, text, idx) {
+  const lines = String(text || "").split("\n"), line = lines[idx] || "";
+  const ind = (l) => /^\s*/.exec(l)[0].replace(/\t/g, "  ").length;
+  const kids = [];
+  for (let i = idx + 1; i < lines.length; i++) { if (!lines[i].trim() || ind(lines[i]) <= ind(line)) break; kids.push(lines[i].replace(/\t/g, "  ").slice(ind(line) + 2)); }
+  const plain = plainLine(line), m = /^([^:]{1,60}):\s+(.+)$/.exec(plain);
+  const lead = m && m[1].trim().split(/\s+/).length <= 8;
+  const title = (lead ? m[1].trim() : plain).slice(0, 140) || "From the notes";
+  const notes = [lead ? m[2].trim() : "", ...kids].filter(Boolean).join("\n");
+  let target = t.next();
+  if (t.key === "council" && cfg.key !== "council") { // the ward council's own dates: read them fresh
+    const ds = await getDoc(doc(db, "councils", "_dates")); const dates = ds.exists() ? [...new Set((ds.data().dates || []).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x)))].sort() : [];
+    target = dates.find((d) => d >= todayIso()) || target;
+  }
+  const item = { id: "a" + Math.random().toString(36).slice(2, 9), title, notes, files: [], due: "", discussed: false, discussedAt: "", copiedFrom: { page: cfg.key, date }, createdAt: new Date().toISOString(), by: ctx.name || "" };
+  const ref = doc(db, t.coll, target), snap = await getDoc(ref);
+  if (snap.exists()) await updateDoc(ref, { extra: [...(snap.data().extra || []), item], updatedAt: serverTimestamp() });
+  else await setDoc(ref, { date: target, extra: [item], notes: "", createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  return target;
 }
 function stepDate(d, dir) {
   if (cfg.anyDay) { const all = [...new Set([...navDates(), todayIso()])].sort(), later = all.filter((x) => x > d), earlier = all.filter((x) => x < d); return dir > 0 ? (later[0] || d) : (earlier[earlier.length - 1] || d); }
@@ -412,7 +442,7 @@ function render() {
     rawNotes.set(key, text || "");
     // editors also get "+ name card": a card for one person, added and edited right in place (2026-10-11)
     const addCard = editor && key !== "m" ? `<span class="nt-card-add" data-addcard="${key}" title="Add a card for one person — their name on top, notes underneath">${placeholder === "+ member" ? "+ member" : "+ name card"}</span>` : "";
-    return `<div class="wc-cnotes${text ? "" : " wc-cnotes-empty"}${editor ? " wc-cnotes-edit" : ""}" data-cnotes="${key}" title="${editor ? "Click to add notes" : ""}">${text ? notesHtml(text, key, editor, null, { assign: true }) : (editor ? (placeholder === "+ member" ? "No members yet — use + member to add one" : placeholder) : "")}${addCard}</div>`;
+    return `<div class="wc-cnotes${text ? "" : " wc-cnotes-empty"}${editor ? " wc-cnotes-edit" : ""}" data-cnotes="${key}" title="${editor ? "Click to add notes" : ""}">${text ? notesHtml(text, key, editor, null, { assign: true, copy: copyTargets().length > 0 }) : (editor ? (placeholder === "+ member" ? "No members yet — use + member to add one" : placeholder) : "")}${addCard}</div>`;
   };
   const row = (it, n) => {
     const title = it.kind === "board" ? it.t.title : it.x.title;
@@ -603,7 +633,7 @@ function render() {
     });
   };
   body.querySelectorAll(".wc-cnotes-edit .nt-card").forEach((card) => card.addEventListener("click", (e) => {
-    if (e.target.closest("input, a, label, .nt-who, .nt-assign")) return;
+    if (e.target.closest("input, a, label, .nt-who, .nt-assign, .nt-copy")) return;
     e.stopPropagation();
     openCardEditor(card, card.closest("[data-cnotes]").dataset.cnotes, Number(card.dataset.cardstart));
   }));
@@ -631,7 +661,29 @@ function render() {
   });
 
   // assign one line of the notes (a bullet, a to-do…) to someone: "+ assign" or click the name pill
-  body.querySelectorAll(".wc-cnotes-edit .nt-assign, .wc-cnotes-edit .nt-who").forEach((el) => el.addEventListener("click", (e) => {
+  // "copy to": one line of the notes (with its sub-points) becomes an item on the next ward council / bishopric agenda (Jordan 11/11)
+  body.querySelectorAll(".wc-cnotes-edit .nt-copy").forEach((el) => el.addEventListener("click", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const holder = el.closest("[data-aline]"); if (!holder) return;
+    const cut = holder.dataset.aline.lastIndexOf("|");
+    const key = holder.dataset.aline.slice(0, cut), idx = Number(holder.dataset.aline.slice(cut + 1));
+    document.querySelector(".wc-who-pop")?.remove();
+    const r = el.getBoundingClientRect(), pop = document.createElement("div");
+    pop.className = "wc-who-pop wc-copy-pop";
+    pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 268)) + window.scrollX + "px";
+    pop.style.top = r.bottom + 4 + window.scrollY + "px";
+    pop.innerHTML = `<div class="wc-copy-h">Add to the agenda of…</div>${copyTargets().map((t) => `<button type="button" class="wc-copy-opt" data-target="${t.key}"><b>${esc(t.label)}</b><span>${esc(fmtDay(t.next()))}</span></button>`).join("")}`;
+    document.body.appendChild(pop);
+    const close = () => { pop.remove(); document.removeEventListener("mousedown", away, true); };
+    const away = (ev) => { if (!pop.contains(ev.target)) close(); };
+    setTimeout(() => document.addEventListener("mousedown", away, true), 0);
+    pop.querySelectorAll("[data-target]").forEach((b) => b.addEventListener("click", async () => {
+      const t = copyTargets().find((x) => x.key === b.dataset.target); close(); if (!t) return;
+      try { const when = await copyLineTo(t, rawNotes.get(key) || "", idx); toast(`Added to the ${t.label.toLowerCase()} agenda for ${fmtDay(when)}`); }
+      catch (err) { toast("Couldn't copy: " + (err.code || err.message)); }
+    }));
+  }));
+  body.querySelectorAll(".wc-cnotes-edit .nt-assign:not(.nt-copy), .wc-cnotes-edit .nt-who").forEach((el) => el.addEventListener("click", (e) => {
     e.preventDefault(); e.stopPropagation();
     const holder = el.closest("[data-aline]"); if (!holder) return;
     const cut = holder.dataset.aline.lastIndexOf("|");

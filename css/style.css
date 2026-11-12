@@ -2834,3 +2834,8 @@ textarea.nx-src { display: none !important; }
 .nx-who { user-select: all; }
 .nx-tip { margin-top: .25rem; }
 .src-ta-tall + .nx-rich { min-height: 12rem; }
+/* "copy to" beside "+ assign" on a line of notes (11/11) */
+.nt-copy:hover { color: var(--brand); border-color: var(--brand); }
+.wc-copy-pop { width: 15rem; } .wc-copy-h { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-soft); padding: .2rem .4rem .35rem; }
+.wc-copy-opt { display: flex; justify-content: space-between; align-items: baseline; gap: .6rem; width: 100%; border: 0; background: transparent; font: inherit; padding: .45rem .5rem; border-radius: 8px; cursor: pointer; text-align: left; }
+.wc-copy-opt:hover { background: var(--brand-soft); } .wc-copy-opt span { font-size: .8rem; color: var(--ink-soft); white-space: nowrap; }
