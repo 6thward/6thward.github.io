@@ -9,9 +9,11 @@
 //   "## Name"               → a name card: the lines under it (until the next "## " or a "---" line)
 //                             sit inside a card headed by that name; cards in a row form a group (2026-10-11)
 // The text is stored exactly as typed, so it stays readable anywhere.
-import { esc } from "./ui.js?v=1794450785";
+import { esc } from "./ui.js?v=1794452715";
 
 const MAX_LEVEL = 3;
+// a dash that got caught inside bold ("**-** words", "**- words**") still starts a bullet (2026-11-11)
+const normLine = (raw) => String(raw).replace(/^(\s*)\*\*([-•*])\s*\*\*\s*/, "$1$2 ").replace(/^(\s*)\*\*([-•*])\s+(?=\S)/, "$1$2 **");
 const levelOf = (indent) => Math.min(MAX_LEVEL, Math.floor(String(indent || "").replace(/\t/g, "  ").length / 2));
 
 // Highlights and text colours (2026-10-04): {y:words} — a short code, a colon, the words.
@@ -86,7 +88,7 @@ export function setLineWho(text, lineIdx, name) {
   lines[lineIdx] = clean ? `${base} {@${clean}}` : base;
   return lines.join("\n");
 }
-export const plainLine = (line) => stripMarks(String(line ?? "").replace(/^\s*(?:##\s+|[-•*]\s+|\[( |x|X)\]\s*)/, "")).trim();
+export const plainLine = (line) => stripMarks(normLine(line ?? "").replace(/^\s*(?:##\s+|[-•*]\s+|\[( |x|X)\]\s*)/, "")).trim();
 
 // attrFn(lineIndex) → the data attribute for a to-do checkbox (default: data-todo-line="key|idx")
 // opts.assign → each line carries data-aline="key|idx" and list lines get a "+ assign" button
@@ -102,7 +104,7 @@ export function notesHtml(text, key, editable, attrFn, opts) {
   const closeCard = () => { closeList(); if (inCard) { html += "</div></div>"; inCard = false; } };
   const closeCards = () => { closeCard(); if (inCards) { html += "</div>"; inCards = false; } };
   lines.forEach((raw, i) => {
-    const line = raw.replace(/\s+$/, "");
+    const line = normLine(raw.replace(/\s+$/, ""));
     let m;
     if ((m = /^##\s+(.*)$/.exec(line))) { // a name card; consecutive cards share one row
       closeCard();
@@ -123,7 +125,7 @@ export function notesHtml(text, key, editable, attrFn, opts) {
     } else if (line.trim() === "") {
       closeList(); html += `<div class="rc-gap"></div>`;
     } else {
-      closeList(); html += `<div${aline(i)}>${inlineFmt(line)}</div>`;
+      closeList(); html += `<div${aline(i)}>${inlineFmt(line)}${addBtn(line)}</div>`; // plain lines can be assigned / copied too (11/11)
     }
   });
   closeCards();
@@ -256,7 +258,7 @@ export function wireToolbar(box, ta) {
 // will look. Every change is written back to the textarea in the same plain format as before.
 const NX_TYPES = { bullet: "- ", todo: "[ ] ", card: "## " };
 function nxParse(raw) {
-  const line = String(raw).replace(/\s+$/, "");
+  const line = normLine(String(raw).replace(/\s+$/, ""));
   let m;
   if ((m = /^##\s+(.*)$/.exec(line))) return { type: "card", lvl: 0, text: m[1] };
   if (line.trim() === "---") return { type: "rule", lvl: 0, text: "" };
@@ -328,12 +330,16 @@ function enhance(ta) {
   const shortcuts = () => {
     const r = range(); if (!r || !r.collapsed) return;
     const line = lineOf(r.startContainer); if (!line || line.dataset.type !== "p") return;
-    const first = line.firstChild; if (!first || first.nodeType !== 3) return;
-    const m = /^(?:([-*•])|(\[\s?\])|(\[[xX]\])|(##))[  ]/.exec(first.nodeValue); if (!m) return;
+    // the first words of the line — even when they sit inside bold or a colour
+    const tw = document.createTreeWalker(line, NodeFilter.SHOW_TEXT); let first = tw.nextNode(); while (first && !first.nodeValue) first = tw.nextNode();
+    if (!first) return;
+    const pre = document.createRange(); pre.setStart(line, 0); pre.setEnd(first, 0); if (pre.cloneContents().querySelector("[data-who], [data-sent]")) return; // a pill comes first: not a line start
+    const m = /^(?:([-*•])|(\[\s?\])|(\[[xX]\])|(##))[ \u00a0]/.exec(first.nodeValue); if (!m) return;
     const at = r.startContainer === first ? Math.max(0, r.startOffset - m[0].length) : null; // the cursor keeps its place in the words that are left
     first.nodeValue = first.nodeValue.slice(m[0].length);
     setType(line, m[1] ? "bullet" : m[4] ? "card" : "todo"); if (m[3]) line.dataset.done = "1";
-    if (!first.nodeValue) { first.remove(); fixEmpty(line); caretStart(line); } else if (at != null) caret(first, Math.min(at, first.nodeValue.length));
+    if (!first.nodeValue) { let up = first.parentNode; first.remove(); while (up && up !== line && !up.textContent && !up.querySelector("[data-who], [data-sent]")) { const nx = up.parentNode; up.remove(); up = nx; } fixEmpty(line); caretStart(line); }
+    else if (at != null) caret(first, Math.min(at, first.nodeValue.length));
   };
   const atLineStart = (r, line) => { if (!r.collapsed) return false; const pre = document.createRange(); pre.setStart(line, 0); pre.setEnd(r.startContainer, r.startOffset); return !pre.toString() && !pre.cloneContents().querySelector("[data-who]"); };
   const indent = (dir) => { let did = false; selLines().forEach((l) => { if (l.dataset.type !== "bullet" && l.dataset.type !== "todo") return; const n = Math.max(0, Math.min(MAX_LEVEL, (Number(l.dataset.lvl) || 0) + dir)); if (String(n) !== l.dataset.lvl) { l.dataset.lvl = String(n); did = true; } }); if (did) sync(); return did; };

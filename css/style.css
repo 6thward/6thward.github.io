@@ -2845,3 +2845,5 @@ textarea.nx-src { display: none !important; }
 /* "copied to" pill on a line of notes (11/11) */
 .nt-sent { display: inline-block; font-size: .7em; font-weight: 700; border-radius: 99px; padding: .02rem .5rem; margin-left: .3rem; white-space: nowrap; vertical-align: middle; background: #ece6f7; color: #5b3a8e; }
 .nt-sent-bishopric { background: #e4f3e8; color: #2e7d4f; }
+.wc-cnotes div[data-aline]:hover > .nt-assign { opacity: 1; } /* plain lines show + assign / copy to on hover too (11/11) */
+.wc-cnotes div[data-aline]:hover > .nt-assign { opacity: 1; } /* plain lines show + assign / copy to on hover too (11/11) */
