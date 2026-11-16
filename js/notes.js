@@ -10,7 +10,7 @@
 //   "## Name"               → a name card: the lines under it (until the next "## " or a "---" line)
 //                             sit inside a card headed by that name; cards in a row form a group (2026-10-11)
 // The text is stored exactly as typed, so it stays readable anywhere.
-import { esc } from "./ui.js?v=1794454026";
+import { esc } from "./ui.js?v=1794801215";
 
 const MAX_LEVEL = 3;
 // a dash that got caught inside bold ("**-** words", "**- words**") still starts a bullet (2026-11-11)

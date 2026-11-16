@@ -2848,3 +2848,53 @@ textarea.nx-src { display: none !important; }
 .wc-cnotes div[data-aline]:hover > .nt-assign { opacity: 1; } /* plain lines show + assign / copy to on hover too (11/11) */
 .wc-cnotes div[data-aline]:hover > .nt-assign { opacity: 1; } /* plain lines show + assign / copy to on hover too (11/11) */
 .nx-rich u, .wc-cnotes u, .src-rich u, .rc-list u { text-decoration: underline; text-underline-offset: 2px; }
+
+/* ---- Ward Council / Bishopric / Bishop's Council: two panes (2026-11-15, option B) ----
+   the agenda as a short outline on the left; the item picked gets the room on the right */
+.wc2 { display: grid; grid-template-columns: minmax(250px, 330px) minmax(0, 1fr); margin-top: .8rem; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.wc2-l { background: #f6f8fa; border-right: 1px solid var(--line); border-radius: 12px 0 0 12px; padding: .65rem; min-width: 0; }
+.wc2-r { padding: .95rem 1.15rem 1.3rem; min-width: 0; }
+.wc2-l .wc-assign { grid-template-columns: 1fr 1fr; gap: .45rem .6rem; padding: .1rem .3rem .7rem; margin-bottom: .55rem; border-bottom: 1px solid var(--line); }
+.wc2-l .wc-asg > span { font-size: .66rem; }
+.wc2-l .wc-asg-in, .wc2-l .wc-asg-ro { padding: .28rem .45rem; font-size: .88rem; width: 100%; min-width: 0; box-sizing: border-box; }
+.wc2-l .wc-asg-pop { right: auto; min-width: 15rem; }
+.wc2-l .wc-asg:nth-child(even) .wc-asg-pop { left: auto; right: 0; }
+.wc2-lh { display: flex; align-items: center; gap: .4rem; font-size: .7rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft); padding: .15rem .5rem .35rem; }
+.wc2-lh-sub { font-weight: 600; letter-spacing: 0; text-transform: none; font-size: .78rem; }
+.wc2-it { display: grid; grid-template-columns: 1.3rem minmax(0, 1fr) auto; gap: .45rem; align-items: center; padding: .45rem .5rem; border: 1.5px solid transparent; border-radius: 8px; font-size: .92rem; line-height: 1.25; cursor: pointer; }
+.wc2-it:hover { background: #e9eef3; }
+.wc2-it.on { background: var(--surface); border-color: var(--brand); font-weight: 700; }
+.wc2-it:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+.wc2-it.done .wc2-t { color: var(--ink-soft); }
+.wc2-t { min-width: 0; overflow-wrap: anywhere; }
+.wc2-n { color: var(--ink-soft); font-weight: 700; margin-right: .35rem; }
+.wc2-circ { width: 1.2rem; height: 1.2rem; box-sizing: border-box; border-radius: 99px; border: 1.8px solid #9aa5b3; background: #fff; padding: 0; font-size: .68rem; font-weight: 800; line-height: 1; color: #fff; display: inline-flex; align-items: center; justify-content: center; }
+button.wc2-circ { cursor: pointer; }
+button.wc2-circ:hover { border-color: #2e7d4f; }
+.wc2-circ.on { background: #2e7d4f; border-color: #2e7d4f; }
+.wc2-ic { text-align: center; font-size: .85rem; }
+.wc2-meta { display: flex; gap: .4rem; align-items: center; font-size: .72rem; font-weight: 600; color: var(--ink-soft); white-space: nowrap; }
+.wc2-over { color: #b3402f; }
+.wc2-it.wc-dragging { opacity: .45; }
+.wc2-it.wc-before { box-shadow: 0 -3px 0 var(--brand); }
+.wc2-it.wc-after { box-shadow: 0 3px 0 var(--brand); }
+.wc2-sep { border-top: 1px solid var(--line); margin: .55rem 0; }
+.wc2-note { font-size: .78rem; color: var(--ink-soft); padding: .35rem .5rem; }
+.wc2-l .wc-add { margin: .4rem .5rem 0; }
+.wc2-r .wc-row { display: block; background: none; border: 0; padding: 0; margin: 0; opacity: 1; }
+.wc2-r .wc-title { font-size: 1.25rem; font-weight: 800; line-height: 1.3; }
+.wc2-tn { color: var(--ink-soft); font-weight: 700; margin-right: .45rem; }
+.wc2-h { margin: 0 0 .3rem; font-size: 1.25rem; }
+.wc2-r .wc-cnotes { min-height: 7.5rem; margin-top: .65rem; padding: .7rem .85rem; border: 1px solid var(--line); border-radius: 10px; font-size: .98rem; }
+.wc2-r .wc-cnotes-empty { border-style: dashed; }
+.wc2-r .wc-cnotes-ta, .wc2-r .nx-rich { font-size: .98rem; }
+.wc2-r .nx-rich { min-height: 7.5rem; }
+.wc2-r .wc-fus { margin: 0; }
+.wc2-todo-add { margin-top: .55rem; background: none; border: 0; padding: .15rem 0; font: inherit; font-size: .9rem; color: var(--ink-soft); cursor: pointer; }
+.wc2-todo-add:hover { color: var(--brand); }
+.wc2-back { display: none; }
+@media (max-width: 760px) {
+  .wc2 { grid-template-columns: 1fr; }
+  .wc2-l { border-right: 0; border-bottom: 1px solid var(--line); border-radius: 12px 12px 0 0; }
+  .wc2-back { display: inline-block; margin-bottom: .5rem; background: none; border: 0; padding: 0; font: inherit; font-size: .85rem; font-weight: 700; color: var(--brand); cursor: pointer; }
+}

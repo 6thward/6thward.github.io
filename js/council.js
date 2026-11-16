@@ -9,16 +9,16 @@
 //   { date, extra: [{ id, title, notes, discussed, discussedAt }], notes }
 // Marking a board item "Discussed" stamps the to-do with the agenda's date,
 // so it shows on that meeting's page afterwards and drops off future ones.
-import { db } from "./firebase-init.js?v=1794454026";
-import { ctx, can } from "./app.js?v=1794454026";
-import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1794454026";
-import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1794454026";
+import { db } from "./firebase-init.js?v=1794801215";
+import { ctx, can } from "./app.js?v=1794801215";
+import { notesHtml, toggleTodoLine, handleNoteKeys, toolbarHtml, wireToolbar, lineWho, setLineWho, plainLine } from "./notes.js?v=1794801215";
+import { uploadAttachment, openAttachment, deleteAttachment, fmtBytes, fileIcon, MAX_ATTACH_BYTES, ATTACH_ACCEPT } from "./files.js?v=1794801215";
 import {
   collection, onSnapshot, updateDoc, setDoc, doc, getDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { watchBishopCal, bishopCalConfig, councilTimeFor } from "./bishop-cal.js?v=1794454026";
+import { watchBishopCal, bishopCalConfig, councilTimeFor } from "./bishop-cal.js?v=1794801215";
 const clock12 = (hhmm) => { const [h, m] = String(hhmm).split(":").map(Number); return `${h % 12 || 12}:${String(m || 0).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`; };
-import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1794454026";
+import { toast, esc, fmtDate, openModal, closeModal } from "./ui.js?v=1794801215";
 
 // One agenda page per "board": Ward Council (councils/…) and, since 2026-10-25, the Bishopric meeting (bishopric/…).
 // The same code runs twice with a config; a Bishopric item can be sent to the next ward council agenda.
@@ -30,12 +30,12 @@ let members = [];     // names of ward council members (Users tab → "Ward coun
 // what a council member can be asked to do at a meeting (2026-10-04)
 const ASSIGN = [["openPrayer", "Opening prayer"], ["thought", "Scripture & thought"], ["training", "Handbook training"], ["closePrayer", "Closing prayer"]];
 let openNotesFor = null;
-// collapsed agenda items (2026-10-18): "date:key" entries; discussed items start folded
-const FOLD_KEY = cfg.key === "council" ? "sw-wc-folded" : "sw-wc-folded-" + cfg.key;
-const collapsed = new Set((() => { try { return JSON.parse(localStorage.getItem(FOLD_KEY) || "[]"); } catch { return []; } })());
-const expandedDone = new Set(); // discussed items the user opened on purpose this visit
-const saveFolded = () => { try { localStorage.setItem(FOLD_KEY, JSON.stringify([...collapsed].slice(-400))); } catch {} }
-const isFolded = (date, key, discussed) => collapsed.has(date + ":" + key) || (discussed && !expandedDone.has(date + ":" + key));
+// two panes (Jordan 11/15, option B): the agenda is a short outline on the left and the item picked gets the room on the
+// right — so nothing folds any more. Which item is picked, per meeting date ("m" = meeting notes, "who" = who has what,
+// "fu" = follow-ups from earlier councils).
+const selByDate = new Map();
+let focusOutline = false; // the outline was moved through with the arrow keys: keep the keyboard there after the redraw
+let addTodoFor = null;    // "+ action item": open that item's notes with a new to-do line
 let fuOpen = new Set(); // follow-up rows that are unfolded (2026-10-11)
 // organizations a follow-up can be handed to, besides a council member or any typed name
 const ORGS = ["Bishopric", "Relief Society", "Elders Quorum", "Primary", "Young Women", "Young Men", "Sunday School", "Ward Mission", "Ward Clerk", "Executive Secretary", "Temple & Family History", "Music", "Activities Committee"]; // an item just added: its notes box opens as soon as it's drawn (2026-10-11)
@@ -477,35 +477,31 @@ function render() {
             : `${cfg.showOnCouncil && it.kind === "extra" ? (it.x.onCouncil ? `<button class="btn btn-sm wc-oncouncil on" data-act="offcouncil" type="button" title="On the ward council agenda for ${esc(fmtDay(it.x.onCouncil))} — click to take it off">✓ On ward council</button>` : `<button class="btn btn-sm btn-ghost wc-oncouncil" data-act="tocouncil" type="button" title="Put a copy of this item on the next ward council agenda">→ Ward council</button>`) : ""}
                <button class="btn btn-sm btn-ghost" data-attach="1" type="button" title="Attach a document, PDF or image">📎 Attach</button>
                <span class="wc-act-wrap"><button class="btn btn-sm btn-ghost wc-act-btn" data-actions="1" type="button" title="Copy or move this item to another council">Actions ▾</button></span>
-               <button class="btn btn-sm" data-act="discussed" title="Discussed — moves to this meeting's record${it.kind === "board" ? "; the to-do stays on the card" : ""}">Discussed ✓</button>
+               <button class="btn btn-sm btn-primary" data-act="discussed" title="Discussed — moves to this meeting's record${it.kind === "board" ? "; the to-do stays on the card" : ""}">Discussed ✓</button>
                <button class="btn btn-sm btn-ghost" data-act="remove" title="${it.kind === "board" ? "Take off the agenda (unflags the to-do)" : "Delete this agenda item"}">✕</button>`}
         </div>` : "";
     return `
-      <div class="wc-row${it.discussed ? " wc-done" : ""}${editor && !it.discussed ? " wc-drag" : ""}${isFolded(date, key, it.discussed) ? " wc-folded" : ""}" data-key="${key}">
-        <div class="wc-num${editor && !it.discussed ? " wc-grip" : ""}"${editor && !it.discussed ? ` draggable="true" title="Drag to reorder"` : ""}>${editor && !it.discussed ? `<span class="wc-grip-dots" aria-hidden="true">⋮⋮</span>` : ""}${n}.</div>
+      <div class="wc-row${it.discussed ? " wc-done" : ""}" data-key="${key}">
         <div class="wc-main">
-          <div class="wc-head"><button type="button" class="wc-fold" data-fold="${key}" title="${isFolded(date, key, it.discussed) ? "Show the details" : "Hide the details"}">${isFolded(date, key, it.discussed) ? "▸" : "▾"}</button><div class="wc-title">${person ? `<span class="wc-person-name">${esc(person)}</span> · ` : ""}${isNewMem ? `<span class="wc-type-badge" title="New members — a card per person">👥</span> ` : ""}${esc(title)}${it.discussed ? `<span class="wc-done-badge" title="Discussed${when ? " " + esc(fmtDay(when)) : ""}">✓ Discussed</span>` : ""}${owner}${assignee}${due}</div>${actions}</div>
+          <div class="wc-head"><div class="wc-title"><span class="wc2-tn">${n}</span>${person ? `<span class="wc-person-name">${esc(person)}</span> · ` : ""}${isNewMem ? `<span class="wc-type-badge" title="New members — a card per person">👥</span> ` : ""}${esc(title)}${it.discussed ? `<span class="wc-done-badge" title="Discussed${when ? " " + esc(fmtDay(when)) : ""}">✓ Discussed</span>` : ""}${owner}${assignee}${due}</div>${actions}</div>
           ${context}
           ${(editor || notes) ? noteBlock(key, notes, isNewMem ? "+ member" : "+ council notes") : ""}
           ${files.length ? `<div class="wc-files">${files.map((f) => `<span class="wc-file" data-file="${esc(f.id)}" title="Open ${esc(f.name)}"><span class="wc-file-ic">${fileIcon(f)}</span><span class="wc-file-name">${esc(f.name)}</span><span class="wc-file-size">${fmtBytes(f.size)}</span>${editor ? `<button type="button" class="wc-file-x" data-rmfile="${esc(f.id)}" title="Remove this attachment">✕</button>` : ""}</span>`).join("")}</div>` : ""}
           <div class="wc-upload" hidden></div>
+          ${editor && !it.discussed ? `<button type="button" class="wc2-todo-add" data-addtodo="${key}" title="Add a check box line to the notes — then assign it with + assign">☐ + action item</button>` : ""}
           ${it.discussed ? `<div class="row-sub">Discussed${when ? " " + fmtDay(when) : ""}${it.kind === "board" && it.t.councilDiscussedBy ? " · " + esc(it.t.councilDiscussedBy) : ""}</div>` : ""}
         </div>
       </div>`;
   };
 
   const asg = cdoc.assign || {};
-  const assignCard = cfg.anyDay ? "" : `
-    <div class="card wc-assign-card">
-      <h3 style="margin:0 0 .4rem">Assignments</h3>
-      <div class="wc-assign">
+  const assignBox = cfg.anyDay ? "" : `
+      <div class="wc-assign wc2-asg">
         ${ASSIGN.map(([k, l]) => `<label class="wc-asg"><span>${esc(l)}</span>${editor
           ? `<input class="wc-asg-in" data-asg="${k}" value="${esc(asg[k] || "")}" placeholder=" " title="Pick a council member or type any name" autocomplete="off">`
           : `<b class="wc-asg-ro${asg[k] ? "" : " wc-asg-open"}">${asg[k] ? esc(asg[k]) : "&nbsp;"}</b>`}</label>`).join("")}
       </div>
-      <datalist id="dl-${cfg.key}-members">${members.map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist>
-      ${editor && !members.length && cfg.board ? `<p class="row-sub" style="margin:.5rem 0 0">Tip: tick “Ward council member” for people on the Users tab and their names appear here as suggestions.</p>` : ""}
-    </div>`;
+      ${editor && !members.length && cfg.board ? `<p class="row-sub" style="margin:0 .5rem .5rem">Tip: tick “Ward council member” for people on the Users tab and their names appear here as suggestions.</p>` : ""}`;
 
   // Follow-ups (2026-10-04): everything assigned at this meeting, grouped by person
   const follow = new Map(); // lowercased name -> { name, rows: [{ text, done }] }
@@ -527,65 +523,106 @@ function render() {
   });
   noteFollow("", cdoc.notes);
   (cdoc.followups || []).forEach((f) => { if (f.assignee) addFollow(f.assignee, `Follow-up: ${f.title}${f.text ? " — " + f.text : ""}`, !!f.done); });
-  const followCard = follow.size ? `
-    <div class="card wc-follow-card" style="margin-top:.8rem">
-      <h3 style="margin:0 0 .4rem">Follow-ups <span class="row-sub" style="font-weight:400">· who has what</span></h3>
+  const followPane = follow.size ? `
+      <h3 class="wc2-h">Who has what <span class="row-sub" style="font-weight:400">· everything assigned at this meeting</span></h3>
       <div class="wc-follow">
         ${[...follow.values()].sort((a, b) => a.name.localeCompare(b.name)).map((f) => `<div class="wc-follow-person"><b>${esc(f.name)}</b><ul>${f.rows.map((r) => `<li class="${r.done ? "done" : ""}">${esc(r.text)}</li>`).join("")}</ul></div>`).join("")}
-      </div>
-    </div>` : "";
+      </div>` : "";
+
+  // ---- two panes: the outline (left) and the item picked (right) ----
+  const keys = items.map(itemKey), fus = cdoc.followups || [], openFus = fus.filter((f) => !f.done).length;
+  let sel = selByDate.get(date);
+  // nothing picked yet (or the pick is gone): the first item still to discuss — not remembered, so it moves on as items are discussed
+  if (!sel || !(keys.includes(sel) || sel === "m" || (sel === "who" && follow.size) || (sel === "fu" && fus.length))) sel = (open[0] && itemKey(open[0])) || keys[0] || "m";
+  const initials = (name) => String(name || "").trim().split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("");
+  const olRow = (it, n) => {
+    const key = itemKey(it), title = it.kind === "board" ? it.t.title : it.x.title, person = it.kind === "board" ? it.k.name : "";
+    const notes = String((it.kind === "board" ? it.t.councilNotes : it.x.notes) || "");
+    const todoOpen = (notes.match(/^\s*\[ \]/gm) || []).length;
+    const files = (it.kind === "board" ? it.t.councilFiles : it.x.files) || [];
+    const dueVal = (it.kind === "board" ? it.t.due : it.x.due) || "", overdue = dueVal && !it.discussed && dueVal < todayIso();
+    const ownerName = it.kind === "board" ? (it.t.councilOwner || "") : (it.x.owner || it.x.by || "");
+    const circ = editor
+      ? `<button type="button" class="wc2-circ${it.discussed ? " on" : ""}" data-olact="${it.discussed ? "reopen" : "discussed"}" title="${it.discussed ? "Discussed — click to put it back on the agenda" : "Mark discussed"}">${it.discussed ? "✓" : ""}</button>`
+      : `<span class="wc2-circ${it.discussed ? " on" : ""}">${it.discussed ? "✓" : ""}</span>`;
+    return `<div class="wc2-it${key === sel ? " on" : ""}${it.discussed ? " done" : ""}" data-sel="${key}" role="button" tabindex="0"${editor && !it.discussed ? ` draggable="true" title="Click to open · drag to reorder"` : ""}>
+      ${circ}<span class="wc2-t"><span class="wc2-n">${n}</span>${person ? `<b>${esc(person)}</b> · ` : ""}${it.kind === "extra" && it.x.type === "newmembers" ? "👥 " : ""}${esc(title)}</span>
+      <span class="wc2-meta">${overdue ? `<span class="wc2-over" title="Past due ${esc(fmtDay(dueVal))}">⚠</span>` : ""}${todoOpen ? `<span title="${todoOpen} open to-do${todoOpen === 1 ? "" : "s"} in the notes">☐ ${todoOpen}</span>` : ""}${files.length ? `<span title="${files.length} attachment${files.length === 1 ? "" : "s"}">📎</span>` : ""}${ownerName ? `<span title="Owner: ${esc(ownerName)}">${esc(initials(ownerName))}</span>` : ""}</span>
+    </div>`;
+  };
+  const olExtra = (key, icon, label, count) => `<div class="wc2-it wc2-x${key === sel ? " on" : ""}" data-sel="${key}" role="button" tabindex="0"><span class="wc2-ic" aria-hidden="true">${icon}</span><span class="wc2-t">${esc(label)}</span><span class="wc2-meta">${count ? `<span class="pill pill-pending">${count}</span>` : ""}</span></div>`;
+  const selItem = items.find((it) => itemKey(it) === sel);
+  const detail = selItem ? row(selItem, items.indexOf(selItem) + 1)
+    : sel === "fu" ? followupsHtml(cdoc, editor)
+    : sel === "who" ? followPane
+    : `<h3 class="wc2-h">Meeting notes</h3>${noteBlock("m", cdoc.notes || "", "+ general notes for this meeting")}`;
 
   body.innerHTML = `
-    ${assignCard}
-    <div class="card" style="margin-top:.8rem">
-      <h3 style="margin:0 0 .2rem;display:flex;align-items:center;gap:.5rem">Agenda <span class="pill ${open.length ? "pill-approved" : "pill-role-member"}">${open.length}</span>
-        ${done.length ? `<span class="row-sub" style="font-weight:400">· ${done.length} discussed</span>` : ""}
-        ${!next && !isFuture(date) && !cfg.anyDay ? `<span class="row-sub" style="margin-left:auto;font-weight:400">Past meeting — record only</span>` : ""}
-        ${isFuture(date) && cfg.board ? `<span class="row-sub" style="margin-left:auto;font-weight:400">Board items join once this becomes the next council</span>` : ""}
-      </h3>
-      ${followupsHtml(cdoc, editor)}
-      <div class="wc-list">
-        ${items.length ? items.map((it, i) => row(it, i + 1)).join("") : `<div class="empty-note" style="padding:.7rem">${next || cfg.anyDay ? (cfg.anyDay ? "Nothing yet — add what you talked about." : "Nothing on the agenda yet.") : "No items."}</div>`}
+    <datalist id="dl-${cfg.key}-members">${members.map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist>
+    <div class="wc2">
+      <div class="wc2-l">
+        ${assignBox}
+        <div class="wc2-lh">Agenda <span class="pill ${open.length ? "pill-approved" : "pill-role-member"}">${open.length}</span>${done.length ? `<span class="wc2-lh-sub">· ${done.length} discussed</span>` : ""}</div>
+        ${fus.length ? olExtra("fu", "↪", "Follow-ups from earlier", openFus) : ""}
+        <div class="wc2-items">
+          ${items.length ? items.map((it, i) => olRow(it, i + 1)).join("") : `<div class="wc2-note">${next || cfg.anyDay ? (cfg.anyDay ? "Nothing yet — add what you talked about." : "Nothing on the agenda yet.") : "No items."}</div>`}
+        </div>
+        ${editor ? `<div class="wc-add"><button type="button" class="btn btn-sm" id="wc-additem">+ Agenda item</button></div>` : ""}
+        <div class="wc2-sep"></div>
+        ${olExtra("m", "📝", "Meeting notes", 0)}
+        ${follow.size ? olExtra("who", "👥", "Who has what", 0) : ""}
+        ${!next && !isFuture(date) && !cfg.anyDay ? `<div class="wc2-note">Past meeting — record only</div>` : ""}
+        ${isFuture(date) && cfg.board ? `<div class="wc2-note">Board items join once this becomes the next council</div>` : ""}
       </div>
-      ${editor ? `<div class="wc-add"><button type="button" class="btn" id="wc-additem">+ Add item</button><span class="wc-foldall"><button type="button" class="btn btn-sm btn-ghost" data-foldall="1">Collapse all</button><button type="button" class="btn btn-sm btn-ghost" data-foldall="0">Expand all</button></span></div>` : ""}
-    </div>
-    ${followCard}
-    <div class="card" style="margin-top:.8rem">
-      <h3 style="margin:0 0 .3rem">Meeting notes</h3>
-      ${noteBlock("m", cdoc.notes || "", "+ general notes for this meeting")}
+      <div class="wc2-r" data-pane="${esc(sel)}"><button type="button" class="wc2-back" data-back="1">‹ Agenda</button>${detail}</div>
     </div>`;
+
+  // pick an item in the outline: click, Enter, or the arrow keys
+  const pickSel = (key, viaKeys) => {
+    selByDate.set(date, key); focusOutline = !!viaKeys; render();
+    if (!viaKeys && window.innerWidth <= 760) panel.querySelector(".wc2-r")?.scrollIntoView({ block: "start", behavior: "smooth" }); // on a phone the panes stack
+  };
+  const olRows = [...body.querySelectorAll(".wc2-it")];
+  olRows.forEach((r, i) => {
+    r.addEventListener("click", (e) => { if (e.target.closest("[data-olact]")) return; if (r.dataset.sel !== sel) pickSel(r.dataset.sel); else if (window.innerWidth <= 760) panel.querySelector(".wc2-r")?.scrollIntoView({ block: "start", behavior: "smooth" }); });
+    r.addEventListener("keydown", (e) => {
+      if (e.target !== r) return;
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pickSel(r.dataset.sel, true); }
+      else if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); const to = olRows[i + (e.key === "ArrowDown" ? 1 : -1)]; if (to) pickSel(to.dataset.sel, true); }
+    });
+  });
+  if (focusOutline) { focusOutline = false; body.querySelector(".wc2-it.on")?.focus(); }
+  body.querySelector("[data-back]")?.addEventListener("click", () => panel.querySelector(".wc2")?.scrollIntoView({ block: "start", behavior: "smooth" }));
 
   if (!editor) return;
 
-  // drag an open agenda item onto another to move it there
+  // drag an open agenda item in the outline onto another to move it there
   let dragKey = null;
-  const openRows = [...body.querySelectorAll(".wc-list > .wc-row.wc-drag")];
   const clearMarks = () => body.querySelectorAll(".wc-before, .wc-after").forEach((r) => r.classList.remove("wc-before", "wc-after"));
-  openRows.forEach((rowEl) => {
-    // only the numbered grip on the left starts a drag, so the text in the row
-    // can still be selected, copied and pasted normally (2026-10-04)
-    const grip = rowEl.querySelector(".wc-grip");
-    grip?.addEventListener("dragstart", (e) => {
-      dragKey = rowEl.dataset.key; rowEl.classList.add("wc-dragging");
-      e.dataTransfer.effectAllowed = "move";
-      try { e.dataTransfer.setData("text/plain", ""); e.dataTransfer.setDragImage(rowEl, 16, 16); } catch { /* older browsers */ }
-    });
-    grip?.addEventListener("dragend", () => { dragKey = null; rowEl.classList.remove("wc-dragging"); clearMarks(); });
+  [...body.querySelectorAll(".wc2-items > .wc2-it")].forEach((rowEl) => {
+    if (rowEl.draggable) {
+      rowEl.addEventListener("dragstart", (e) => {
+        dragKey = rowEl.dataset.sel; rowEl.classList.add("wc-dragging");
+        e.dataTransfer.effectAllowed = "move";
+        try { e.dataTransfer.setData("text/plain", ""); } catch { /* older browsers */ }
+      });
+      rowEl.addEventListener("dragend", () => { dragKey = null; rowEl.classList.remove("wc-dragging"); clearMarks(); });
+    }
     rowEl.addEventListener("dragover", (e) => {
-      if (!dragKey || rowEl.dataset.key === dragKey) return;
+      if (!dragKey || rowEl.dataset.sel === dragKey) return;
       e.preventDefault();
       const r = rowEl.getBoundingClientRect();
       clearMarks(); rowEl.classList.add(e.clientY > r.top + r.height / 2 ? "wc-after" : "wc-before");
     });
     rowEl.addEventListener("drop", async (e) => {
-      if (!dragKey || rowEl.dataset.key === dragKey) return;
+      if (!dragKey || rowEl.dataset.sel === dragKey) return;
       e.preventDefault();
       const r = rowEl.getBoundingClientRect();
       const after = e.clientY > r.top + r.height / 2;
-      const keys = [...body.querySelectorAll(".wc-list > .wc-row")].map((x) => x.dataset.key).filter((k) => k !== dragKey); // discussed rows keep their place too
-      keys.splice(keys.indexOf(rowEl.dataset.key) + (after ? 1 : 0), 0, dragKey);
+      const order = [...body.querySelectorAll(".wc2-items > .wc2-it")].map((x) => x.dataset.sel).filter((k) => k !== dragKey); // discussed rows keep their place too
+      order.splice(order.indexOf(rowEl.dataset.sel) + (after ? 1 : 0), 0, dragKey);
       dragKey = null; clearMarks();
-      try { await saveCouncil(date, { order: keys }); } catch (err) { toast("Couldn't save the order: " + (err.code || err.message)); }
+      try { await saveCouncil(date, { order }); } catch (err) { toast("Couldn't save the order: " + (err.code || err.message)); }
     });
   });
 
@@ -719,8 +756,9 @@ function render() {
     if (el.parentElement.querySelector("textarea.wc-cnotes-ta")) return;
     const key = el.dataset.cnotes;
     const current = rawNotes.get(key) || "";
+    const withTodo = addTodoFor === key; addTodoFor = null; // "+ action item": start on a new check box line
     const ta = document.createElement("textarea");
-    ta.className = "wc-cnotes-ta"; ta.value = current;
+    ta.className = "wc-cnotes-ta"; ta.value = withTodo ? (current.replace(/\s+$/, "") ? current.replace(/\s+$/, "") + "\n" : "") + "[ ] " : current;
     ta.placeholder = key === "m" ? "Attendance, general discussion, assignments…" : "What was discussed, decided, who follows up…";
     // • Bullet / ☐ To-do buttons above the box; mousedown is cancelled so the box keeps focus
     const tools = document.createElement("div");
@@ -734,7 +772,7 @@ function render() {
     let fin = false;
     const finish = async (save) => {
       if (fin) return; fin = true;
-      const val = ta.value.trim();
+      const val = ta.value.trim().replace(/(^|\n)\[ \]$/, "").trim(); // a check box nobody wrote on isn't kept
       try {
         if (save && val !== current.trim()) { await saveNote(key, val); toast("Saved"); }
       } catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
@@ -752,25 +790,10 @@ function render() {
   // an item that was just added: drop straight into its notes (Esc leaves them empty)
   if (openNotesFor) { const el = body.querySelector(`[data-cnotes="${openNotesFor}"]`); openNotesFor = null; if (el) { el.click(); el.scrollIntoView({ block: "nearest" }); } }
 
-  // fold / unfold an item's details; discussed items start folded
-  body.querySelectorAll("[data-fold]").forEach((b) => b.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const key = b.dataset.fold, row = b.closest(".wc-row"), id = date + ":" + key, done = row.classList.contains("wc-done");
-    const nowFolded = !row.classList.contains("wc-folded");
-    if (nowFolded) { collapsed.add(id); expandedDone.delete(id); } else { collapsed.delete(id); if (done) expandedDone.add(id); }
-    saveFolded();
-    row.classList.toggle("wc-folded", nowFolded); b.textContent = nowFolded ? "▸" : "▾"; b.title = nowFolded ? "Show the details" : "Hide the details";
-  }));
-  // the headline itself folds / unfolds too (Jordan 10/25) — chips, buttons and the notes stay clickable on their own
-  body.querySelectorAll(".wc-row .wc-head").forEach((h) => h.addEventListener("click", (e) => {
-    if (e.target.closest("button, a, input, [data-owner], [data-assignee], [data-due], .wc-actions, .wc-fold")) return;
-    if (window.getSelection && String(window.getSelection())) return; // selecting text isn't a click
-    h.querySelector("[data-fold]")?.click();
-  }));
-  body.querySelectorAll("[data-foldall]").forEach((b) => b.addEventListener("click", () => {
-    const fold = b.dataset.foldall === "1";
-    body.querySelectorAll(".wc-list > .wc-row").forEach((row) => { const id = date + ":" + row.dataset.key; if (fold) { collapsed.add(id); expandedDone.delete(id); } else { collapsed.delete(id); expandedDone.add(id); } });
-    saveFolded(); render();
+  // "+ action item": the item's notes open with a new check box line, ready to type
+  body.querySelectorAll("[data-addtodo]").forEach((b) => b.addEventListener("click", () => {
+    const el = body.querySelector(`.wc2-r [data-cnotes="${b.dataset.addtodo}"]`); if (!el) return;
+    addTodoFor = b.dataset.addtodo; el.click();
   }));
   // "+ Add item": title + body in one window (2026-10-18)
   body.querySelector("#wc-additem")?.addEventListener("click", () => {
@@ -797,7 +820,7 @@ function render() {
       const id = "a" + Math.random().toString(36).slice(2, 9);
       const body0 = ta.value.trim() === "##" ? "" : ta.value.trim();
       const extra = [...(cdoc.extra || []), { id, title, notes: body0, discussed: false, createdAt: new Date().toISOString(), by: ctx.name || "", owner: ctx.name || "", ...(type ? { type } : {}) }];
-      try { await saveCouncil(date, { extra }); closeModal(); toast("Added"); } catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
+      try { selByDate.set(date, "x:" + id); await saveCouncil(date, { extra }); closeModal(); toast("Added"); } catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
     };
     el.querySelector("#wca-cancel").addEventListener("click", closeModal);
     el.querySelector("#wca-save").addEventListener("click", save);
@@ -1059,10 +1082,12 @@ function render() {
     setTimeout(() => document.addEventListener("click", closeMenus, { once: true }), 0);
   }));
 
-  // row actions
-  body.querySelectorAll(".wc-row [data-act]").forEach((b) => b.addEventListener("click", async () => {
-    const key = b.closest(".wc-row").dataset.key;
-    const act = b.dataset.act;
+  // item actions — the buttons on the item, and the circle beside it in the outline
+  const doAct = async (key, act) => {
+    if (act === "discussed" && key === sel) { // on to the next thing still to discuss
+      const i = keys.indexOf(key), rest = [...items.slice(i + 1), ...items.slice(0, i)].find((x) => !x.discussed);
+      if (rest) selByDate.set(date, itemKey(rest));
+    }
     try {
       if (key.startsWith("x:")) {
         const id = key.slice(2);
@@ -1102,7 +1127,9 @@ function render() {
       }
       toast(act === "discussed" ? "Marked discussed" : act === "reopen" ? "Back on the agenda" : "Removed");
     } catch (e) { toast("Couldn't save: " + (e.code || e.message)); }
-  }));
+  };
+  body.querySelectorAll(".wc-row [data-act]").forEach((b) => b.addEventListener("click", () => doAct(b.closest(".wc-row").dataset.key, b.dataset.act)));
+  body.querySelectorAll("[data-olact]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); doAct(b.closest(".wc2-it").dataset.sel, b.dataset.olact); }));
 }
 
 
